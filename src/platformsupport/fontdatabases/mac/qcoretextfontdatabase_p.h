@@ -72,13 +72,13 @@ QT_BEGIN_NAMESPACE
 class QCoreTextFontDatabase : public QPlatformFontDatabase
 {
 public:
-    QCoreTextFontDatabase(bool useFreeType = false);
+    QCoreTextFontDatabase();
     ~QCoreTextFontDatabase();
     void populateFontDatabase() Q_DECL_OVERRIDE;
+    bool populateFamilyAliases() override;
     void populateFamily(const QString &familyName) Q_DECL_OVERRIDE;
+    void invalidate() override;
 
-    QFontEngine *fontEngine(const QFontDef &fontDef, void *handle) Q_DECL_OVERRIDE;
-    QFontEngine *fontEngine(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference) Q_DECL_OVERRIDE;
     QStringList fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const Q_DECL_OVERRIDE;
     QStringList addApplicationFont(const QByteArray &fontData, const QString &fileName) Q_DECL_OVERRIDE;
     void releaseHandle(void *handle) Q_DECL_OVERRIDE;
@@ -92,20 +92,24 @@ public:
     const QHash<QPlatformTheme::Font, QFont *> &themeFonts() const;
 
 private:
-    void populateFromDescriptor(CTFontDescriptorRef font);
+    void populateFromDescriptor(CTFontDescriptorRef font, const QString &familyName = QString());
 
-#ifndef QT_NO_FREETYPE
-    bool m_useFreeType;
-    QFontEngine *freeTypeFontEngine(const QFontDef &fontDef, const QByteArray &filename,
-                                    const QByteArray &fontData = QByteArray());
-#endif
     mutable QString defaultFontName;
 
-    void removeApplicationFonts();
-
-    QVector<QVariant> m_applicationFonts;
     mutable QSet<CTFontDescriptorRef> m_systemFontDescriptors;
     mutable QHash<QPlatformTheme::Font, QFont *> m_themeFonts;
+    bool m_hasPopulatedAliases;
+};
+
+// Split out into separate template class so that the compiler doesn't have
+// to generate code for each override in QCoreTextFontDatabase for each T.
+
+template <class T>
+class QCoreTextFontDatabaseEngineFactory : public QCoreTextFontDatabase
+{
+public:
+    QFontEngine *fontEngine(const QFontDef &fontDef, void *handle) override;
+    QFontEngine *fontEngine(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference) override;
 };
 
 QT_END_NAMESPACE

@@ -1113,6 +1113,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
                        && !(event->modifiers() & ~(Qt::ShiftModifier|Qt::KeypadModifier));
             break;
         }
+        Q_FALLTHROUGH();
     case Qt::Key_Left:
     case Qt::Key_Right:
         if (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) {
@@ -2662,11 +2663,13 @@ void QCalendarPopup::mouseReleaseEvent(QMouseEvent*)
 
 bool QCalendarPopup::event(QEvent *event)
 {
+#if QT_CONFIG(shortcut)
     if (event->type() == QEvent::KeyPress) {
         QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
         if (keyEvent->matches(QKeySequence::Cancel))
             dateChanged = false;
     }
+#endif
     return QWidget::event(event);
 }
 

@@ -51,7 +51,6 @@
 
 #include <string.h>
 
-#include <type_traits>
 #ifndef QT_NO_EXCEPTIONS
 #  include <exception>
 #endif // QT_NO_EXCEPTIONS
@@ -240,14 +239,14 @@ namespace QTest
     namespace Internal {
 
     template<typename T> // Output registered enums
-    inline typename QtPrivate::QEnableIf<QtPrivate::IsQEnumHelper<T>::Value, char*>::Type toString(T e)
+    inline typename std::enable_if<QtPrivate::IsQEnumHelper<T>::Value, char*>::type toString(T e)
     {
         QMetaEnum me = QMetaEnum::fromType<T>();
         return qstrdup(me.valueToKey(int(e))); // int cast is necessary to support enum classes
     }
 
     template <typename T> // Fallback
-    inline typename QtPrivate::QEnableIf<!QtPrivate::IsQEnumHelper<T>::Value, char*>::Type toString(const T &)
+    inline typename std::enable_if<!QtPrivate::IsQEnumHelper<T>::Value, char*>::type toString(const T &)
     {
         return Q_NULLPTR;
     }
@@ -283,7 +282,9 @@ namespace QTest
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern);
 #endif
 
+#if QT_CONFIG(temporaryfile)
     Q_TESTLIB_EXPORT QSharedPointer<QTemporaryDir> qExtractTestData(const QString &dirName);
+#endif
     Q_TESTLIB_EXPORT QString qFindTestData(const char* basepath, const char* file = Q_NULLPTR, int line = 0, const char* builddir = Q_NULLPTR);
     Q_TESTLIB_EXPORT QString qFindTestData(const QString& basepath, const char* file = Q_NULLPTR, int line = 0, const char* builddir = Q_NULLPTR);
 
@@ -309,13 +310,14 @@ namespace QTest
     Q_TESTLIB_EXPORT void addColumnInternal(int id, const char *name);
 
     template <typename T>
-    inline void addColumn(const char *name, T * = 0)
+    inline void addColumn(const char *name, T * = nullptr)
     {
         typedef std::is_same<T, const char*> QIsSameTConstChar;
         Q_STATIC_ASSERT_X(!QIsSameTConstChar::value, "const char* is not allowed as a test data format.");
         addColumnInternal(qMetaTypeId<T>(), name);
     }
     Q_TESTLIB_EXPORT QTestData &newRow(const char *dataTag);
+    Q_TESTLIB_EXPORT QTestData &addRow(const char *format, ...) Q_ATTRIBUTE_FORMAT_PRINTF(1, 2);
 
     template <typename T>
     inline bool qCompare(T const &t1, T const &t2, const char *actual, const char *expected,

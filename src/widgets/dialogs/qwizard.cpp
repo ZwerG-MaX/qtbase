@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qwizard.h"
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #ifndef QT_NO_WIZARD
 
@@ -61,7 +62,7 @@
 #include <QtCore/QMetaMethod>
 #include <QtGui/QGuiApplication>
 #include <qpa/qplatformnativeinterface.h>
-#elif !defined(QT_NO_STYLE_WINDOWSVISTA)
+#elif QT_CONFIG(style_windowsvista)
 #include "qwizard_win_p.h"
 #include "qtimer.h"
 #endif
@@ -295,7 +296,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 private:
     bool vistaDisabled() const;
 #endif
@@ -342,7 +343,7 @@ QWizardHeader::QWizardHeader(QWidget *parent)
     layout->addWidget(logoLabel, 1, 5, 5, 1);
 }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 bool QWizardHeader::vistaDisabled() const
 {
     bool styleDisabled = false;
@@ -362,7 +363,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
                           Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat)
 {
     bool modern = ((info.wizStyle == QWizard::ModernStyle)
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         || ((info.wizStyle == QWizard::AeroStyle
             && QVistaHelper::vistaState() == QVistaHelper::Classic) || vistaDisabled())
 #endif
@@ -525,7 +526,7 @@ void QWizardPagePrivate::_q_updateCachedCompleteState()
 class QWizardAntiFlickerWidget : public QWidget
 {
 public:
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     QWizardPrivate *wizardPrivate;
     QWizardAntiFlickerWidget(QWizard *wizard, QWizardPrivate *wizardPrivate)
         : QWidget(wizard)
@@ -572,7 +573,7 @@ public:
         , titleLabel(0)
         , subTitleLabel(0)
         , bottomRuler(0)
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         , vistaHelper(0)
         , vistaInitPending(false)
         , vistaState(QVistaHelper::Dirty)
@@ -586,7 +587,7 @@ public:
     {
         std::fill(btns, btns + QWizard::NButtons, static_cast<QAbstractButton *>(0));
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA
             && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based))
             vistaInitPending = true;
@@ -611,7 +612,7 @@ public:
     void setButtonLayout(const QWizard::WizardButton *array, int size);
     bool buttonLayoutContains(QWizard::WizardButton which);
     void updatePixmap(QWizard::WizardPixmap which);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     bool vistaDisabled() const;
     bool isVistaThemeEnabled(QVistaHelper::VistaState state) const;
     bool handleAeroStyleChange();
@@ -677,7 +678,7 @@ public:
     QHBoxLayout *buttonLayout;
     QGridLayout *mainLayout;
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     QVistaHelper *vistaHelper;
     bool vistaInitPending;
     QVistaHelper::VistaState vistaState;
@@ -692,7 +693,7 @@ public:
 
 static QString buttonDefaultText(int wstyle, int which, const QWizardPrivate *wizardPrivate)
 {
-#if defined(QT_NO_STYLE_WINDOWSVISTA)
+#if !QT_CONFIG(style_windowsvista)
     Q_UNUSED(wizardPrivate);
 #endif
     const bool macStyle = (wstyle == QWizard::MacStyle);
@@ -730,7 +731,7 @@ void QWizardPrivate::init()
         opts = QWizard::HelpButtonOnRight;
     }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     vistaHelper = new QVistaHelper(q);
 #endif
 
@@ -959,7 +960,7 @@ QWizardLayoutInfo QWizardPrivate::layoutInfoForCurrentPage()
 
     info.wizStyle = wizStyle;
     if (info.wizStyle == QWizard::AeroStyle
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         && (QVistaHelper::vistaState() == QVistaHelper::Classic || vistaDisabled())
 #endif
         )
@@ -1088,7 +1089,7 @@ void QWizardPrivate::recreateLayout(const QWizardLayoutInfo &info)
             // ### hardcoded for now:
             titleFont = QFont(QLatin1String("Segoe UI"), 12);
             QPalette pal(titleLabel->palette());
-            pal.setColor(QPalette::Text, "#003399");
+            pal.setColor(QPalette::Text, QColor(0x00, 0x33, 0x99));
             titleLabel->setPalette(pal);
         }
 
@@ -1337,7 +1338,7 @@ void QWizardPrivate::updateMinMaxSizes(const QWizardLayoutInfo &info)
     Q_Q(QWizard);
 
     int extraHeight = 0;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (isVistaThemeEnabled())
         extraHeight = vistaHelper->titleBarSize() + vistaHelper->topOffset();
 #endif
@@ -1464,8 +1465,10 @@ void QWizardPrivate::updateButtonTexts()
     // Vista: Add shortcut for 'next'. Note: native dialogs use ALT-Right
     // even in RTL mode, so do the same, even if it might be counter-intuitive.
     // The shortcut for 'back' is set in class QVistaBackButton.
+#if QT_CONFIG(shortcut)
     if (btns[QWizard::NextButton])
         btns[QWizard::NextButton]->setShortcut(isVistaThemeEnabled() ? QKeySequence(Qt::ALT | Qt::Key_Right) : QKeySequence());
+#endif
 }
 
 void QWizardPrivate::updateButtonLayout()
@@ -1560,7 +1563,7 @@ void QWizardPrivate::updatePixmap(QWizard::WizardPixmap which)
     }
 }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 bool QWizardPrivate::vistaDisabled() const
 {
     Q_Q(const QWizard);
@@ -1642,7 +1645,7 @@ bool QWizardPrivate::handleAeroStyleChange()
 
 bool QWizardPrivate::isVistaThemeEnabled() const
 {
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     return isVistaThemeEnabled(QVistaHelper::VistaAero)
         || isVistaThemeEnabled(QVistaHelper::VistaBasic);
 #else
@@ -1720,7 +1723,7 @@ void QWizardPrivate::_q_updateButtonStates()
     if (QPushButton *finishPush = qobject_cast<QPushButton *>(btn.finish))
         finishPush->setDefault(!canContinue && useDefault);
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (isVistaThemeEnabled()) {
         vistaHelper->backButton()->setEnabled(btn.back->isEnabled());
         vistaHelper->backButton()->setVisible(backButtonVisible);
@@ -1788,7 +1791,7 @@ QPixmap QWizardPrivate::findDefaultBackgroundPixmap()
 
 #endif
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 void QWizardAntiFlickerWidget::paintEvent(QPaintEvent *)
 {
     if (wizardPrivate->isVistaThemeEnabled()) {
@@ -2556,7 +2559,7 @@ void QWizard::setWizardStyle(WizardStyle style)
 
     const bool styleChange = style != d->wizStyle;
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     const bool aeroStyleChange =
         d->vistaInitPending || d->vistaStateChanged || (styleChange && (style == AeroStyle || d->wizStyle == AeroStyle));
     d->vistaStateChanged = false;
@@ -2564,14 +2567,14 @@ void QWizard::setWizardStyle(WizardStyle style)
 #endif
 
     if (styleChange
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         || aeroStyleChange
 #endif
         ) {
         d->disableUpdates();
         d->wizStyle = style;
         d->updateButtonTexts();
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         if (aeroStyleChange) {
             //Send a resizeevent since the antiflicker widget probably needs a new size
             //because of the backbutton in the window title
@@ -2582,7 +2585,7 @@ void QWizard::setWizardStyle(WizardStyle style)
         d->updateLayout();
         updateGeometry();
         d->enableUpdates();
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         // Delay initialization when activating Aero style fails due to missing native window.
         if (aeroStyleChange && !d->handleAeroStyleChange() && d->wizStyle == AeroStyle)
             d->vistaInitPending = true;
@@ -2816,7 +2819,7 @@ void QWizard::setButton(WizardButton which, QAbstractButton *button)
 QAbstractButton *QWizard::button(WizardButton which) const
 {
     Q_D(const QWizard);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->wizStyle == AeroStyle && which == BackButton)
         return d->vistaHelper->backButton();
 #endif
@@ -3176,7 +3179,7 @@ bool QWizard::event(QEvent *event)
         d->setStyle(style());
         d->updateLayout();
     }
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     else if (event->type() == QEvent::Show && d->vistaInitPending) {
         d->vistaInitPending = false;
         // Do not force AeroStyle when in Classic theme.
@@ -3211,7 +3214,7 @@ void QWizard::resizeEvent(QResizeEvent *event)
 {
     Q_D(QWizard);
     int heightOffset = 0;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->isVistaThemeEnabled()) {
         heightOffset = d->vistaHelper->topOffset();
         if (d->isVistaThemeEnabled(QVistaHelper::VistaAero))
@@ -3219,7 +3222,7 @@ void QWizard::resizeEvent(QResizeEvent *event)
     }
 #endif
     d->antiFlickerWidget->resize(event->size().width(), event->size().height() - heightOffset);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->isVistaThemeEnabled())
         d->vistaHelper->resizeEvent(event);
 #endif
@@ -3240,7 +3243,7 @@ void QWizard::paintEvent(QPaintEvent * event)
         QPainter painter(this);
         painter.drawPixmap(0, (height() - backgroundPixmap.height()) / 2, backgroundPixmap);
     }
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     else if (d->isVistaThemeEnabled()) {
         if (d->isVistaThemeEnabled(QVistaHelper::VistaBasic)) {
             QPainter painter(this);
@@ -3254,13 +3257,13 @@ void QWizard::paintEvent(QPaintEvent * event)
 #endif
 }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
 /*!
     \reimp
 */
 bool QWizard::nativeEvent(const QByteArray &eventType, void *message, long *result)
 {
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     Q_D(QWizard);
     if (d->isVistaThemeEnabled() && eventType == "windows_generic_MSG") {
         MSG *windowsMessage = static_cast<MSG *>(message);

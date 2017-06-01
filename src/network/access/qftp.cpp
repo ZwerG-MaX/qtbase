@@ -246,22 +246,25 @@ public:
     } data;
     bool is_ba;
 
-    static QBasicAtomicInt idCounter;
 };
 
-QBasicAtomicInt QFtpCommand::idCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int nextId()
+{
+    static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(0);
+    return 1 + counter.fetchAndAddRelaxed(1);
+}
 
 QFtpCommand::QFtpCommand(QFtp::Command cmd, const QStringList &raw, const QByteArray &ba)
     : command(cmd), rawCmds(raw), is_ba(true)
 {
-    id = idCounter.fetchAndAddRelaxed(1);
+    id = nextId();
     data.ba = new QByteArray(ba);
 }
 
 QFtpCommand::QFtpCommand(QFtp::Command cmd, const QStringList &raw, QIODevice *dev)
     : command(cmd), rawCmds(raw), is_ba(false)
 {
-    id = idCounter.fetchAndAddRelaxed(1);
+    id = nextId();
     data.dev = dev;
 }
 
@@ -571,7 +574,7 @@ static void _q_parseDosDir(const QStringList &tokens, const QString &userName, Q
 
     QString name = tokens.at(3);
     info->setName(name);
-    info->setSymLink(name.toLower().endsWith(QLatin1String(".lnk")));
+    info->setSymLink(name.endsWith(QLatin1String(".lnk"), Qt::CaseInsensitive));
 
     if (tokens.at(2) == QLatin1String("<DIR>")) {
         info->setFile(false);

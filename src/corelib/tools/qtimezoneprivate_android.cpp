@@ -88,7 +88,7 @@ void QAndroidTimeZonePrivate::init(const QByteArray &ianaId)
         m_id = ianaId;
 }
 
-QTimeZonePrivate *QAndroidTimeZonePrivate::clone()
+QAndroidTimeZonePrivate *QAndroidTimeZonePrivate::clone() const
 {
     return new QAndroidTimeZonePrivate(*this);
 }
@@ -205,58 +205,6 @@ QTimeZonePrivate::Data QAndroidTimeZonePrivate::previousTransition(qint64 before
     // transitions not available on Android, so return an invalid data object
     Q_UNUSED( beforeMSecsSinceEpoch );
     return invalidData();
-}
-
-// Since Android does not provide an API to access transitions,
-// dataForLocalTime needs to be reimplemented without direct use of transitions
-QTimeZonePrivate::Data QAndroidTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs) const
-{
-    if (!androidTimeZone.isValid()) {
-        return invalidData();
-    } else {
-        qint64 UTCepochMSecs;
-
-        // compare the UTC time with standard offset against normal DST offset of one hour
-        qint64 standardUTCMSecs(forLocalMSecs - (standardTimeOffset(forLocalMSecs) * 1000));
-        qint64 daylightUTCMsecs;
-
-        // Check if daylight-saving time applies,
-        // checking also for DST boundaries
-        if (isDaylightTime(standardUTCMSecs)) {
-            // If DST does apply, then standardUTCMSecs will be an hour or so ahead of the real epoch time
-            // so check that time
-            daylightUTCMsecs = standardUTCMSecs - daylightTimeOffset(standardUTCMSecs)*1000;
-            if (isDaylightTime(daylightUTCMsecs)) {
-                // DST confirmed
-                UTCepochMSecs = daylightUTCMsecs;
-            } else {
-                // DST has just finished
-                UTCepochMSecs = standardUTCMSecs;
-            }
-        } else {
-            // Standard time indicated, but check for a false negative.
-            // Would a standard one-hour DST offset indicate DST?
-            daylightUTCMsecs = standardUTCMSecs - 3600000; // 3600000 MSECS_PER_HOUR
-            if (isDaylightTime(daylightUTCMsecs)) {
-                // DST may have just started,
-                // but double check against timezone's own DST offset
-                // (don't necessarily assume a one-hour offset)
-                daylightUTCMsecs = standardUTCMSecs - daylightTimeOffset(daylightUTCMsecs)*1000;
-                if (isDaylightTime(daylightUTCMsecs)) {
-                    // DST confirmed
-                    UTCepochMSecs = daylightUTCMsecs;
-                } else {
-                    // false positive, apply standard time after all
-                    UTCepochMSecs = standardUTCMSecs;
-                }
-            } else {
-                // confirmed standard time
-                UTCepochMSecs = standardUTCMSecs;
-            }
-        }
-
-        return data(UTCepochMSecs);
-    }
 }
 
 QByteArray QAndroidTimeZonePrivate::systemTimeZoneId() const

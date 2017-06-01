@@ -2,7 +2,6 @@ TEMPLATE=subdirs
 QT_FOR_CONFIG += gui-private
 
 SUBDIRS=\
-   # atwrapper \ # QTBUG-19452
    compiler \
    gestures \
    lancelot \
@@ -57,6 +56,8 @@ cross_compile: SUBDIRS -= \
 
 !qtConfig(accessibility-atspi-bridge): SUBDIRS -= qaccessibilitylinux
 
+!qtConfig(process): SUBDIRS -= qprocess_and_guieventloop
+
 !mac: SUBDIRS -= \
            macgui \
            macnativeevents \
@@ -65,9 +66,6 @@ cross_compile: SUBDIRS -= \
 
 !embedded: SUBDIRS -= \
            qdirectpainter
-
-winrt: SUBDIRS -= \
-   qprocess_and_guieventloop
 
 android: SUBDIRS += \
     android

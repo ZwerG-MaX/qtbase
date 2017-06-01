@@ -408,6 +408,8 @@ QTextDocumentFragment QTextDocumentFragment::fromPlainText(const QString &plainT
     return res;
 }
 
+#ifndef QT_NO_TEXTHTMLPARSER
+
 static QTextListFormat::Style nextListStyle(QTextListFormat::Style style)
 {
     if (style == QTextListFormat::ListDisc)
@@ -416,8 +418,6 @@ static QTextListFormat::Style nextListStyle(QTextListFormat::Style style)
         return QTextListFormat::ListSquare;
     return style;
 }
-
-#ifndef QT_NO_TEXTHTMLPARSER
 
 QTextHtmlImporter::QTextHtmlImporter(QTextDocument *_doc, const QString &_html, ImportMode mode, const QTextDocument *resourceProvider)
     : indent(0), compressNextWhitespace(PreserveWhiteSpace), doc(_doc), importMode(mode)
@@ -825,9 +825,13 @@ bool QTextHtmlImporter::closeTag()
                 break;
 
             case Html_div:
-                if (closedNode->children.isEmpty())
-                    break;
-                Q_FALLTHROUGH();
+                if (cursor.position() > 0) {
+                    const QChar curChar = cursor.document()->characterAt(cursor.position() - 1);
+                    if (!closedNode->children.isEmpty() && curChar != QChar::LineSeparator) {
+                        blockTagClosed = true;
+                    }
+                }
+                break;
             default:
                 if (closedNode->isBlock())
                     blockTagClosed = true;

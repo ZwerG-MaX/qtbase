@@ -64,7 +64,8 @@ public:
     enum SurfaceType {
         RasterSurface,
         OpenGLSurface,
-        RasterGLSurface
+        RasterGLSurface,
+        OpenVGSurface,
     };
 
     virtual ~QSurface();

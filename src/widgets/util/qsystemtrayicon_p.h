@@ -84,7 +84,8 @@ public:
     void updateToolTip_sys();
     void updateMenu_sys();
     QRect geometry_sys() const;
-    void showMessage_sys(const QString &title, const QString &msg, QSystemTrayIcon::MessageIcon icon, int secs);
+    void showMessage_sys(const QString &title, const QString &msg, const QIcon &icon,
+                         QSystemTrayIcon::MessageIcon msgIcon, int msecs);
 
     static bool isSystemTrayAvailable_sys();
     static bool supportsMessages_sys();
@@ -101,11 +102,7 @@ public:
 private:
     void install_sys_qpa();
     void remove_sys_qpa();
-    void updateIcon_sys_qpa();
-    void updateToolTip_sys_qpa();
-    void updateMenu_sys_qpa();
-    QRect geometry_sys_qpa() const;
-    void showMessage_sys_qpa(const QString &title, const QString &msg, QSystemTrayIcon::MessageIcon icon, int secs);
+
     void addPlatformMenu(QMenu *menu) const;
 };
 
@@ -113,16 +110,16 @@ class QBalloonTip : public QWidget
 {
     Q_OBJECT
 public:
-    static void showBalloon(QSystemTrayIcon::MessageIcon icon, const QString& title,
-                            const QString& msg, QSystemTrayIcon *trayIcon,
-                            const QPoint& pos, int timeout, bool showArrow = true);
+    static void showBalloon(const QIcon &icon, const QString &title,
+                            const QString &msg, QSystemTrayIcon *trayIcon,
+                            const QPoint &pos, int timeout, bool showArrow = true);
     static void hideBalloon();
     static bool isBalloonVisible();
     static void updateBalloonPosition(const QPoint& pos);
 
 private:
-    QBalloonTip(QSystemTrayIcon::MessageIcon icon, const QString& title,
-                const QString& msg, QSystemTrayIcon *trayIcon);
+    QBalloonTip(const QIcon &icon, const QString &title,
+                const QString &msg, QSystemTrayIcon *trayIcon);
     ~QBalloonTip();
     void balloon(const QPoint&, int, bool);
 

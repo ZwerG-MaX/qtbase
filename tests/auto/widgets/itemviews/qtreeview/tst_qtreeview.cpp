@@ -1107,10 +1107,10 @@ void tst_QTreeView::setModel()
 {
     QTreeView view;
     view.show();
-    QCOMPARE(view.model(), (QAbstractItemModel*)0);
-    QCOMPARE(view.selectionModel(), (QItemSelectionModel*)0);
-    QCOMPARE(view.header()->model(), (QAbstractItemModel*)0);
-    QCOMPARE(view.header()->selectionModel(), (QItemSelectionModel*)0);
+    QCOMPARE(view.model(), nullptr);
+    QCOMPARE(view.selectionModel(), nullptr);
+    QCOMPARE(view.header()->model(), nullptr);
+    QCOMPARE(view.header()->selectionModel(), nullptr);
 
     for (int x = 0; x < 2; ++x) {
         QtTestModel *model = new QtTestModel(10, 8);
@@ -1131,9 +1131,9 @@ void tst_QTreeView::setModel()
         QTRY_COMPARE(modelDestroyedSpy.count(), 0);
 
         view.setModel(0);
-        QCOMPARE(view.model(), (QAbstractItemModel*)0);
+        QCOMPARE(view.model(), nullptr);
         // ### shouldn't selectionModel also be 0 now?
-//        QCOMPARE(view.selectionModel(), (QItemSelectionModel*)0);
+//        QCOMPARE(view.selectionModel(), nullptr);
         delete model;
     }
 }
@@ -1283,7 +1283,7 @@ void tst_QTreeView::noDelegate()
     QTreeView view;
     view.setModel(&model);
     view.setItemDelegate(0);
-    QCOMPARE(view.itemDelegate(), (QAbstractItemDelegate *)0);
+    QCOMPARE(view.itemDelegate(), nullptr);
 }
 
 void tst_QTreeView::noModel()
@@ -3796,25 +3796,24 @@ void tst_QTreeView::task248022_changeSelection()
 void tst_QTreeView::task245654_changeModelAndExpandAll()
 {
     QTreeView view;
-    QStandardItemModel *model = new QStandardItemModel;
+    QScopedPointer<QStandardItemModel> model(new QStandardItemModel);
     QStandardItem *top = new QStandardItem("top");
     QStandardItem *sub = new QStandardItem("sub");
     top->appendRow(sub);
     model->appendRow(top);
-    view.setModel(model);
+    view.setModel(model.data());
     view.expandAll();
     QApplication::processEvents();
     QVERIFY(view.isExpanded(top->index()));
 
     //now let's try to delete the model
     //then repopulate and expand again
-    delete model;
-    model = new QStandardItemModel;
+    model.reset(new QStandardItemModel);
     top = new QStandardItem("top");
     sub = new QStandardItem("sub");
     top->appendRow(sub);
     model->appendRow(top);
-    view.setModel(model);
+    view.setModel(model.data());
     view.expandAll();
     QApplication::processEvents();
     QVERIFY(view.isExpanded(top->index()));

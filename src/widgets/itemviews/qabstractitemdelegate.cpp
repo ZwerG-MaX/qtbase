@@ -537,14 +537,18 @@ bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
 #ifndef QT_NO_LINEEDIT
     if (QLineEdit *e = qobject_cast<QLineEdit*>(editor)) {
         if (!e->hasAcceptableInput()) {
+#if QT_CONFIG(validator)
             if (const QValidator *validator = e->validator()) {
                 QString text = e->text();
                 validator->fixup(text);
                 e->setText(text);
             }
+#endif
             return e->hasAcceptableInput();
         }
     }
+#else
+    Q_UNUSED(editor)
 #endif // QT_NO_LINEEDIT
 
     return true;

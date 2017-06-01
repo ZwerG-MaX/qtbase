@@ -211,7 +211,8 @@ void qt_from_latin1(ushort *dst, const char *str, size_t size) Q_DECL_NOTHROW
 {
     /* SIMD:
      * Unpacking with SSE has been shown to improve performance on recent CPUs
-     * The same method gives no improvement with NEON.
+     * The same method gives no improvement with NEON. On Aarch64, clang will do the vectorization
+     * itself in exactly the same way as one would do it with intrinsics.
      */
 #if defined(__SSE2__)
     const char *e = str + size;
@@ -491,6 +492,30 @@ static int ucstrncmp(const QChar *a, const QChar *b, int l)
     return UnrollTailLoop<7>::exec(l, 0, lambda, lambda);
 #  endif
 #endif
+#if defined(__ARM_NEON__) && defined(Q_PROCESSOR_ARM_64) // vaddv is only available on Aarch64
+    if (l >= 8) {
+        const QChar *end = a + l;
+        const uint16x8_t mask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
+        while (a + 7 < end) {
+            uint16x8_t da = vld1q_u16(reinterpret_cast<const uint16_t *>(a));
+            uint16x8_t db = vld1q_u16(reinterpret_cast<const uint16_t *>(b));
+
+            uint8_t r = ~(uint8_t)vaddvq_u16(vandq_u16(vceqq_u16(da, db), mask));
+            if (r) {
+                // found a different QChar
+                uint idx = qCountTrailingZeroBits(r);
+                return (int)a[idx].unicode() - (int)b[idx].unicode();
+            }
+            a += 8;
+            b += 8;
+        }
+        l &= 7;
+    }
+    const auto &lambda = [=](int i) -> int {
+        return a[i].unicode() - b[i].unicode();
+    };
+    return UnrollTailLoop<7>::exec(l, 0, lambda, lambda);
+#endif // __ARM_NEON__
     if (!l)
         return 0;
 
@@ -703,6 +728,18 @@ static int findChar(const QChar *str, int len, QChar ch, int from,
                                            [=](int i) { return n - s + i; });
 #  endif
 #endif
+#if defined(__ARM_NEON__) && defined(Q_PROCESSOR_ARM_64) // vaddv is only available on Aarch64
+            const uint16x8_t vmask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
+            const uint16x8_t ch_vec = vdupq_n_u16(c);
+            for (const ushort *next = n + 8; next <= e; n = next, next += 8) {
+                uint16x8_t data = vld1q_u16(n);
+                uint mask = vaddvq_u16(vandq_u16(vceqq_u16(data, ch_vec), vmask));
+                if (ushort(mask)) {
+                    // found a match
+                    return n - s + qCountTrailingZeroBits(mask);
+                }
+            }
+#endif // aarch64
             --n;
             while (++n != e)
                 if (*n == c)
@@ -742,7 +779,9 @@ inline char qToLower(char ch)
 }
 
 
+#if QT_DEPRECATED_SINCE(5, 9)
 const QString::Null QString::null = { };
+#endif
 
 /*!
   \macro QT_RESTRICTED_CAST_FROM_ASCII
@@ -1617,7 +1656,7 @@ QString::QString(QChar ch)
     \internal
 */
 
-/*! \fn QString &QString::operator=(const Null &)
+/*! \fn QString &QString::operator=(const QString::Null &)
     \internal
 */
 
@@ -1767,17 +1806,11 @@ void QString::resize(int size, QChar fillChar)
 
 void QString::reallocData(uint alloc, bool grow)
 {
-    size_t blockSize;
-    if (grow) {
-        auto r = qCalculateGrowingBlockSize(alloc, sizeof(QChar), sizeof(Data));
-        blockSize = r.size;
-        alloc = uint(r.elementCount);
-    } else {
-        blockSize = qCalculateBlockSize(alloc, sizeof(QChar), sizeof(Data));
-    }
+    auto allocOptions = d->detachFlags();
+    if (grow)
+        allocOptions |= QArrayData::Grow;
 
     if (d->ref.isShared() || IS_RAW_DATA(d)) {
-        Data::AllocationOptions allocOptions(d->capacityReserved ? Data::CapacityReserved : 0);
         Data *x = Data::allocate(alloc, allocOptions);
         Q_CHECK_PTR(x);
         x->size = qMin(int(alloc) - 1, d->size);
@@ -1787,11 +1820,9 @@ void QString::reallocData(uint alloc, bool grow)
             Data::deallocate(d);
         d = x;
     } else {
-        Data *p = static_cast<Data *>(::realloc(d, blockSize));
+        Data *p = Data::reallocateUnaligned(d, alloc, allocOptions);
         Q_CHECK_PTR(p);
         d = p;
-        d->alloc = alloc;
-        d->offset = sizeof(QStringData);
     }
 }
 
@@ -1840,7 +1871,7 @@ QString &QString::operator=(const QString &other) Q_DECL_NOTHROW
 */
 QString &QString::operator=(QLatin1String other)
 {
-    if (isDetached() && other.size() <= capacity()) { // assumes d->alloc == 0 → !isDetached() (sharedNull)
+    if (isDetached() && other.size() <= capacity()) { // assumes d->alloc == 0 -> !isDetached() (sharedNull)
         d->size = other.size();
         d->data()[other.size()] = 0;
         qt_from_latin1(d->data(), other.latin1(), other.size());
@@ -1899,7 +1930,7 @@ QString &QString::operator=(QLatin1String other)
 */
 QString &QString::operator=(QChar ch)
 {
-    if (isDetached() && capacity() >= 1) { // assumes d->alloc == 0 → !isDetached() (sharedNull)
+    if (isDetached() && capacity() >= 1) { // assumes d->alloc == 0 -> !isDetached() (sharedNull)
         // re-use existing capacity:
         ushort *dat = d->data();
         dat[0] = ch.unicode();
@@ -4466,11 +4497,11 @@ bool QString::startsWith(const QStringRef &s, Qt::CaseSensitivity cs) const
 
     \sa startsWith()
 */
-bool QString::endsWith(const QString& s, Qt::CaseSensitivity cs) const
+bool QString::endsWith(const QString &s, Qt::CaseSensitivity cs) const
 {
     return qt_ends_with(isNull() ? 0 : unicode(), size(),
                         s.isNull() ? 0 : s.unicode(), s.size(), cs);
-    }
+}
 
 /*!
     \since 4.8
@@ -4606,6 +4637,8 @@ QByteArray QString::toLatin1_helper_inplace(QString &s)
 
 QByteArray QString::toLocal8Bit_helper(const QChar *data, int size)
 {
+    if (!data)
+        return QByteArray();
 #ifndef QT_NO_TEXTCODEC
     QTextCodec *localeCodec = QTextCodec::codecForLocale();
     if (localeCodec)
@@ -4886,6 +4919,7 @@ QString QString::fromUcs4(const uint *unicode, int size)
     }
     return QUtf32::convertToUnicode((const char *)unicode, size*4, 0);
 }
+
 
 /*!
     Resizes the string to \a size characters and copies \a unicode
@@ -5575,7 +5609,7 @@ int QString::localeAwareCompare(const QString &other) const
     return localeAwareCompare_helper(constData(), length(), other.constData(), other.length());
 }
 
-#if defined(QT_USE_ICU) && !defined(Q_OS_WIN32) && !defined(Q_OS_DARWIN)
+#if QT_CONFIG(icu) && !defined(Q_OS_WIN32) && !defined(Q_OS_DARWIN)
 Q_GLOBAL_STATIC(QThreadStorage<QCollator>, defaultCollator)
 #endif
 
@@ -5621,7 +5655,7 @@ int QString::localeAwareCompare_helper(const QChar *data1, int length1,
     CFRelease(thisString);
     CFRelease(otherString);
     return result;
-#elif defined(QT_USE_ICU)
+#elif QT_CONFIG(icu)
     if (!defaultCollator()->hasLocalData())
         defaultCollator()->setLocalData(QCollator());
     return defaultCollator()->localData().compare(data1, length1, data2, length2);
@@ -5981,7 +6015,10 @@ static uint parse_flag_characters(const char * &c) Q_DECL_NOTHROW
     uint flags = QLocaleData::ZeroPadExponent;
     while (true) {
         switch (*c) {
-        case '#': flags |= QLocaleData::Alternate; break;
+        case '#':
+            flags |= QLocaleData::ShowBase | QLocaleData::AddTrailingZeroes
+                    | QLocaleData::ForcePoint;
+            break;
         case '0': flags |= QLocaleData::ZeroPadded; break;
         case '-': flags |= QLocaleData::LeftAdjusted; break;
         case ' ': flags |= QLocaleData::BlankBeforePositive; break;
@@ -6239,7 +6276,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
             case 'p': {
                 void *arg = va_arg(ap, void*);
                 const quint64 i = reinterpret_cast<quintptr>(arg);
-                flags |= QLocaleData::Alternate;
+                flags |= QLocaleData::ShowBase;
                 subst = QLocaleData::c()->unsLongLongToString(i, precision, 16, width, flags);
                 ++c;
                 break;
@@ -7814,10 +7851,13 @@ QString QString::arg(double a, int fieldWidth, char fmt, int prec, QChar fillCha
     if (d.locale_occurrences > 0) {
         QLocale locale;
 
-        if (!(locale.numberOptions() & QLocale::OmitGroupSeparator))
+        const QLocale::NumberOptions numberOptions = locale.numberOptions();
+        if (!(numberOptions & QLocale::OmitGroupSeparator))
             flags |= QLocaleData::ThousandsGroup;
-        if (!(locale.numberOptions() & QLocale::OmitLeadingZeroInExponent))
+        if (!(numberOptions & QLocale::OmitLeadingZeroInExponent))
             flags |= QLocaleData::ZeroPadExponent;
+        if (numberOptions & QLocale::IncludeTrailingZeroesAfterDot)
+            flags |= QLocaleData::AddTrailingZeroes;
         locale_arg = locale.d->m_data->doubleToString(a, prec, form, fieldWidth, flags);
     }
 
@@ -8025,33 +8065,12 @@ bool QString::isSimpleText() const
 /*! \fn bool QString::isRightToLeft() const
 
     Returns \c true if the string is read right to left.
+
+    \sa QStringRef::isRightToLeft()
 */
 bool QString::isRightToLeft() const
 {
-    const ushort *p = d->data();
-    const ushort * const end = p + d->size;
-    while (p < end) {
-        uint ucs4 = *p;
-        if (QChar::isHighSurrogate(ucs4) && p < end - 1) {
-            ushort low = p[1];
-            if (QChar::isLowSurrogate(low)) {
-                ucs4 = QChar::surrogateToUcs4(ucs4, low);
-                ++p;
-            }
-        }
-        switch (QChar::direction(ucs4))
-        {
-        case QChar::DirL:
-            return false;
-        case QChar::DirR:
-        case QChar::DirAL:
-            return true;
-        default:
-            break;
-        }
-        ++p;
-    }
-    return false;
+    return QStringRef(this).isRightToLeft();
 }
 
 /*! \fn QChar *QString::data()
@@ -8144,7 +8163,7 @@ bool QString::isRightToLeft() const
     to create a deep copy of the data, ensuring that the raw data
     isn't modified.
 
-    Here's an example of how we can use a QRegExp on raw data in
+    Here's an example of how we can use a QRegularExpression on raw data in
     memory without requiring to copy the data into a QString:
 
     \snippet qstring/main.cpp 22
@@ -8357,7 +8376,7 @@ QString &QString::setRawData(const QChar *unicode, int size)
     Returns the character at position \a pos in this object.
 
     \note This function performs no error checking.
-    The behavior is undefined when \a pos < 0 or \a pos ≥ size().
+    The behavior is undefined when \a pos < 0 or \a pos >= size().
 
     \sa operator[]()
 */
@@ -8368,7 +8387,7 @@ QString &QString::setRawData(const QChar *unicode, int size)
     Returns the character at position \a pos in this object.
 
     \note This function performs no error checking.
-    The behavior is undefined when \a pos < 0 or \a pos ≥ size().
+    The behavior is undefined when \a pos < 0 or \a pos >= size().
 
     \sa at()
 */
@@ -9007,7 +9026,7 @@ ownership of it, no memory is freed when instances are destroyed.
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the first character in
     the string.
 
-    \sa cbegin(), end(), rbegin(), rend()
+    \sa cbegin(), constBegin(), end(), constEnd(), rbegin(), rend()
 */
 
 /*!
@@ -9016,7 +9035,16 @@ ownership of it, no memory is freed when instances are destroyed.
 
     Same as begin().
 
-    \sa begin(), cend(), rbegin(), rend()
+    \sa begin(), constBegin(), cend(), constEnd(), rbegin(), rend()
+*/
+
+/*!
+    \fn QStringRef::const_iterator QStringRef::constBegin() const
+    \since 5.9
+
+    Same as begin().
+
+    \sa begin(), cend(), constEnd(), rbegin(), rend()
 */
 
 /*!
@@ -9026,7 +9054,7 @@ ownership of it, no memory is freed when instances are destroyed.
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the imaginary
     character after the last character in the list.
 
-    \sa cbegin(), end(), rbegin(), rend()
+    \sa cbegin(), constBegin(), end(), constEnd(), rbegin(), rend()
 */
 
 /*! \fn QStringRef::const_iterator QStringRef::cend() const
@@ -9034,7 +9062,15 @@ ownership of it, no memory is freed when instances are destroyed.
 
     Same as end().
 
-    \sa end(), cbegin(), rbegin(), rend()
+    \sa end(), constEnd(), cbegin(), constBegin(), rbegin(), rend()
+*/
+
+/*! \fn QStringRef::const_iterator QStringRef::constEnd() const
+    \since 5.9
+
+    Same as end().
+
+    \sa end(), cend(), cbegin(), constBegin(), rbegin(), rend()
 */
 
 /*!
@@ -9585,9 +9621,7 @@ QStringRef QStringRef::left(int n) const
 */
 QStringRef QString::leftRef(int n)  const
 {
-    if (uint(n) >= uint(d->size))
-        n = d->size;
-    return QStringRef(this, 0, n);
+    return QStringRef(this).left(n);
 }
 
 /*!
@@ -9624,9 +9658,7 @@ QStringRef QStringRef::right(int n) const
 */
 QStringRef QString::rightRef(int n) const
 {
-    if (uint(n) >= uint(d->size))
-        n = d->size;
-    return QStringRef(this, d->size - n, n);
+    return QStringRef(this).right(n);
 }
 
 /*!
@@ -9685,19 +9717,7 @@ QStringRef QStringRef::mid(int pos, int n) const
 */
 QStringRef QString::midRef(int position, int n) const
 {
-    using namespace QtPrivate;
-    switch (QContainerImplHelper::mid(d->size, &position, &n)) {
-    case QContainerImplHelper::Null:
-        return QStringRef();
-    case QContainerImplHelper::Empty:
-        return QStringRef(this, 0, 0);
-    case QContainerImplHelper::Full:
-        return QStringRef(this, 0, d->size);
-    case QContainerImplHelper::Subset:
-        return QStringRef(this, position, n);
-    }
-    Q_UNREACHABLE();
-    return QStringRef();
+    return QStringRef(this).mid(position, n);
 }
 
 /*!
@@ -9944,6 +9964,41 @@ int QStringRef::count(const QStringRef &str, Qt::CaseSensitivity cs) const
 }
 
 /*!
+    \since 5.9
+
+    Returns \c true if the string is read right to left.
+
+    \sa QString::isRightToLeft()
+*/
+bool QStringRef::isRightToLeft() const
+{
+    const ushort *p = reinterpret_cast<const ushort*>(unicode());
+    const ushort * const end = p + size();
+    while (p < end) {
+        uint ucs4 = *p;
+        if (QChar::isHighSurrogate(ucs4) && p < end - 1) {
+            ushort low = p[1];
+            if (QChar::isLowSurrogate(low)) {
+                ucs4 = QChar::surrogateToUcs4(ucs4, low);
+                ++p;
+            }
+        }
+        switch (QChar::direction(ucs4))
+        {
+        case QChar::DirL:
+            return false;
+        case QChar::DirR:
+        case QChar::DirAL:
+            return true;
+        default:
+            break;
+        }
+        ++p;
+    }
+    return false;
+}
+
+/*!
     \since 4.8
 
     Returns \c true if the string reference starts with \a str; otherwise
@@ -10107,7 +10162,7 @@ bool QStringRef::endsWith(const QStringRef &str, Qt::CaseSensitivity cs) const
 */
 
 /*! \fn bool QStringRef::contains(QLatin1String str, Qt::CaseSensitivity cs) const
-    \since 4,8
+    \since 4.8
     \overload contains()
 
     Returns \c true if this string reference contains an occurrence of
@@ -10309,6 +10364,8 @@ static inline bool qt_ends_with(const QChar *haystack, int haystackLen,
 */
 QByteArray QStringRef::toLatin1() const
 {
+    if (isNull())
+        return QByteArray();
     return QString::toLatin1_helper(unicode(), length());
 }
 
@@ -10347,9 +10404,11 @@ QByteArray QStringRef::toLatin1() const
 QByteArray QStringRef::toLocal8Bit() const
 {
 #ifndef QT_NO_TEXTCODEC
-    QTextCodec *localeCodec = QTextCodec::codecForLocale();
-    if (localeCodec)
-        return localeCodec->fromUnicode(unicode(), length());
+    if (!isNull()) {
+        QTextCodec *localeCodec = QTextCodec::codecForLocale();
+        if (localeCodec)
+            return localeCodec->fromUnicode(unicode(), length());
+    }
 #endif // QT_NO_TEXTCODEC
     return toLatin1();
 }

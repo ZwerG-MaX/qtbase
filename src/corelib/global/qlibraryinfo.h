@@ -91,6 +91,7 @@ public:
 #ifdef QT_BUILD_QMAKE
         // These are not subject to binary compatibility constraints
         SysrootPath,
+        SysrootifyPrefixPath,
         HostBinariesPath,
         HostLibrariesPath,
         HostDataPath,
@@ -105,6 +106,7 @@ public:
 #ifdef QT_BUILD_QMAKE
     enum PathGroup { FinalPaths, EffectivePaths, EffectiveSourcePaths, DevicePaths };
     static QString rawLocation(LibraryLocation, PathGroup);
+    static void reload();
 #endif
 
     static QStringList platformPluginArguments(const QString &platformName);

@@ -76,12 +76,7 @@ public:
 class Direct2DVersion
 {
 private:
-    Direct2DVersion()
-        : partOne(0)
-        , partTwo(0)
-        , partThree(0)
-        , partFour(0)
-    {}
+    Direct2DVersion() = default;
 
     Direct2DVersion(int one, int two, int three, int four)
         : partOne(one)
@@ -108,13 +103,14 @@ public:
             if (_tcscat_s(filename, bufSize, __TEXT("\\d2d1.dll")) == 0) {
                 DWORD versionInfoSize = GetFileVersionInfoSize(filename, NULL);
                 if (versionInfoSize) {
-                    QVarLengthArray<BYTE> info(versionInfoSize);
-                    if (GetFileVersionInfo(filename, NULL, versionInfoSize, info.data())) {
+                    QVarLengthArray<BYTE> info(static_cast<int>(versionInfoSize));
+                    if (GetFileVersionInfo(filename, 0, versionInfoSize, info.data())) {
                         UINT size;
                         DWORD *fi;
 
-                        if (VerQueryValue(info.constData(), __TEXT("\\"), (LPVOID *) &fi, &size) && size) {
-                            VS_FIXEDFILEINFO *verInfo = (VS_FIXEDFILEINFO *) fi;
+                        if (VerQueryValue(info.constData(), __TEXT("\\"),
+                                          reinterpret_cast<void **>(&fi), &size) && size) {
+                            const VS_FIXEDFILEINFO *verInfo = reinterpret_cast<const VS_FIXEDFILEINFO *>(fi);
                             return Direct2DVersion(HIWORD(verInfo->dwFileVersionMS),
                                                    LOWORD(verInfo->dwFileVersionMS),
                                                    HIWORD(verInfo->dwFileVersionLS),
@@ -171,7 +167,10 @@ public:
         return a - b;
     }
 
-    int partOne, partTwo, partThree, partFour;
+    int partOne = 0;
+    int partTwo = 0;
+    int partThree = 0;
+    int partFour = 0;
 };
 
 QWindowsDirect2DIntegration *QWindowsDirect2DIntegration::create(const QStringList &paramList)

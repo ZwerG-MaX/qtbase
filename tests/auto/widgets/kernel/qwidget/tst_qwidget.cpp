@@ -277,6 +277,7 @@ private slots:
 #endif
 
     void setLocale();
+    void propagateLocale();
     void deleteStyle();
     void multipleToplevelFocusCheck();
     void setFocus();
@@ -406,6 +407,8 @@ private slots:
     void qmlSetParentHelper();
 
     void testForOutsideWSRangeFlag();
+
+    void tabletTracking();
 
 private:
     bool ensureScreenSize(int width, int height);
@@ -1201,6 +1204,33 @@ void tst_QWidget::setLocale()
     QCOMPARE(child2.locale(), QLocale());
     child2.setParent(&w);
     QCOMPARE(child2.locale(), QLocale(QLocale::French));
+}
+
+void tst_QWidget::propagateLocale()
+{
+    QWidget parent;
+    parent.setLocale(QLocale::French);
+    // Non-window widget; propagates locale:
+    QWidget *child = new QWidget(&parent);
+    QVERIFY(!child->isWindow());
+    QVERIFY(!child->testAttribute(Qt::WA_WindowPropagation));
+    QCOMPARE(child->locale(), QLocale(QLocale::French));
+    parent.setLocale(QLocale::Italian);
+    QCOMPARE(child->locale(), QLocale(QLocale::Italian));
+    delete child;
+    // Window: doesn't propagate locale:
+    child = new QWidget(&parent, Qt::Window);
+    QVERIFY(child->isWindow());
+    QVERIFY(!child->testAttribute(Qt::WA_WindowPropagation));
+    QCOMPARE(child->locale(), QLocale());
+    parent.setLocale(QLocale::French);
+    QCOMPARE(child->locale(), QLocale());
+    // ... unless we tell it to:
+    child->setAttribute(Qt::WA_WindowPropagation, true);
+    QVERIFY(child->testAttribute(Qt::WA_WindowPropagation));
+    QCOMPARE(child->locale(), QLocale(QLocale::French));
+    parent.setLocale(QLocale::Italian);
+    QCOMPARE(child->locale(), QLocale(QLocale::Italian));
 }
 
 void tst_QWidget::visible_setWindowOpacity()
@@ -2149,6 +2179,8 @@ void tst_QWidget::showMinimizedKeepsFocus()
         QSKIP("QTBUG-26424");
     if (m_platform == QStringLiteral("wayland"))
         QSKIP("Wayland: This fails. Figure out why.");
+    if (m_platform == QStringLiteral("offscreen"))
+        QSKIP("Platform offscreen does not support showMinimized()");
 
     //here we test that minimizing a widget and restoring it doesn't change the focus inside of it
     {
@@ -2188,8 +2220,8 @@ void tst_QWidget::showMinimizedKeepsFocus()
         QTRY_COMPARE(qApp->focusWidget(), child);
 
         delete child;
-        QCOMPARE(window.focusWidget(), static_cast<QWidget*>(0));
-        QCOMPARE(qApp->focusWidget(), static_cast<QWidget*>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
     }
 
     //testing reparenting the focus widget
@@ -2207,8 +2239,8 @@ void tst_QWidget::showMinimizedKeepsFocus()
 
         child->setParent(0);
         QScopedPointer<QWidget> childGuard(child);
-        QCOMPARE(window.focusWidget(), static_cast<QWidget*>(0));
-        QCOMPARE(qApp->focusWidget(), static_cast<QWidget*>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
     }
 
     //testing setEnabled(false)
@@ -2225,8 +2257,8 @@ void tst_QWidget::showMinimizedKeepsFocus()
         QTRY_COMPARE(qApp->focusWidget(), child);
 
         child->setEnabled(false);
-        QCOMPARE(window.focusWidget(), static_cast<QWidget*>(0));
-        QCOMPARE(qApp->focusWidget(), static_cast<QWidget*>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
     }
 
     //testing clearFocus
@@ -2245,14 +2277,14 @@ void tst_QWidget::showMinimizedKeepsFocus()
         QTRY_COMPARE(qApp->focusWidget(), child);
 
         child->clearFocus();
-        QCOMPARE(window.focusWidget(), static_cast<QWidget*>(0));
-        QCOMPARE(qApp->focusWidget(), static_cast<QWidget*>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         window.showMinimized();
         QTest::qWait(30);
         QTRY_VERIFY(window.isMinimized());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget*>(0));
-        QTRY_COMPARE(qApp->focusWidget(), static_cast<QWidget*>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QTRY_COMPARE(QApplication::focusWidget(), nullptr);
 
         window.showNormal();
         qApp->setActiveWindow(&window);
@@ -3205,6 +3237,9 @@ void tst_QWidget::widgetAt()
 
     if (m_platform == QStringLiteral("wayland"))
         QSKIP("Wayland: This fails. Figure out why.");
+    if (m_platform == QStringLiteral("offscreen"))
+        QSKIP("Platform offscreen does not support lower()/raise() or WindowMasks");
+
     Q_CHECK_PAINTEVENTS
 
     const QPoint referencePos = m_availableTopLeft + QPoint(100, 100);
@@ -3621,7 +3656,7 @@ void tst_QWidget::optimizedResize_topLevel()
     expectedUpdateRegion -= QRect(QPoint(), topLevel.size() - QSize(10, 10));
 
     QTRY_COMPARE(topLevel.gotPaintEvent, true);
-    if (m_platform == QStringLiteral("xcb"))
+    if (m_platform == QStringLiteral("xcb") || m_platform == QStringLiteral("offscreen"))
         QSKIP("QTBUG-26424");
     QCOMPARE(topLevel.partial, true);
     QCOMPARE(topLevel.paintedRegion, expectedUpdateRegion);
@@ -4243,12 +4278,14 @@ void tst_QWidget::update()
     }
 }
 
+#ifndef Q_OS_OSX
 static inline bool isOpaque(QWidget *widget)
 {
     if (!widget)
         return false;
     return qt_widget_private(widget)->isOpaque;
 }
+#endif
 
 void tst_QWidget::isOpaque()
 {
@@ -5214,16 +5251,40 @@ protected:
             widgetDuringFocusAboutToChange = qApp->focusWidget();
         return QWidget::event(ev);
     }
+    virtual void focusInEvent(QFocusEvent *)
+    {
+        foucsObjectDuringFocusIn = qApp->focusObject();
+        detectedBadEventOrdering = foucsObjectDuringFocusIn != mostRecentFocusObjectChange;
+    }
     virtual void focusOutEvent(QFocusEvent *)
     {
+        foucsObjectDuringFocusOut = qApp->focusObject();
         widgetDuringFocusOut = qApp->focusWidget();
+        detectedBadEventOrdering = foucsObjectDuringFocusOut != mostRecentFocusObjectChange;
+    }
+
+    void focusObjectChanged(QObject *focusObject)
+    {
+        mostRecentFocusObjectChange = focusObject;
     }
 
 public:
-    FocusWidget(QWidget *parent) : QWidget(parent), widgetDuringFocusAboutToChange(0), widgetDuringFocusOut(0) {}
+    FocusWidget(QWidget *parent) : QWidget(parent),
+        widgetDuringFocusAboutToChange(0), widgetDuringFocusOut(0),
+        foucsObjectDuringFocusIn(0), foucsObjectDuringFocusOut(0),
+        mostRecentFocusObjectChange(0), detectedBadEventOrdering(false)
+    {
+        connect(qGuiApp, &QGuiApplication::focusObjectChanged, this, &FocusWidget::focusObjectChanged);
+    }
 
     QWidget *widgetDuringFocusAboutToChange;
     QWidget *widgetDuringFocusOut;
+
+    QObject *foucsObjectDuringFocusIn;
+    QObject *foucsObjectDuringFocusOut;
+
+    QObject *mostRecentFocusObjectChange;
+    bool detectedBadEventOrdering;
 };
 
 void tst_QWidget::setFocus()
@@ -5260,12 +5321,12 @@ void tst_QWidget::setFocus()
         child1.setFocus();
         QVERIFY(!child1.hasFocus());
         QCOMPARE(window.focusWidget(), &child1);
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child2.setFocus();
         QVERIFY(!child2.hasFocus());
         QCOMPARE(window.focusWidget(), &child2);
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(QApplication::focusWidget(), nullptr);
     }
 
     {
@@ -5294,12 +5355,12 @@ void tst_QWidget::setFocus()
         child1.setFocus();
         QVERIFY(!child1.hasFocus());
         QCOMPARE(window.focusWidget(), &child1);
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child2.setFocus();
         QVERIFY(!child2.hasFocus());
         QCOMPARE(window.focusWidget(), &child2);
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(QApplication::focusWidget(), nullptr);
     }
 
     {
@@ -5355,8 +5416,8 @@ void tst_QWidget::setFocus()
 
         child1.setFocus();
         QVERIFY(!child1.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child1.show();
         QApplication::processEvents();
@@ -5396,33 +5457,67 @@ void tst_QWidget::setFocus()
 
         child1.setFocus();
         QVERIFY(!child1.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child1.hide();
         QVERIFY(!child1.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child1.show();
         QVERIFY(!child1.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child2.setFocus();
         QVERIFY(!child2.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child2.hide();
         QVERIFY(!child2.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
 
         child2.show();
         QVERIFY(!child2.hasFocus());
-        QCOMPARE(window.focusWidget(), static_cast<QWidget *>(0));
-        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(0));
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
+    }
+
+    {
+        QWidget window;
+        window.resize(m_testWidgetSize);
+        window.move(windowPos);
+
+        FocusWidget child1(&window);
+        QWidget child2(&window);
+
+        window.show();
+        window.activateWindow();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY(QApplication::focusWindow());
+
+        QCOMPARE(QApplication::focusObject(), &window);
+
+        child1.setFocus();
+        QTRY_VERIFY(child1.hasFocus());
+        QCOMPARE(window.focusWidget(), &child1);
+        QCOMPARE(QApplication::focusWidget(), &child1);
+        QCOMPARE(QApplication::focusObject(), &child1);
+        QCOMPARE(child1.foucsObjectDuringFocusIn, &child1);
+        QVERIFY2(!child1.detectedBadEventOrdering,
+            "focusObjectChanged should be delivered before widget focus events on setFocus");
+
+        child1.clearFocus();
+        QTRY_VERIFY(!child1.hasFocus());
+        QCOMPARE(window.focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusWidget(), nullptr);
+        QCOMPARE(QApplication::focusObject(), &window);
+        QVERIFY(child1.foucsObjectDuringFocusOut != &child1);
+        QVERIFY2(!child1.detectedBadEventOrdering,
+            "focusObjectChanged should be delivered before widget focus events on clearFocus");
     }
 }
 
@@ -6706,6 +6801,9 @@ void tst_QWidget::render_task217815()
 // Window Opacity is not supported on Windows CE.
 void tst_QWidget::render_windowOpacity()
 {
+    if (m_platform == QStringLiteral("offscreen"))
+        QSKIP("Platform offscreen does not support setting opacity");
+
     const qreal opacity = 0.5;
 
     { // Check that the painter opacity effects the widget drawing.
@@ -7296,6 +7394,9 @@ void tst_QWidget::updateWhileMinimized()
 {
     if (m_platform == QStringLiteral("wayland"))
         QSKIP("Wayland: This fails. Figure out why.");
+    if (m_platform == QStringLiteral("offscreen"))
+        QSKIP("Platform offscreen does not support showMinimized()");
+
 #if defined(Q_OS_QNX)
     QSKIP("Platform does not support showMinimized()");
 #endif
@@ -8119,7 +8220,7 @@ void tst_QWidget::customDpi()
     custom->logicalDpiX();
     QCOMPARE(custom->metricCallCount, 1);
     child->logicalDpiX();
-    QCOMPARE(custom->metricCallCount, 2);
+    QCOMPARE(custom->metricCallCount, 1);
 }
 
 void tst_QWidget::customDpiProperty()
@@ -8957,8 +9058,13 @@ void tst_QWidget::taskQTBUG_4055_sendSyntheticEnterLeave()
 void tst_QWidget::windowFlags()
 {
     QWidget w;
+    const auto baseFlags = w.windowFlags();
     w.setWindowFlags(w.windowFlags() | Qt::FramelessWindowHint);
     QVERIFY(w.windowFlags() & Qt::FramelessWindowHint);
+    w.setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    QCOMPARE(w.windowFlags(), baseFlags | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    w.setWindowFlag(Qt::FramelessWindowHint, false);
+    QCOMPARE(w.windowFlags(), baseFlags | Qt::WindowStaysOnTopHint);
 }
 
 void tst_QWidget::initialPosForDontShowOnScreenWidgets()
@@ -10462,6 +10568,110 @@ void tst_QWidget::testForOutsideWSRangeFlag()
         // The layout should change the size, so the widget must be visible!
         QVERIFY(QTest::qWaitForWindowExposed(&widget));
     }
+}
+
+class TabletWidget : public QWidget
+{
+public:
+    TabletWidget(QWidget *parent) : QWidget(parent) { }
+
+    int tabletEventCount = 0;
+    int pressEventCount = 0;
+    int moveEventCount = 0;
+    int releaseEventCount = 0;
+    int trackingChangeEventCount = 0;
+    qint64 uid = -1;
+
+protected:
+    void tabletEvent(QTabletEvent *event) override {
+        ++tabletEventCount;
+        uid = event->uniqueId();
+        switch (event->type()) {
+        case QEvent::TabletMove:
+            ++moveEventCount;
+            break;
+        case QEvent::TabletPress:
+            ++pressEventCount;
+            break;
+        case QEvent::TabletRelease:
+            ++releaseEventCount;
+            break;
+        default:
+            break;
+        }
+    }
+
+    bool event(QEvent *ev) override {
+        if (ev->type() == QEvent::TabletTrackingChange)
+            ++trackingChangeEventCount;
+        return QWidget::event(ev);
+    }
+};
+
+void tst_QWidget::tabletTracking()
+{
+    QWidget parent;
+    parent.resize(200,200);
+    // QWidgetWindow::handleTabletEvent doesn't deliver tablet events to the window's widget, only to a child.
+    // So it doesn't do any good to show a TabletWidget directly: it needs a parent.
+    TabletWidget widget(&parent);
+    widget.resize(200,200);
+    parent.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    widget.setAttribute(Qt::WA_TabletTracking);
+    QTRY_COMPARE(widget.trackingChangeEventCount, 1);
+    QVERIFY(widget.hasTabletTracking());
+
+    QWindow *window = parent.windowHandle();
+    QPointF local(10, 10);
+    QPointF global = window->mapToGlobal(local.toPoint());
+    QPointF deviceLocal = QHighDpi::toNativeLocalPosition(local, window);
+    QPointF deviceGlobal = QHighDpi::toNativePixels(global, window->screen());
+    qint64 uid = 1234UL;
+
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+        QTabletEvent::Stylus, QTabletEvent::Pen, Qt::NoButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.moveEventCount, 1);
+    QCOMPARE(widget.uid, uid);
+
+    local += QPoint(10, 10);
+    deviceLocal += QPoint(10, 10);
+    deviceGlobal += QPoint(10, 10);
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+        QTabletEvent::Stylus, QTabletEvent::Pen, Qt::NoButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.moveEventCount, 2);
+
+    widget.setTabletTracking(false);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.trackingChangeEventCount, 2);
+
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+        QTabletEvent::Stylus, QTabletEvent::Pen, Qt::LeftButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.pressEventCount, 1);
+
+    local += QPoint(10, 10);
+    deviceLocal += QPoint(10, 10);
+    deviceGlobal += QPoint(10, 10);
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+        QTabletEvent::Stylus, QTabletEvent::Pen, Qt::LeftButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.moveEventCount, 3);
+
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+        QTabletEvent::Stylus, QTabletEvent::Pen, Qt::NoButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.releaseEventCount, 1);
+
+    local += QPoint(10, 10);
+    deviceLocal += QPoint(10, 10);
+    deviceGlobal += QPoint(10, 10);
+    QWindowSystemInterface::handleTabletEvent(window, QDateTime::currentMSecsSinceEpoch(), deviceLocal, deviceGlobal,
+                                              QTabletEvent::Stylus, QTabletEvent::Pen, Qt::NoButton, 0, 0, 0, 0, 0, 0, uid, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(widget.moveEventCount, 3);
 }
 
 QTEST_MAIN(tst_QWidget)

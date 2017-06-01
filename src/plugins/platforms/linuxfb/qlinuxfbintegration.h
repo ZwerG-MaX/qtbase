@@ -46,7 +46,7 @@
 QT_BEGIN_NAMESPACE
 
 class QAbstractEventDispatcher;
-class QLinuxFbScreen;
+class QFbScreen;
 class QFbVtHandler;
 
 class QLinuxFbIntegration : public QPlatformIntegration, public QPlatformNativeInterface
@@ -74,7 +74,7 @@ public:
 private:
     void createInputHandlers();
 
-    QLinuxFbScreen *m_primaryScreen;
+    QFbScreen *m_primaryScreen;
     QPlatformInputContext *m_inputContext;
     QScopedPointer<QPlatformFontDatabase> m_fontDb;
     QScopedPointer<QPlatformServices> m_services;

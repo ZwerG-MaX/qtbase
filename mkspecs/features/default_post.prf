@@ -38,13 +38,25 @@ force_debug_info {
     QMAKE_LFLAGS_RELEASE = $$QMAKE_LFLAGS_RELEASE_WITH_DEBUGINFO
 }
 
-optimize_full {
+optimize_size {
+    !isEmpty(QMAKE_CFLAGS_OPTIMIZE):!isEmpty(QMAKE_CFLAGS_OPTIMIZE_SIZE)  {
+        QMAKE_CFLAGS_RELEASE -= $$QMAKE_CFLAGS_OPTIMIZE
+        QMAKE_CXXFLAGS_RELEASE -= $$QMAKE_CFLAGS_OPTIMIZE
+        QMAKE_CFLAGS_RELEASE += $$QMAKE_CFLAGS_OPTIMIZE_SIZE
+        QMAKE_CXXFLAGS_RELEASE += $$QMAKE_CFLAGS_OPTIMIZE_SIZE
+    }
+} else: optimize_full {
     !isEmpty(QMAKE_CFLAGS_OPTIMIZE):!isEmpty(QMAKE_CFLAGS_OPTIMIZE_FULL)  {
         QMAKE_CFLAGS_RELEASE -= $$QMAKE_CFLAGS_OPTIMIZE
         QMAKE_CXXFLAGS_RELEASE -= $$QMAKE_CFLAGS_OPTIMIZE
         QMAKE_CFLAGS_RELEASE += $$QMAKE_CFLAGS_OPTIMIZE_FULL
         QMAKE_CXXFLAGS_RELEASE += $$QMAKE_CFLAGS_OPTIMIZE_FULL
     }
+}
+
+optimize_debug {
+    QMAKE_CFLAGS_DEBUG += $$QMAKE_CFLAGS_OPTIMIZE_DEBUG
+    QMAKE_CXXFLAGS_DEBUG += $$QMAKE_CFLAGS_OPTIMIZE_DEBUG
 }
 
 debug {
@@ -60,7 +72,7 @@ debug {
 }
 
 # disable special linker flags for host builds (no proper test for host support yet)
-!host_build {
+!host_build|!cross_compile {
     use_gold_linker: QMAKE_LFLAGS += $$QMAKE_LFLAGS_USE_GOLD
     enable_new_dtags: QMAKE_LFLAGS += $$QMAKE_LFLAGS_NEW_DTAGS
 }
@@ -95,6 +107,11 @@ breakpad {
     !isEmpty(QMAKE_STRIP):QMAKE_POST_LINK = $$QMAKE_POST_LINK$$escape_expand(\\n\\t)$$quote($$QMAKE_STRIP $$DEBUGFILENAME)
 }
 
+!c++11:!c++14:!c++1z {
+    # Qt requires C++11 since 5.7, check if we need to force a compiler option
+    QT_COMPILER_STDCXX_no_L = $$replace(QT_COMPILER_STDCXX, "L$", "")
+    !greaterThan(QT_COMPILER_STDCXX_no_L, 199711): CONFIG += c++11
+}
 c++11|c++14|c++1z {
     # Disable special compiler flags for host builds
     !host_build|!cross_compile {
@@ -114,6 +131,11 @@ c++11|c++14|c++1z {
     QMAKE_LFLAGS += $$eval(QMAKE_LFLAGS_$$cxxstd)
 
     unset(cxxstd)
+}
+
+utf8_source {
+    QMAKE_CFLAGS += $$QMAKE_CFLAGS_UTF8_SOURCE
+    QMAKE_CXXFLAGS += $$QMAKE_CFLAGS_UTF8_SOURCE
 }
 
 !precompile_header: SOURCES += $$NO_PCH_SOURCES

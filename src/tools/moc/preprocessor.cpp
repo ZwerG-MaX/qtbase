@@ -236,7 +236,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                     data -= 2;
                     break;
                 case DIGIT:
-                    while (is_digit_char(*data))
+                    while (is_digit_char(*data) || *data == '\'')
                         ++data;
                     if (!*data || *data != '.') {
                         token = INTEGER_LITERAL;
@@ -244,7 +244,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                             (*data == 'x' || *data == 'X')
                             && *lexem == '0') {
                             ++data;
-                            while (is_hex_char(*data))
+                            while (is_hex_char(*data) || *data == '\'')
                                 ++data;
                         }
                         break;
@@ -253,13 +253,13 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                     ++data;
                     Q_FALLTHROUGH();
                 case FLOATING_LITERAL:
-                    while (is_digit_char(*data))
+                    while (is_digit_char(*data) || *data == '\'')
                         ++data;
                     if (*data == '+' || *data == '-')
                         ++data;
                     if (*data == 'e' || *data == 'E') {
                         ++data;
-                        while (is_digit_char(*data))
+                        while (is_digit_char(*data) || *data == '\'')
                             ++data;
                     }
                     if (*data == 'f' || *data == 'F'
@@ -413,7 +413,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                 token = PP_CHARACTER_LITERAL;
                 break;
             case PP_DIGIT:
-                while (is_digit_char(*data))
+                while (is_digit_char(*data) || *data == '\'')
                     ++data;
                 if (!*data || *data != '.') {
                     token = PP_INTEGER_LITERAL;
@@ -421,7 +421,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                         (*data == 'x' || *data == 'X')
                         && *lexem == '0') {
                         ++data;
-                        while (is_hex_char(*data))
+                        while (is_hex_char(*data) || *data == '\'')
                             ++data;
                     }
                     break;
@@ -430,13 +430,13 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                 ++data;
                 Q_FALLTHROUGH();
             case PP_FLOATING_LITERAL:
-                while (is_digit_char(*data))
+                while (is_digit_char(*data) || *data == '\'')
                     ++data;
                 if (*data == '+' || *data == '-')
                     ++data;
                 if (*data == 'e' || *data == 'E') {
                     ++data;
-                    while (is_digit_char(*data))
+                    while (is_digit_char(*data) || *data == '\'')
                         ++data;
                 }
                 if (*data == 'f' || *data == 'F'
@@ -1005,22 +1005,20 @@ static void mergeStringLiterals(Symbols *_symbols)
     }
 }
 
-QByteArray Preprocessor::resolveInclude(const QByteArray &include, const QByteArray &relativeTo)
+static QByteArray searchIncludePaths(const QList<Parser::IncludePath> &includepaths,
+                                     const QByteArray &include)
 {
-    // #### stringery
     QFileInfo fi;
-    if (!relativeTo.isEmpty())
-        fi.setFile(QFileInfo(QString::fromLocal8Bit(relativeTo.constData())).dir(), QString::fromLocal8Bit(include.constData()));
-    for (int j = 0; j < Preprocessor::includes.size() && !fi.exists(); ++j) {
-        const IncludePath &p = Preprocessor::includes.at(j);
+    for (int j = 0; j < includepaths.size() && !fi.exists(); ++j) {
+        const Parser::IncludePath &p = includepaths.at(j);
         if (p.isFrameworkPath) {
             const int slashPos = include.indexOf('/');
             if (slashPos == -1)
                 continue;
             fi.setFile(QString::fromLocal8Bit(p.path + '/' + include.left(slashPos) + ".framework/Headers/"),
-                       QString::fromLocal8Bit(include.mid(slashPos + 1).constData()));
+                       QString::fromLocal8Bit(include.mid(slashPos + 1)));
         } else {
-            fi.setFile(QString::fromLocal8Bit(p.path.constData()), QString::fromLocal8Bit(include.constData()));
+            fi.setFile(QString::fromLocal8Bit(p.path), QString::fromLocal8Bit(include));
         }
         // try again, maybe there's a file later in the include paths with the same name
         // (186067)
@@ -1033,6 +1031,21 @@ QByteArray Preprocessor::resolveInclude(const QByteArray &include, const QByteAr
     if (!fi.exists() || fi.isDir())
         return QByteArray();
     return fi.canonicalFilePath().toLocal8Bit();
+}
+
+QByteArray Preprocessor::resolveInclude(const QByteArray &include, const QByteArray &relativeTo)
+{
+    if (!relativeTo.isEmpty()) {
+        QFileInfo fi;
+        fi.setFile(QFileInfo(QString::fromLocal8Bit(relativeTo)).dir(), QString::fromLocal8Bit(include));
+        if (fi.exists() && !fi.isDir())
+            return fi.canonicalFilePath().toLocal8Bit();
+    }
+
+    auto it = nonlocalIncludePathResolutionCache.find(include);
+    if (it == nonlocalIncludePathResolutionCache.end())
+       it = nonlocalIncludePathResolutionCache.insert(include, searchIncludePaths(includes, include));
+    return it.value();
 }
 
 void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)

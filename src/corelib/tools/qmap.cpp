@@ -399,7 +399,9 @@ void QMapDataBase::freeData(QMapDataBase *d)
        With QMap, the items are always sorted by key.
     \li The key type of a QHash must provide operator==() and a global
        qHash(Key) function. The key type of a QMap must provide
-       operator<() specifying a total order.
+       operator<() specifying a total order. Since Qt 5.8.1 it is also safe
+       to use a pointer type as key, even if the underlying operator<()
+       does not provide a total order.
     \endlist
 
     Here's an example QMap with QString keys and \c int values:
@@ -1865,7 +1867,7 @@ void QMapDataBase::freeData(QMapDataBase *d)
 /*! \fn QMultiMap::QMultiMap(std::initializer_list<std::pair<Key,T> > list)
     \since 5.1
 
-    Constructs a multi map with a copy of each of the elements in the
+    Constructs a multi-map with a copy of each of the elements in the
     initializer list \a list.
 
     This function is only available if the program is being

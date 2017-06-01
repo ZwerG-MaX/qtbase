@@ -88,6 +88,8 @@ win32 {
             SOURCES += kernel/qeventdispatcher_win.cpp
             HEADERS += kernel/qeventdispatcher_win_p.h
         }
+
+        !winrt: LIBS_PRIVATE += -lversion
 }
 
 winrt {
@@ -119,8 +121,8 @@ mac {
 
     osx: LIBS_PRIVATE += -framework CoreServices -framework AppKit
 
-    uikit {
-        # We need UIKit for UIDevice
+    ios|tvos {
+        # We need UIKit for UIApplication in qeventdispatcher_cf.mm
         LIBS_PRIVATE += -framework UIKit
     }
 
@@ -151,9 +153,6 @@ unix|integrity {
             kernel/qtimerinfo_unix_p.h
 
     qtConfig(poll_select): SOURCES += kernel/qpoll.cpp
-    qtConfig(poll_poll): DEFINES += QT_HAVE_POLL
-    qtConfig(poll_ppoll): DEFINES += QT_HAVE_POLL QT_HAVE_PPOLL
-    qtConfig(poll_pollts): DEFINES += QT_HAVE_POLL QT_HAVE_POLLTS
 
     qtConfig(glib) {
         SOURCES += \
@@ -176,6 +175,9 @@ unix|integrity {
         SOURCES += kernel/qsharedmemory_android.cpp \
                    kernel/qsystemsemaphore_android.cpp
     }
+
+    # This is needed by QMetaType::typeName array implementation
+    integrity: QMAKE_CXXFLAGS += --pending_instantiations=128
 }
 
 vxworks {

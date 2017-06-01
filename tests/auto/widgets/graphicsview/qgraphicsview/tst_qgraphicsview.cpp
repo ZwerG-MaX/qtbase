@@ -56,6 +56,8 @@
 #include <private/qgraphicsview_p.h>
 #include "../../../shared/platforminputcontext.h"
 #include <private/qinputmethod_p.h>
+#include <private/qguiapplication_p.h>
+#include <qpa/qplatformintegration.h>
 
 #include "tst_qgraphicsview.h"
 
@@ -489,7 +491,7 @@ void tst_QGraphicsView::scene()
         QCOMPARE(view.scene(), &scene);
     }
 
-    QCOMPARE(view.scene(), (QGraphicsScene *)0);
+    QCOMPARE(view.scene(), nullptr);
 }
 
 void tst_QGraphicsView::setScene()
@@ -529,9 +531,9 @@ void tst_QGraphicsView::deleteScene()
     QGraphicsView view3(scene);
     view3.show();
     delete scene;
-    QCOMPARE(view1.scene(), (QGraphicsScene *)0);
-    QCOMPARE(view2.scene(), (QGraphicsScene *)0);
-    QCOMPARE(view3.scene(), (QGraphicsScene *)0);
+    QCOMPARE(view1.scene(), nullptr);
+    QCOMPARE(view2.scene(), nullptr);
+    QCOMPARE(view3.scene(), nullptr);
 }
 
 void tst_QGraphicsView::sceneRect()
@@ -664,6 +666,9 @@ void tst_QGraphicsView::viewport()
 #ifndef QT_NO_OPENGL
 void tst_QGraphicsView::openGLViewport()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
+        QSKIP("QOpenGL is not supported on this platform.");
+
     QGraphicsScene scene;
     scene.setBackgroundBrush(Qt::white);
     scene.addText("GraphicsView");
@@ -2885,7 +2890,7 @@ public:
 
 void tst_QGraphicsView::scrollBarRanges()
 {
-    QFETCH(QString, style);
+    QFETCH(QByteArray, style);
     QFETCH(QSize, viewportSize);
     QFETCH(QRectF, sceneRect);
     QFETCH(ScrollBarCount, sceneRectOffsetFactors);
@@ -2898,7 +2903,7 @@ void tst_QGraphicsView::scrollBarRanges()
     QFETCH(ExpectedValueDescription, vmax);
     QFETCH(bool, useStyledPanel);
 
-    if (useStyledPanel && style == QStringLiteral("Macintosh") && platformName == QStringLiteral("cocoa"))
+    if (useStyledPanel && style == "Macintosh" && platformName == QStringLiteral("cocoa"))
         QSKIP("Insignificant on OSX");
 
     QScopedPointer<QStyle> stylePtr;
@@ -2909,10 +2914,10 @@ void tst_QGraphicsView::scrollBarRanges()
     view.setTransform(transform);
     view.setFrameStyle(useStyledPanel ? QFrame::StyledPanel : QFrame::NoFrame);
 
-    if (style == QString("motif"))
+    if (style == "motif")
         stylePtr.reset(new FauxMotifStyle);
     else
-        stylePtr.reset(QStyleFactory::create(style));
+        stylePtr.reset(QStyleFactory::create(QLatin1String(style)));
     view.setStyle(stylePtr.data());
     view.setStyleSheet(" "); // enables style propagation ;-)
 

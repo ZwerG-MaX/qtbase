@@ -1113,6 +1113,8 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
     }
     bool copyBundleResources = project->isActiveConfig("app_bundle") && project->first("TEMPLATE") == "app";
     ProStringList bundle_resources_files;
+    ProStringList embedded_frameworks;
+    QMap<ProString, ProStringList> embedded_plugins;
     // Copy Bundle Data
     if (!project->isEmpty("QMAKE_BUNDLE_DATA")) {
         ProStringList bundle_file_refs;
@@ -1123,6 +1125,11 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
         for(int i = 0; i < bundle_data.count(); i++) {
             ProStringList bundle_files;
             ProString path = project->first(ProKey(bundle_data[i] + ".path"));
+            const bool isEmbeddedFramework = ((!osx && path == QLatin1String("Frameworks"))
+                || (osx && path == QLatin1String("Contents/Frameworks")));
+            const ProString pluginsPrefix = ProString(osx ? QLatin1String("Contents/PlugIns") : QLatin1String("PlugIns"));
+            const bool isEmbeddedPlugin = (path == pluginsPrefix) || path.startsWith(pluginsPrefix + "/");
+
             //all files
             const ProStringList &files = project->values(ProKey(bundle_data[i] + ".files"));
             for(int file = 0; file < files.count(); file++) {
@@ -1140,19 +1147,29 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                 bundle_files += file_key;
                 t << "\t\t" <<  file_key << " = {\n"
                   << "\t\t\t" << writeSettings("fileRef", file_ref_key) << ";\n"
-                  << "\t\t\t" << writeSettings("isa", "PBXBuildFile", SettingsNoQuote) << ";\n"
-                  << "\t\t};\n";
+                  << "\t\t\t" << writeSettings("isa", "PBXBuildFile", SettingsNoQuote) << ";\n";
+                if (isEmbeddedFramework || isEmbeddedPlugin || name.endsWith(".dylib") || name.endsWith(".framework"))
+                    t << "\t\t\t" << writeSettings("settings", "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }", SettingsNoQuote) << ";\n";
+                t << "\t\t};\n";
             }
 
             if (copyBundleResources && ((!osx && path.isEmpty())
                                         || (osx && path == QLatin1String("Contents/Resources")))) {
                 for (const ProString &s : qAsConst(bundle_files))
                     bundle_resources_files << s;
+            } else if (copyBundleResources && isEmbeddedFramework) {
+                for (const ProString &s : qAsConst(bundle_files))
+                    embedded_frameworks << s;
+            } else if (copyBundleResources && isEmbeddedPlugin) {
+                for (const ProString &s : qAsConst(bundle_files)) {
+                    ProString subpath = (path == pluginsPrefix) ? ProString() : path.mid(pluginsPrefix.size() + 1);
+                    embedded_plugins[subpath] << s;
+                }
             } else {
                 QString phase_key = keyFor("QMAKE_PBX_BUNDLE_COPY." + bundle_data[i]);
-                if (!project->isEmpty(ProKey(bundle_data[i] + ".version"))) {
-                    //###
-                }
+                //if (!project->isActiveConfig("shallow_bundle")
+                //    && !project->isEmpty(ProKey(bundle_data[i] + ".version"))) {
+                //}
 
                 project->values("QMAKE_PBX_BUILDPHASES").append(phase_key);
                 t << "\t\t" << phase_key << " = {\n"
@@ -1196,6 +1213,35 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("runOnlyForDeploymentPostprocessing", "0", SettingsNoQuote) << ";\n"
           << "\t\t\t" << writeSettings("name", grp) << ";\n"
           << "\t\t};\n";
+
+        QString grp2("Embed Frameworks"), key2 = keyFor(grp2);
+        project->values("QMAKE_PBX_BUILDPHASES").append(key2);
+        t << "\t\t" << key2 << " = {\n"
+          << "\t\t\t" << writeSettings("isa", "PBXCopyFilesBuildPhase", SettingsNoQuote) << ";\n"
+          << "\t\t\t" << writeSettings("buildActionMask", "2147483647", SettingsNoQuote) << ";\n"
+          << "\t\t\t" << writeSettings("dstPath", "") << ";\n"
+          << "\t\t\t" << writeSettings("dstSubfolderSpec", "10", SettingsNoQuote) << ";\n"
+          << "\t\t\t" << writeSettings("files", embedded_frameworks, SettingsAsList, 4) << ";\n"
+          << "\t\t\t" << writeSettings("name", grp2) << ";\n"
+          << "\t\t\t" << writeSettings("runOnlyForDeploymentPostprocessing", "0", SettingsNoQuote) << ";\n"
+          << "\t\t};\n";
+
+        QMapIterator<ProString, ProStringList> it(embedded_plugins);
+        while (it.hasNext()) {
+            it.next();
+            QString suffix = !it.key().isEmpty() ? (" (" + it.key() + ")") : QString();
+            QString grp3("Embed PlugIns" + suffix), key3 = keyFor(grp3);
+            project->values("QMAKE_PBX_BUILDPHASES").append(key3);
+            t << "\t\t" << key3 << " = {\n"
+              << "\t\t\t" << writeSettings("isa", "PBXCopyFilesBuildPhase", SettingsNoQuote) << ";\n"
+              << "\t\t\t" << writeSettings("buildActionMask", "2147483647", SettingsNoQuote) << ";\n"
+              << "\t\t\t" << writeSettings("dstPath", it.key()) << ";\n"
+              << "\t\t\t" << writeSettings("dstSubfolderSpec", "13", SettingsNoQuote) << ";\n"
+              << "\t\t\t" << writeSettings("files", it.value(), SettingsAsList, 4) << ";\n"
+              << "\t\t\t" << writeSettings("name", grp3) << ";\n"
+              << "\t\t\t" << writeSettings("runOnlyForDeploymentPostprocessing", "0", SettingsNoQuote) << ";\n"
+              << "\t\t};\n";
+        }
     }
 
     //REFERENCE
@@ -1431,14 +1477,22 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
 
         QMap<QString, QString> settings;
         if (!project->isActiveConfig("no_xcode_development_team")) {
-            const QList<QVariantMap> teams = provisioningTeams();
-            if (!teams.isEmpty()) {
-                // first suitable team we find is the one we'll use by default
-                settings.insert("DEVELOPMENT_TEAM",
-                    teams.first().value(QLatin1String("teamID")).toString());
+            QString teamId;
+            if (!project->isEmpty("QMAKE_DEVELOPMENT_TEAM")) {
+                teamId = project->first("QMAKE_DEVELOPMENT_TEAM").toQString();
+            } else {
+                const QList<QVariantMap> teams = provisioningTeams();
+                if (!teams.isEmpty()) // first suitable team we find is the one we'll use by default
+                    teamId = teams.first().value(QLatin1String("teamID")).toString();
             }
+            if (!teamId.isEmpty())
+                settings.insert("DEVELOPMENT_TEAM", teamId);
+            if (!project->isEmpty("QMAKE_PROVISIONING_PROFILE"))
+                settings.insert("PROVISIONING_PROFILE_SPECIFIER", project->first("QMAKE_PROVISIONING_PROFILE").toQString());
         }
+
         settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
+        settings.insert("APPLICATION_EXTENSION_API_ONLY", project->isActiveConfig("app_extension_api_only") ? "YES" : "NO");
         // required for tvOS (and watchos), optional on iOS (deployment target >= iOS 6.0)
         settings.insert("ENABLE_BITCODE", project->isActiveConfig("bitcode") ? "YES" : "NO");
         settings.insert("GCC_GENERATE_DEBUGGING_SYMBOLS", as_release ? "NO" : "YES");
@@ -1515,9 +1569,15 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                             plist_in_text.replace(QLatin1String("@ICON@"),
                               (project->isEmpty("ICON") ? QString("") : project->first("ICON").toQString().section(Option::dir_sep, -1)));
                             if (project->first("TEMPLATE") == "app") {
-                                plist_in_text.replace(QLatin1String("@EXECUTABLE@"), project->first("QMAKE_ORIG_TARGET").toQString());
+                                ProString app_bundle_name = project->first("QMAKE_APPLICATION_BUNDLE_NAME");
+                                if (app_bundle_name.isEmpty())
+                                    app_bundle_name = project->first("QMAKE_ORIG_TARGET");
+                                plist_in_text.replace(QLatin1String("@EXECUTABLE@"), app_bundle_name.toQString());
                             } else {
-                                plist_in_text.replace(QLatin1String("@LIBRARY@"), project->first("QMAKE_ORIG_TARGET").toQString());
+                                ProString lib_bundle_name = project->first("QMAKE_FRAMEWORK_BUNDLE_NAME");
+                                if (lib_bundle_name.isEmpty())
+                                    lib_bundle_name = project->first("QMAKE_ORIG_TARGET");
+                                plist_in_text.replace(QLatin1String("@LIBRARY@"), lib_bundle_name.toQString());
                             }
                             QString bundlePrefix = project->first("QMAKE_TARGET_BUNDLE_PREFIX").toQString();
                             if (bundlePrefix.isEmpty())
@@ -1834,108 +1894,12 @@ ProjectBuilderMakefileGenerator::openOutput(QFile &file, const QString &build) c
     return UnixMakefileGenerator::openOutput(file, build);
 }
 
-/* This function is such a hack it is almost pointless, but it
-   eliminates the warning message from ProjectBuilder that the project
-   file is for an older version. I guess this could be used someday if
-   the format of the output is dependant upon the version of
-   ProjectBuilder as well.
-*/
 int
 ProjectBuilderMakefileGenerator::pbuilderVersion() const
 {
-    QString ret;
-    if(!project->isEmpty("QMAKE_PBUILDER_VERSION")) {
-        ret = project->first("QMAKE_PBUILDER_VERSION").toQString();
-    } else {
-        QString version, version_plist = project->first("QMAKE_PBUILDER_VERSION_PLIST").toQString();
-        if(version_plist.isEmpty()) {
-#ifdef Q_OS_DARWIN
-            ret = QLatin1String("34");
-            QCFType<CFURLRef> cfurl;
-            // Check for XCode 4 first
-            OSStatus err = LSFindApplicationForInfo(0, CFSTR("com.apple.dt.Xcode"), 0, 0, &cfurl);
-            // Now check for XCode 3
-            if (err == kLSApplicationNotFoundErr)
-                err = LSFindApplicationForInfo(0, CFSTR("com.apple.Xcode"), 0, 0, &cfurl);
-            if (err == noErr) {
-                QCFType<CFBundleRef> bundle = CFBundleCreate(0, cfurl);
-                if (bundle) {
-                    CFStringRef str = CFStringRef(CFBundleGetValueForInfoDictionaryKey(bundle,
-                                                              CFSTR("CFBundleShortVersionString")));
-                    if (str) {
-                        QStringList versions = QString::fromCFString(str).split(QLatin1Char('.'));
-                        int versionMajor = versions.at(0).toInt();
-                        int versionMinor = versions.at(1).toInt();
-                        if (versionMajor >= 3) {
-                            ret = QLatin1String("46");
-                        } else if (versionMajor >= 2) {
-                            ret = QLatin1String("42");
-                        } else if (versionMajor == 1 && versionMinor >= 5) {
-                            ret = QLatin1String("39");
-                        }
-                    }
-                }
-            }
-#else
-            if(exists("/Developer/Applications/Xcode.app/Contents/version.plist"))
-                version_plist = "/Developer/Applications/Xcode.app/Contents/version.plist";
-            else
-                version_plist = "/Developer/Applications/Project Builder.app/Contents/version.plist";
-#endif
-        }
-        if (ret.isEmpty()) {
-            QFile version_file(version_plist);
-            if (version_file.open(QIODevice::ReadOnly)) {
-                debug_msg(1, "pbuilder: version.plist: Reading file: %s", version_plist.toLatin1().constData());
-                QTextStream plist(&version_file);
-
-                bool in_dict = false;
-                QString current_key;
-                QRegExp keyreg("^<key>(.*)</key>$"), stringreg("^<string>(.*)</string>$");
-                while(!plist.atEnd()) {
-                    QString line = plist.readLine().trimmed();
-                    if(line == "<dict>")
-                        in_dict = true;
-                    else if(line == "</dict>")
-                        in_dict = false;
-                    else if(in_dict) {
-                        if(keyreg.exactMatch(line))
-                            current_key = keyreg.cap(1);
-                        else if(current_key == "CFBundleShortVersionString" && stringreg.exactMatch(line))
-                            version = stringreg.cap(1);
-                    }
-                }
-                plist.flush();
-                version_file.close();
-            } else {
-                debug_msg(1, "pbuilder: version.plist: Failure to open %s", version_plist.toLatin1().constData());
-            }
-            if(version.isEmpty() && version_plist.contains("Xcode")) {
-                ret = "39";
-            } else {
-                int versionMajor = version.left(1).toInt();
-                if(versionMajor >= 2)
-                    ret = "42";
-                else if(version == "1.5")
-                    ret = "39";
-                else if(version == "1.1")
-                    ret = "34";
-            }
-        }
-    }
-
-    if(!ret.isEmpty()) {
-        bool ok;
-        int int_ret = ret.toInt(&ok);
-        if(ok) {
-            debug_msg(1, "pbuilder: version.plist: Got version: %d", int_ret);
-            if (int_ret < 46)
-                warn_msg(WarnLogic, "XCode version is too old, at least XCode 3.2 is required");
-            return int_ret;
-        }
-    }
-    debug_msg(1, "pbuilder: version.plist: Fallback to default version");
-    return 46; //my fallback
+    if (!project->isEmpty("QMAKE_PBUILDER_VERSION"))
+        return project->first("QMAKE_PBUILDER_VERSION").toQString().toInt();
+    return 46; // Xcode 3.2-compatible; default format since that version
 }
 
 int
@@ -1950,22 +1914,13 @@ ProjectBuilderMakefileGenerator::reftypeForFile(const QString &where)
 QString
 ProjectBuilderMakefileGenerator::projectSuffix() const
 {
-    const int pbVersion = pbuilderVersion();
-    if(pbVersion >= 42)
-        return ".xcodeproj";
-    else if(pbVersion >= 38)
-        return ".xcode";
-    return ".pbproj";
+    return ".xcodeproj";
 }
 
 QString
 ProjectBuilderMakefileGenerator::pbxbuild()
 {
-    if(exists("/usr/bin/pbbuild"))
-        return "pbbuild";
-    if(exists("/usr/bin/xcodebuild"))
-       return "xcodebuild";
-    return (pbuilderVersion() >= 38 ? "xcodebuild" : "pbxbuild");
+    return "xcodebuild";
 }
 
 static QString quotedStringLiteral(const QString &value)

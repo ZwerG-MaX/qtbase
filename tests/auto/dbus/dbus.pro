@@ -29,3 +29,11 @@ SUBDIRS+=\
 !qtConfig(private_tests): SUBDIRS -= \
            qdbusmarshall \
 
+!qtConfig(process): SUBDIRS -= \
+           qdbusabstractadaptor \
+           qdbusabstractinterface \
+           qdbusinterface \
+           qdbusmarshall
+
+!qtHaveModule(xml): SUBDIRS -= \
+           qdbusxmlparser

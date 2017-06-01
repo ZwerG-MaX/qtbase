@@ -445,6 +445,11 @@ bool QFontEngine::supportsTransformation(const QTransform &transform) const
     return transform.type() < QTransform::TxProject;
 }
 
+bool QFontEngine::expectsGammaCorrectedBlending() const
+{
+    return true;
+}
+
 void QFontEngine::getGlyphPositions(const QGlyphLayout &glyphs, const QTransform &matrix, QTextItem::RenderFlags flags,
                                     QVarLengthArray<glyph_t> &glyphs_out, QVarLengthArray<QFixedPoint> &positions)
 {
@@ -1268,7 +1273,7 @@ const uchar *QFontEngine::getCMap(const uchar *table, uint tableSize, bool *isSy
         if (!qSafeFromBigEndian(maps + 8 * n, endPtr, &platformId))
             return 0;
 
-        quint16 platformSpecificId;
+        quint16 platformSpecificId = 0;
         if (!qSafeFromBigEndian(maps + 8 * n + 2, endPtr, &platformSpecificId))
             return 0;
 

@@ -180,6 +180,13 @@ UnixMakefileGenerator::init()
                 // icc style
                 pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT}"),
                                  escapeFilePath(pchBaseName + project->first("QMAKE_PCH_OUTPUT_EXT")));
+                const ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+                for (const ProString &arch : pchArchs) {
+                    QString suffix = project->first("QMAKE_PCH_OUTPUT_EXT").toQString();
+                    suffix.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                    pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT_") + arch + QLatin1Char('}'),
+                                     escapeFilePath(pchBaseName + suffix));
+                }
             } else {
                 // gcc style (including clang_pch_style)
                 QString headerSuffix;
@@ -334,10 +341,19 @@ QStringList
             header_prefix += project->first("QMAKE_PCH_OUTPUT_EXT").toQString();
         if (project->isActiveConfig("icc_pch_style")) {
             // icc style
-            for(QStringList::Iterator it = Option::cpp_ext.begin(); it != Option::cpp_ext.end(); ++it) {
-                if(file.endsWith(*it)) {
-                    ret += header_prefix;
-                    break;
+            ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+            if (pchArchs.isEmpty())
+                pchArchs << ProString(); // normal single-arch PCH
+            for (const ProString &arch : qAsConst(pchArchs)) {
+                auto pfx = header_prefix;
+                if (!arch.isEmpty())
+                    pfx.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                for (QStringList::Iterator it = Option::cpp_ext.begin();
+                    it != Option::cpp_ext.end(); ++it) {
+                    if (file.endsWith(*it)) {
+                        ret += pfx;
+                        break;
+                    }
                 }
             }
         } else {
@@ -584,7 +600,7 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
                 dst = escapeFilePath(filePrefixRoot(root, targetdir + src.section('/', -1)));
         if(!ret.isEmpty())
             ret += "\n\t";
-        ret += "-$(INSTALL_FILE) " + escapeFilePath(Option::fixPathToTargetOS(src, false)) + ' ' + dst;
+        ret += "-$(QINSTALL_FILE) " + escapeFilePath(Option::fixPathToTargetOS(src, false)) + ' ' + dst;
         if(!uninst.isEmpty())
             uninst.append("\n\t");
         uninst.append("-$(DEL_FILE) " + dst);
@@ -599,10 +615,13 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
         plain_targ = escapeFilePath(plain_targ);
         if (bundle != NoBundle) {
             QString suffix;
-            if (project->first("TEMPLATE") == "lib")
-                suffix = "/Versions/" + project->first("QMAKE_FRAMEWORK_VERSION") + "/$(TARGET)";
-            else
+            if (project->first("TEMPLATE") == "lib") {
+                if (!project->isActiveConfig("shallow_bundle"))
+                    suffix += "/Versions/" + project->first("QMAKE_FRAMEWORK_VERSION");
+                suffix += "/$(TARGET)";
+            } else {
                 suffix = "/" + project->first("QMAKE_BUNDLE_LOCATION") + "/$(QMAKE_TARGET)";
+            }
             dst_targ += suffix;
             if (bundle == SolidBundle) {
                 if (!ret.isEmpty())
@@ -617,16 +636,16 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
 
         QString copy_cmd;
         if (bundle == SolidBundle) {
-            copy_cmd += "-$(INSTALL_DIR) " + src_targ + ' ' + plain_targ;
+            copy_cmd += "-$(QINSTALL_DIR) " + src_targ + ' ' + plain_targ;
         } else if (project->first("TEMPLATE") == "lib" && project->isActiveConfig("staticlib")) {
-            copy_cmd += "-$(INSTALL_FILE) " + src_targ + ' ' + dst_targ;
+            copy_cmd += "-$(QINSTALL_FILE) " + src_targ + ' ' + dst_targ;
         } else if (!isAux) {
             if (bundle == SlicedBundle) {
                 if (!ret.isEmpty())
                     ret += "\n\t";
                 ret += mkdir_p_asstring("\"`dirname " + dst_targ + "`\"", false);
             }
-            copy_cmd += "-$(INSTALL_PROGRAM) " + src_targ + ' ' + dst_targ;
+            copy_cmd += "-$(QINSTALL_PROGRAM) " + src_targ + ' ' + dst_targ;
         }
         if(project->first("TEMPLATE") == "lib" && !project->isActiveConfig("staticlib")
            && project->values(ProKey(t + ".CONFIG")).indexOf("fix_rpath") != -1) {
@@ -679,7 +698,7 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
                     ret += "\n\t";
                 ret += mkdir_p_asstring("\"`dirname " + dst + "`\"", false) + "\n\t";
                 ret += "-$(DEL_FILE) " + dst + "\n\t"; // Can't overwrite symlinks to directories
-                ret += "-$(INSTALL_DIR) " + escapeFilePath(src) + " " + dst; // Use cp -R to copy symlinks
+                ret += "-$(QINSTALL_DIR) " + escapeFilePath(src) + " " + dst;
                 if (!uninst.isEmpty())
                     uninst.append("\n\t");
                 uninst.append("-$(DEL_FILE) " + dst);

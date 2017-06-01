@@ -685,7 +685,7 @@
 
     Directories other than the standard framework directory need to be specified
     to the build system, and this is achieved by appending linker options to the
-    \l{QMAKE_LFLAGS} variable, as shown in the following example:
+    \l{LIBS} variable, as shown in the following example:
 
     \snippet code/doc_src_qmake-manual.pro 14
 
@@ -960,6 +960,8 @@
     \row    \li c++14 \li C++14 support is enabled. This option has no effect if
             the compiler does not support C++14.
             By default, support is disabled.
+    \row    \li depend_includepath \li Appending the value of INCLUDEPATH to
+            DEPENDPATH is enabled. Set by default.
     \endtable
 
     When you use the \c debug_and_release option (which is the default under
@@ -1119,24 +1121,6 @@
     Specifies a list of all directories to look in to resolve dependencies. This
     variable is used when crawling through \c included files.
 
-    \target DEPLOYMENT_PLUGIN
-    \section1 DEPLOYMENT_PLUGIN
-
-    \note This variable is used only on the Windows CE platform.
-
-    Specifies the Qt plugins that will be deployed. All plugins
-    available in Qt can be explicitly deployed to the device. See
-    \l{Static Plugins}{Static Plugins} for a complete list.
-
-    \note No plugins will be deployed automatically to Windows CE devices.
-    If the application depends on plugins, these plugins have to be specified
-    manually.
-
-    For example, the following definition uploads the jpeg imageformat plugin to
-    the plugins directory on the Windows CE device:
-
-    \snippet code/doc_src_qmake-manual.pro 142
-
     \target DESTDIR
     \section1 DESTDIR
 
@@ -1245,10 +1229,6 @@
 
     This variable is also used to specify which additional files will be
     deployed to embedded devices.
-
-    For Windows CE, the default deployment target path is
-    \c{%CSIDL_PROGRAM_FILES%\target}, which usually gets expanded to
-    \c{\Program Files\target}.
 
     \target LEXIMPLS
     \section1 LEXIMPLS
@@ -1600,6 +1580,14 @@
     The value of this variable is typically handled by
     qmake or \l{#QMAKESPEC}{qmake.conf} and rarely
     needs to be modified.
+
+    \target QMAKE_DEVELOPMENT_TEAM
+    \section1 QMAKE_DEVELOPMENT_TEAM
+
+    \note This variable is used on \macos, iOS, tvOS, and watchOS only.
+
+    The identifier of a development team to use for signing certificates
+    and provisioning profiles.
 
     \target QMAKE_DISTCLEAN
     \section1 QMAKE_DISTCLEAN
@@ -2044,6 +2032,15 @@
     of this variable is typically handled by qmake
     or \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
 
+    \section1 QMAKE_LINK
+
+    Specifies the linker that will be used when building
+    application based projects. Only the file name of the linker
+    executable needs to be specified as long as it is on a path
+    contained in the \c PATH variable when the Makefile is processed.
+    The value of this variable is typically handled by qmake or
+    \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
+
     \section1 QMAKE_LINK_SHLIB_CMD
 
     Specifies the command to execute when creating a shared
@@ -2086,6 +2083,17 @@
     Determines the name of the project when generating project
     files for IDEs. The default value is the target name. The value of this
     variable is typically handled by qmake and rarely needs to be modified.
+
+    \target QMAKE_PROVISIONING_PROFILE
+    \section1 QMAKE_PROVISIONING_PROFILE
+
+    \note This variable is used on \macos, iOS, tvOS, and watchOS only.
+
+    The UUID of a valid provisioning profile. Use in conjunction with
+    \l{QMAKE_DEVELOPMENT_TEAM} to specify the provisioning profile.
+
+    \note Specifying the provisioning profile disables the automatically
+    managed signing.
 
     \section1 QMAKE_MAC_SDK
 
@@ -2369,16 +2377,6 @@
     The value of this variable is typically handled by
     qmake or \l{#QMAKESPEC}{qmake.conf} and rarely
     needs to be modified.
-
-    \target SIGNATURE_FILE
-    \section1 SIGNATURE_FILE
-
-    \note This variable is only used on Windows CE.
-
-    Specifies which signature file should be used to sign the project target.
-
-    \note This variable will overwrite the setting you have specified in configure,
-    with the \c -signature option.
 
     \target SOURCES
     \section1 SOURCES
@@ -2885,6 +2883,11 @@
     MY_VAR2 will contain '-Lone -Ltwo -Lthree -Lfour -Lfive', and MY_VAR3 will
     contain 'three two three'.
 
+    \section2 files(pattern[, recursive=false])
+
+    Expands the specified wildcard pattern and returns a list of filenames.
+    If \c recursive is true, this function descends into subdirectories.
+
     \target fn_first
     \section2 first(variablename)
 
@@ -3172,6 +3175,7 @@
 
     See also \l{fn_size}{size()}.
 
+    \target system_replace
     \section2 system(command[, mode[, stsvar]])
 
     You can use this variant of the \c system function to obtain stdout from the
@@ -3377,11 +3381,6 @@
     Exports the current value of \c variablename from the local context of a
     function to the global context.
 
-    \section2 files(pattern[, recursive=false])
-
-    Expands the specified wildcard pattern and returns a list of filenames.
-    If \c recursive is true, this function descends into subdirectories.
-
     \target forfunction
     \section2 for(iterate, list)
 
@@ -3519,7 +3518,7 @@
 
     \snippet code/doc_src_qmake-manual.pro 71
 
-    See also the replace variant of \l{system(command[, mode])}{system()}.
+    See also the replace variant of \l{system_replace}{system()}.
 
     \target touchfunction
     \section2 touch(filename, reference_filename)
@@ -4499,8 +4498,8 @@
     include the precompiled header file in \c HEADERS, as
     qmake will do this if the configuration supports precompiled headers.
 
-    The MSVC and g++ specs targeting Windows (and Windows CE) enable
-    \c precompile_header by default.
+    The MSVC and g++ specs targeting Windows enable \c precompile_header
+    by default.
 
     Using this option, you may trigger
     conditional blocks in your project file to add settings when using

@@ -291,6 +291,7 @@ public:
 private:
     friend class QRegion; // Optimization for QRegion::rects()
 
+    // ### Qt6: remove const from int parameters
     void reallocData(const int size, const int alloc, QArrayData::AllocationOptions options = QArrayData::Default);
     void reallocData(const int sz) { reallocData(sz, d->alloc); }
     void freeData(Data *d);
@@ -553,7 +554,7 @@ void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::Allo
                 T *srcEnd = asize > d->size ? d->end() : d->begin() + asize;
                 T *dst = x->begin();
 
-                if (QTypeInfo<T>::isStatic || (isShared && QTypeInfo<T>::isComplex)) {
+                if (!QTypeInfoQuery<T>::isRelocatable || (isShared && QTypeInfo<T>::isComplex)) {
                     // we can not move the data, we need to copy construct it
                     while (srcBegin != srcEnd) {
                         new (dst++) T(*srcBegin++);
@@ -598,7 +599,7 @@ void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::Allo
     }
     if (d != x) {
         if (!d->ref.deref()) {
-            if (QTypeInfo<T>::isStatic || !aalloc || (isShared && QTypeInfo<T>::isComplex)) {
+            if (!QTypeInfoQuery<T>::isRelocatable || !aalloc || (isShared && QTypeInfo<T>::isComplex)) {
                 // data was copy constructed, we need to call destructors
                 // or if !alloc we did nothing to the old 'd'.
                 freeData(d);
@@ -692,12 +693,12 @@ typename QVector<T>::iterator QVector<T>::insert(iterator before, size_type n, c
 {
     Q_ASSERT_X(isValidIterator(before),  "QVector::insert", "The specified iterator argument 'before' is invalid");
 
-    int offset = std::distance(d->begin(), before);
+    const auto offset = std::distance(d->begin(), before);
     if (n != 0) {
         const T copy(t);
         if (!isDetached() || d->size + n > int(d->alloc))
             reallocData(d->size, d->size + n, QArrayData::Grow);
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             T *b = d->end();
             T *i = d->end() + n;
             while (i != b)
@@ -728,7 +729,7 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
     Q_ASSERT_X(isValidIterator(abegin), "QVector::erase", "The specified iterator argument 'abegin' is invalid");
     Q_ASSERT_X(isValidIterator(aend), "QVector::erase", "The specified iterator argument 'aend' is invalid");
 
-    const int itemsToErase = aend - abegin;
+    const auto itemsToErase = aend - abegin;
 
     if (!itemsToErase)
         return abegin;
@@ -737,7 +738,7 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
     Q_ASSERT(aend <= d->end());
     Q_ASSERT(abegin <= aend);
 
-    const int itemsUntouched = abegin - d->begin();
+    const auto itemsUntouched = abegin - d->begin();
 
     // FIXME we could do a proper realloc, which copy constructs only needed data.
     // FIXME we are about to delete data - maybe it is good time to shrink?
@@ -746,7 +747,7 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
         detach();
         abegin = d->begin() + itemsUntouched;
         aend = abegin + itemsToErase;
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             iterator moveBegin = abegin + itemsToErase;
             iterator moveEnd = d->end();
             while (moveBegin != moveEnd) {
@@ -766,7 +767,7 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
             memmove(static_cast<void *>(abegin), static_cast<void *>(aend),
                     (d->size - itemsToErase - itemsUntouched) * sizeof(T));
         }
-        d->size -= itemsToErase;
+        d->size -= int(itemsToErase);
     }
     return d->begin() + itemsUntouched;
 }

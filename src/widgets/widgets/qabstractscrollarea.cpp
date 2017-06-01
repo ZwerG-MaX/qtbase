@@ -65,7 +65,6 @@
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
 #ifdef Q_OS_WIN
-#  include <qlibrary.h>
 #  include <qt_windows.h>
 #endif
 
@@ -473,6 +472,7 @@ void QAbstractScrollAreaPrivate::layoutChildren()
     // move the scrollbars away from top/left headers
     int vHeaderRight = 0;
     int hHeaderBottom = 0;
+#if QT_CONFIG(itemviews)
     if ((vscrollOverlap > 0 && needv) || (hscrollOverlap > 0 && needh)) {
         const QList<QHeaderView *> headers = q->findChildren<QHeaderView*>();
         if (headers.count() <= 2) {
@@ -485,7 +485,7 @@ void QAbstractScrollAreaPrivate::layoutChildren()
              }
          }
     }
-
+#endif // QT_CONFIG(itemviews)
     if (needh) {
         QRect horizontalScrollBarRect(QPoint(controlsRect.left() + vHeaderRight, cornerPoint.y()), QPoint(cornerPoint.x() - 1, controlsRect.bottom()));
 #if 0 // Used to be included in Qt4 for Q_WS_MAC
@@ -637,7 +637,6 @@ QWidget *QAbstractScrollArea::viewport() const
 Returns the size of the viewport as if the scroll bars had no valid
 scrolling range.
 */
-// ### still thinking about the name
 QSize QAbstractScrollArea::maximumViewportSize() const
 {
     Q_D(const QAbstractScrollArea);

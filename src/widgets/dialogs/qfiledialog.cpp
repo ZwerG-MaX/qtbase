@@ -656,7 +656,7 @@ void QFileDialogPrivate::retranslateStrings()
     /* WIDGETS */
     if (options->useDefaultNameFilters())
         q->setNameFilter(QFileDialogOptions::defaultNameFilterString());
-    if (nativeDialogInUse)
+    if (!usingWidgets())
         return;
 
     QList<QAction*> actions = qFileDialogUi->treeView->header()->actions();
@@ -860,7 +860,7 @@ void QFileDialog::setVisible(bool visible)
         }
     }
 
-    if (d->usingWidgets())
+    if (visible && d->usingWidgets())
         d->qFileDialogUi->fileNameEdit->setFocus();
 
     QDialog::setVisible(visible);
@@ -1461,6 +1461,19 @@ void QFileDialog::selectNameFilter(const QString &filter)
 }
 
 /*!
+ * \since 5.9
+ * \return The mimetype of the file that the user selected in the file dialog.
+ */
+QString QFileDialog::selectedMimeTypeFilter() const
+{
+    Q_D(const QFileDialog);
+    if (!d->usingWidgets())
+        return d->selectedMimeTypeFilter_sys();
+
+    return d->options->initiallySelectedMimeTypeFilter();
+}
+
+/*!
     \since 4.4
 
     Returns the filter that the user selected in the file dialog.
@@ -1579,9 +1592,19 @@ QStringList QFileDialog::mimeTypeFilters() const
 */
 void QFileDialog::selectMimeTypeFilter(const QString &filter)
 {
-    const QString text = nameFilterForMime(filter);
-    if (!text.isEmpty())
-        selectNameFilter(text);
+    Q_D(QFileDialog);
+    d->options->setInitiallySelectedMimeTypeFilter(filter);
+
+    const QString filterForMime = nameFilterForMime(filter);
+
+    if (!d->usingWidgets()) {
+        d->selectMimeTypeFilter_sys(filter);
+        if (d->selectedMimeTypeFilter_sys().isEmpty() && !filterForMime.isEmpty()) {
+            selectNameFilter(filterForMime);
+        }
+    } else if (!filterForMime.isEmpty()) {
+        selectNameFilter(filterForMime);
+    }
 }
 
 #endif // QT_NO_MIMETYPE
@@ -2223,7 +2246,7 @@ QStringList QFileDialog::getOpenFileNames(QWidget *parent,
 }
 
 /*!
-    This is a convenience static function that will return or or more existing
+    This is a convenience static function that will return one or more existing
     files selected by the user. If the user presses Cancel, it returns an
     empty list.
 
@@ -3789,13 +3812,13 @@ void QFileDialogPrivate::_q_nativeEnterDirectory(const QUrl &directory)
 */
 bool QFileDialogPrivate::itemViewKeyboardEvent(QKeyEvent *event) {
 
+#if QT_CONFIG(shortcut)
     Q_Q(QFileDialog);
-
     if (event->matches(QKeySequence::Cancel)) {
         q->reject();
         return true;
     }
-
+#endif
     switch (event->key()) {
     case Qt::Key_Backspace:
         _q_navigateToParent();
@@ -3995,9 +4018,13 @@ void QFileDialogLineEdit::keyPressEvent(QKeyEvent *e)
     }
 #endif // QT_KEYPAD_NAVIGATION
 
+#if QT_CONFIG(shortcut)
     int key = e->key();
+#endif
     QLineEdit::keyPressEvent(e);
+#if QT_CONFIG(shortcut)
     if (!e->matches(QKeySequence::Cancel) && key != Qt::Key_Back)
+#endif
         e->accept();
 }
 

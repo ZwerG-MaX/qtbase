@@ -41,11 +41,16 @@ manifestmeta.highlighted.names      =   "QtQuick/Qt Quick Demo - Same Game" \
                                         "QtQuickExtras/Qt Quick Extras - Flat" \
                                         "QtQuickExtras/Qt Quick Extras - Gallery" \
                                         "QtQuickControls2/Qt Quick Controls 2 - Gallery" \
+                                        "QtQuickControls2/Qt Quick Controls 2 - Wearable Demo" \
                                         "QtQuickDialogs/Qt Quick System Dialog Examples" \
                                         "QtWinExtras/Quick Player" \
                                         "QtMultimedia/QML Video Shader Effects Example" \
                                         "QtCanvas3D/Interactive Mobile Phone Example" \
-                                        "QtLocation/Map Viewer (QML)"
+                                        "QtLocation/Map Viewer (QML)" \
+                                        "QtBluetooth/Bluetooth Low Energy Heart Rate Game" \
+                                        "QtCharts/Chart Themes Example" \
+                                        "QtDataVisualization/Bars Example" \
+                                        "QtDataVisualization/Surface Example"
 
 manifestmeta.highlighted.attributes =   isHighlighted:true
 

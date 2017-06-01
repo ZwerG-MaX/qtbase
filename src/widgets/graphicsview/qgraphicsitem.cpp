@@ -2981,6 +2981,7 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(QGraphicsItem *topMostEffectI
 
     return brect;
 #else //QT_NO_GRAPHICSEFFECT
+    Q_UNUSED(topMostEffectItem);
     return q_ptr->boundingRect();
 #endif //QT_NO_GRAPHICSEFFECT
 
@@ -4516,7 +4517,7 @@ void QGraphicsItem::setMatrix(const QMatrix &matrix, bool combine)
     otherwise, \a matrix \e replaces the current matrix. \a combine is false
     by default.
 
-    To simplify interation with items using a transformed view, QGraphicsItem
+    To simplify interaction with items using a transformed view, QGraphicsItem
     provides mapTo... and mapFrom... functions that can translate between
     items' and the scene's coordinates. For example, you can call mapToScene()
     to map an item coordiate to a scene coordinate, or mapFromScene() to map
@@ -6596,7 +6597,7 @@ QGraphicsItem *QGraphicsItem::commonAncestorItem(const QGraphicsItem *other) con
 }
 
 /*!
-    \since 4,4
+    \since 4.4
     Returns \c true if this item is currently under the mouse cursor in one of
     the views; otherwise, false is returned.
 
@@ -7191,9 +7192,6 @@ void QGraphicsItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     }
 }
 
-/*!
-    obsolete
-*/
 bool _qt_movableAncestorIsSelected(const QGraphicsItem *item)
 {
     const QGraphicsItem *parent = item->parentItem();

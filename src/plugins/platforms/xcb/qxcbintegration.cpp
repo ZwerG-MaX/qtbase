@@ -214,6 +214,27 @@ QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
     return xcbWindow;
 }
 
+class QXcbForeignWindow : public QXcbWindow
+{
+public:
+    QXcbForeignWindow(QWindow *window, WId nativeHandle)
+        : QXcbWindow(window) { m_window = nativeHandle; }
+    ~QXcbForeignWindow() {}
+    bool isForeignWindow() const override { return true; }
+
+protected:
+    // No-ops
+    void create() override {}
+    void destroy() override {}
+};
+
+QPlatformWindow *QXcbIntegration::createForeignWindow(QWindow *window, WId nativeHandle) const
+{
+    QXcbWindow *xcbWindow = new QXcbForeignWindow(window, nativeHandle);
+    xcbWindow->create();
+    return xcbWindow;
+}
+
 #ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QXcbIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
@@ -384,9 +405,6 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
     case QPlatformIntegration::PasswordMaskCharacter:
         // TODO using various xcb, gnome or KDE settings
         break; // Not implemented, use defaults
-    case QPlatformIntegration::FontSmoothingGamma:
-        // Match Qt 4.8 text rendering, and rendering of other X11 toolkits.
-        return qreal(1.0);
     case QPlatformIntegration::StartDragDistance: {
         // The default (in QPlatformTheme::defaultThemeHint) is 10 pixels, but
         // on a high-resolution screen it makes sense to increase it.
@@ -447,12 +465,8 @@ QByteArray QXcbIntegration::wmClass() const
                 className[0] = className.at(0).toUpper();
         }
 
-        if (!name.isEmpty() && !className.isEmpty()) {
-            m_wmClass = name.toLocal8Bit();
-            m_wmClass.append('\0');
-            m_wmClass.append(className.toLocal8Bit());
-            m_wmClass.append('\0');
-        }
+        if (!name.isEmpty() && !className.isEmpty())
+            m_wmClass = std::move(name).toLocal8Bit() + '\0' + std::move(className).toLocal8Bit() + '\0';
     }
     return m_wmClass;
 }

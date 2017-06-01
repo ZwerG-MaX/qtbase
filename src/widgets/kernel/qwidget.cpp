@@ -341,10 +341,6 @@ QWidgetPrivate::~QWidgetPrivate()
 
     if (extra)
         deleteExtra();
-
-#ifndef QT_NO_GRAPHICSEFFECT
-    delete graphicsEffect;
-#endif //QT_NO_GRAPHICSEFFECT
 }
 
 /*!
@@ -1477,12 +1473,16 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
 
     qt_window_private(win)->positionPolicy = topData()->posIncludesFrame ?
         QWindowPrivate::WindowFrameInclusive : QWindowPrivate::WindowFrameExclusive;
-    win->create();
-    // Enable nonclient-area events for QDockWidget and other NonClientArea-mouse event processing.
-    if ((flags & Qt::Desktop) == Qt::Window)
+
+    if (q->windowType() != Qt::Desktop || q->testAttribute(Qt::WA_NativeWindow)) {
+        win->create();
+        // Enable nonclient-area events for QDockWidget and other NonClientArea-mouse event processing.
         win->handle()->setFrameStrutEventsEnabled(true);
+    }
 
     data.window_flags = win->flags();
+    if (!win->isTopLevel()) // In a Widget world foreign windows can only be top level
+      data.window_flags &= ~Qt::ForeignWindow;
 
     if (!topData()->role.isNull())
         QXcbWindowFunctions::setWmWindowRole(win, topData()->role.toLatin1());
@@ -1499,10 +1499,13 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
     }
 
     setWindowModified_helper();
-    WId id = win->winId();
-    // See the QPlatformWindow::winId() documentation
-    Q_ASSERT(id != WId(0));
-    setWinId(id);
+
+    if (win->handle()) {
+        WId id = win->winId();
+        // See the QPlatformWindow::winId() documentation
+        Q_ASSERT(id != WId(0));
+        setWinId(id);
+    }
 
     // Check children and create windows for them if necessary
     q_createNativeChildrenAndSetParent(q);
@@ -1711,6 +1714,10 @@ QWidget::~QWidget()
     } QT_CATCH(const std::exception&) {
         // if this fails we can't do anything about it but at least we are not allowed to throw.
     }
+
+#if QT_CONFIG(graphicseffect)
+    delete d->graphicsEffect;
+#endif
 }
 
 int QWidgetPrivate::instanceCounter = 0;  // Current number of widget instances
@@ -2525,10 +2532,6 @@ QWidget *QWidget::find(WId id)
 
     If a widget is non-native (alien) and winId() is invoked on it, that widget
     will be provided a native handle.
-
-    On \macos, the type returned depends on which framework Qt was linked
-    against. If Qt is using Carbon, the {WId} is actually an HIViewRef. If Qt
-    is using Cocoa, {WId} is a pointer to an NSView.
 
     This value may change at run-time. An event with type QEvent::WinIdChange
     will be sent to the widget following a change in window system identifier.
@@ -5250,8 +5253,6 @@ static void sendResizeEvents(QWidget *target)
 
     \sa render(), QPixmap
 */
-
-/* INVOKABLE since used by QPixmap::grabWidget(). */
 QPixmap QWidget::grab(const QRect &rectangle)
 {
     Q_D(QWidget);
@@ -5997,7 +5998,7 @@ void QWidgetPrivate::resolveLocale()
     Q_Q(const QWidget);
 
     if (!q->testAttribute(Qt::WA_SetLocale)) {
-        setLocale_helper(q->isWindow()
+        setLocale_helper(q->isWindow() && !q->testAttribute(Qt::WA_WindowPropagation)
                             ? QLocale()
                             : q->parentWidget()->locale());
     }
@@ -6386,6 +6387,24 @@ void QWidget::setWindowRole(const QString &role)
     \sa mouseMoveEvent()
 */
 
+/*!
+    \property QWidget::tabletTracking
+    \brief whether tablet tracking is enabled for the widget
+    \since 5.9
+
+    If tablet tracking is disabled (the default), the widget only
+    receives tablet move events when the stylus is in contact with
+    the tablet, or at least one stylus button is pressed,
+    while the stylus is being moved.
+
+    If tablet tracking is enabled, the widget receives tablet move
+    events even while hovering in proximity.  This is useful for
+    monitoring position as well as the auxiliary properties such
+    as rotation and tilt, and providing feedback in the UI.
+
+    \sa tabletEvent()
+*/
+
 
 /*!
     Sets the widget's focus proxy to widget \a w. If \a w is 0, the
@@ -6597,11 +6616,6 @@ void QWidget::setFocus(Qt::FocusReason reason)
     } else {
         f->d_func()->updateFocusChild();
     }
-
-    if (QTLWExtra *extra = f->window()->d_func()->maybeTopData()) {
-        if (extra->window)
-            emit extra->window->focusObjectChanged(f);
-    }
 }
 
 void QWidgetPrivate::setFocus_sys()
@@ -6635,6 +6649,11 @@ void QWidgetPrivate::updateFocusChild()
             w->d_func()->focus_child = q;
             w = w->isWindow() ? 0 : w->parentWidget();
         }
+    }
+
+    if (QTLWExtra *extra = q->window()->d_func()->maybeTopData()) {
+        if (extra->window)
+            emit extra->window->focusObjectChanged(q);
     }
 }
 
@@ -6677,9 +6696,15 @@ void QWidget::clearFocus()
             w->d_func()->focus_child = 0;
         w = w->parentWidget();
     }
-    // Since focus_child is the basis for the top level QWidgetWindow's focusObject()
-    // we need to report this change to the rest of Qt, but we match setFocus() and
-    // do it at the end of the function.
+
+    // Since we've unconditionally cleared the focus_child of our parents, we need
+    // to report this to the rest of Qt. Note that the focus_child is not the same
+    // thing as the application's focusWidget, which is why this piece of code is
+    // not inside the hasFocus() block below.
+    if (QTLWExtra *extra = window()->d_func()->maybeTopData()) {
+        if (extra->window)
+            emit extra->window->focusObjectChanged(extra->window->focusObject());
+    }
 
 #ifndef QT_NO_GRAPHICSVIEW
     QWExtra *topData = d_func()->extra;
@@ -6701,15 +6726,6 @@ void QWidget::clearFocus()
             QAccessible::updateAccessibility(&event);
 #endif
         }
-    }
-
-    // Since we've unconditionally cleared the focus_child of our parents, we need
-    // to report this to the rest of Qt. Note that the focus_child is not the same
-    // thing as the application's focusWidget, which is why this piece of code is
-    // not inside the hasFocus() block above.
-    if (QTLWExtra *extra = window()->d_func()->maybeTopData()) {
-        if (extra->window)
-            emit extra->window->focusObjectChanged(extra->window->focusObject());
     }
 }
 
@@ -6758,12 +6774,12 @@ void QWidget::clearFocus()
 
 bool QWidget::focusNextPrevChild(bool next)
 {
-    Q_D(QWidget);
     QWidget* p = parentWidget();
     bool isSubWindow = (windowType() == Qt::SubWindow);
     if (!isWindow() && !isSubWindow && p)
         return p->focusNextPrevChild(next);
 #ifndef QT_NO_GRAPHICSVIEW
+    Q_D(QWidget);
     if (d->extra && d->extra->proxyWidget)
         return d->extra->proxyWidget->focusNextPrevChild(next);
 #endif
@@ -8790,6 +8806,9 @@ bool QWidget::event(QEvent *event)
 #endif
 #ifndef QT_NO_TABLETEVENT
     case QEvent::TabletMove:
+        if (static_cast<QTabletEvent *>(event)->buttons() == Qt::NoButton && !testAttribute(Qt::WA_TabletTracking))
+            break;
+        Q_FALLTHROUGH();
     case QEvent::TabletPress:
     case QEvent::TabletRelease:
         tabletEvent((QTabletEvent*)event);
@@ -9022,6 +9041,7 @@ bool QWidget::event(QEvent *event)
     case QEvent::IconTextChange:
     case QEvent::ModifiedChange:
     case QEvent::MouseTrackingChange:
+    case QEvent::TabletTrackingChange:
     case QEvent::ParentChange:
     case QEvent::LocaleChange:
     case QEvent::MacSizeChange:
@@ -9193,6 +9213,8 @@ bool QWidget::event(QEvent *event)
             const QWindow *win = te->window;
             d->setWinId((win && win->handle()) ? win->handle()->winId() : 0);
         }
+        if (d->data.fnt.d->dpi != logicalDpiY())
+            d->updateFont(d->data.fnt);
 #ifndef QT_NO_OPENGL
         d->renderToTextureReallyDirty = 1;
 #endif
@@ -9426,7 +9448,13 @@ void QWidget::wheelEvent(QWheelEvent *event)
 
     The default implementation ignores the event.
 
-    \sa QEvent::ignore(), QEvent::accept(), event(),
+    If tablet tracking is switched off, tablet move events only occur if the
+    stylus is in contact with the tablet, or at least one stylus button is
+    pressed, while the stylus is being moved. If tablet tracking is switched on,
+    tablet move events occur even while the stylus is hovering in proximity of
+    the tablet, with no buttons pressed.
+
+    \sa QEvent::ignore(), QEvent::accept(), event(), setTabletTracking(),
     QTabletEvent
 */
 
@@ -9993,8 +10021,8 @@ bool QWidget::nativeEvent(const QByteArray &eventType, void *message, long *resu
 }
 
 /*!
-    Ensures that the widget has been polished by QStyle (i.e., has a
-    proper font and palette).
+    Ensures that the widget and its children have been polished by
+    QStyle (i.e., have a proper font and palette).
 
     QWidget calls this function after it has been fully constructed
     but before it is shown the very first time. You can call this
@@ -10357,12 +10385,29 @@ void QWidget::updateGeometry()
     a window, causing the widget to be hidden. You must call show() to make
     the widget visible again..
 
-    \sa windowType(), {Window Flags Example}
+    \sa windowType(), setWindowFlag(), {Window Flags Example}
 */
 void QWidget::setWindowFlags(Qt::WindowFlags flags)
 {
     Q_D(QWidget);
     d->setWindowFlags(flags);
+}
+
+/*!
+    \since 5.9
+
+    Sets the window flag \a flag on this widget if \a on is true;
+    otherwise clears the flag.
+
+    \sa setWindowFlags(), windowFlags(), windowType()
+*/
+void QWidget::setWindowFlag(Qt::WindowType flag, bool on)
+{
+    Q_D(QWidget);
+    if (on)
+        d->setWindowFlags(data->window_flags | flag);
+    else
+        d->setWindowFlags(data->window_flags & ~flag);
 }
 
 /*! \internal
@@ -11176,6 +11221,10 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         break;
     case Qt::WA_MouseTracking: {
         QEvent e(QEvent::MouseTrackingChange);
+        QApplication::sendEvent(this, &e);
+        break; }
+    case Qt::WA_TabletTracking: {
+        QEvent e(QEvent::TabletTrackingChange);
         QApplication::sendEvent(this, &e);
         break; }
     case Qt::WA_NativeWindow: {
@@ -12714,7 +12763,6 @@ void QWidget::activateWindow()
 }
 
 /*!
-    \fn int QWidget::metric(PaintDeviceMetric m) const
 
     Internal implementation of the virtual QPaintDevice::metric()
     function.
@@ -12723,8 +12771,6 @@ void QWidget::activateWindow()
 */
 int QWidget::metric(PaintDeviceMetric m) const
 {
-    Q_D(const QWidget);
-
     QWindow *topLevelWindow = 0;
     QScreen *screen = 0;
     if (QWidget *topLevel = window()) {
@@ -12752,16 +12798,16 @@ int QWidget::metric(PaintDeviceMetric m) const
     } else if (m == PdmDepth) {
         return screen->depth();
     } else if (m == PdmDpiX) {
-        if (d->extra && d->extra->customDpiX)
-            return d->extra->customDpiX;
-        else if (d->parent)
-            return static_cast<QWidget *>(d->parent)->metric(m);
+        for (const QWidget *p = this; p; p = p->parentWidget()) {
+            if (p->d_func()->extra && p->d_func()->extra->customDpiX)
+                return p->d_func()->extra->customDpiX;
+        }
         return qRound(screen->logicalDotsPerInchX());
     } else if (m == PdmDpiY) {
-        if (d->extra && d->extra->customDpiY)
-            return d->extra->customDpiY;
-        else if (d->parent)
-            return static_cast<QWidget *>(d->parent)->metric(m);
+        for (const QWidget *p = this; p; p = p->parentWidget()) {
+            if (p->d_func()->extra && p->d_func()->extra->customDpiY)
+                return p->d_func()->extra->customDpiY;
+        }
         return qRound(screen->logicalDotsPerInchY());
     } else if (m == PdmPhysicalDpiX) {
         return qRound(screen->physicalDotsPerInchX());
@@ -12938,6 +12984,9 @@ void QWidget::setMask(const QBitmap &bitmap)
 */
 void QWidget::clearMask()
 {
+    Q_D(QWidget);
+    if (!d->extra || !d->extra->hasMask)
+        return;
     setMask(QRegion());
 }
 

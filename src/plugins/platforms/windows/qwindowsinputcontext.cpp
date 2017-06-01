@@ -166,15 +166,8 @@ Q_CORE_EXPORT QLocale qt_localeFromLCID(LCID id); // from qlocale_win.cpp
 
 HIMC QWindowsInputContext::m_defaultContext = 0;
 
-QWindowsInputContext::CompositionContext::CompositionContext() :
-    hwnd(0), haveCaret(false), position(0), isComposing(false),
-    factor(1)
-{
-}
-
 QWindowsInputContext::QWindowsInputContext() :
     m_WM_MSIME_MOUSE(RegisterWindowMessage(L"MSIMEMouseOperation")),
-    m_endCompositionRecursionGuard(false),
     m_languageId(currentInputLanguageId()),
     m_locale(qt_localeFromLCID(m_languageId))
 {
@@ -236,7 +229,7 @@ void QWindowsInputContext::updateEnabled()
         const bool accepted = inputMethodAccepted();
         if (QWindowsContext::verbose > 1)
             qCDebug(lcQpaInputMethods) << __FUNCTION__ << platformWindow->window() << "accepted=" << accepted;
-            QWindowsInputContext::setWindowsImeEnabled(platformWindow, accepted);
+        QWindowsInputContext::setWindowsImeEnabled(platformWindow, accepted);
     }
 }
 

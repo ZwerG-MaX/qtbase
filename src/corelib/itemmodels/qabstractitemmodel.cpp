@@ -2044,7 +2044,7 @@ Qt::DropActions QAbstractItemModel::supportedDropActions() const
 Qt::DropActions QAbstractItemModel::supportedDragActions() const
 {
     Q_D(const QAbstractItemModel);
-    if (d->supportedDragActions != -1)
+    if (d->supportedDragActions != Qt::IgnoreAction)
         return d->supportedDragActions;
     return supportedDropActions();
 }
@@ -3071,7 +3071,7 @@ void QAbstractItemModel::endRemoveColumns()
     When reimplementing a subclass, this method simplifies moving
     entities in your model. This method is responsible for moving
     persistent indexes in the model, which you would otherwise be
-    required to do yourself. Using beginMoveRows and endMoveRows
+    required to do yourself. Using beginMoveColumns and endMoveColumns
     is an alternative to emitting layoutAboutToBeChanged and
     layoutChanged directly along with changePersistentIndex.
 

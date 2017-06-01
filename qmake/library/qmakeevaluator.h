@@ -44,7 +44,7 @@
 #include <qstring.h>
 #include <qstringlist.h>
 #include <qshareddata.h>
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(process)
 # include <qprocess.h>
 #else
 # include <qiodevice.h>
@@ -212,7 +212,7 @@ public:
     VisitReturn evaluateExpandFunction(const ProKey &function, const ushort *&tokPtr, ProStringList *ret);
     VisitReturn evaluateConditionalFunction(const ProKey &function, const ushort *&tokPtr);
 
-    ProStringList evaluateBuiltinExpand(int func_t, const ProKey &function, const ProStringList &args);
+    VisitReturn evaluateBuiltinExpand(int func_t, const ProKey &function, const ProStringList &args, ProStringList &ret);
     VisitReturn evaluateBuiltinConditional(int func_t, const ProKey &function, const ProStringList &args);
 
     VisitReturn evaluateConditional(const QStringRef &cond, const QString &where, int line = -1);
@@ -237,7 +237,7 @@ public:
 
     VisitReturn writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
                           bool exe, const QString &contents);
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(process)
     void runProcess(QProcess *proc, const QString &command) const;
 #endif
     QByteArray getCommandOutput(const QString &args, int *exitCode) const;

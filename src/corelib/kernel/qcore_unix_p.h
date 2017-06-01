@@ -55,7 +55,6 @@
 #include <QtCore/private/qglobal_p.h>
 #include "qplatformdefs.h"
 #include "qatomic.h"
-#include "qhash.h"
 
 #ifndef Q_OS_UNIX
 # error "qcore_unix_p.h included on a non-Unix system"
@@ -300,7 +299,7 @@ static inline int qt_safe_close(int fd)
 #define QT_CLOSE qt_safe_close
 
 // - VxWorks & iOS/tvOS/watchOS don't have processes
-#if !defined(Q_OS_VXWORKS) && !defined(QT_NO_PROCESS)
+#if QT_CONFIG(process)
 static inline int qt_safe_execve(const char *filename, char *const argv[],
                                  char *const envp[])
 {
@@ -329,7 +328,7 @@ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
     EINTR_LOOP(ret, ::waitpid(pid, status, options));
     return ret;
 }
-#endif // Q_OS_VXWORKS
+#endif // QT_CONFIG(process)
 
 #if !defined(_POSIX_MONOTONIC_CLOCK)
 #  define _POSIX_MONOTONIC_CLOCK -1
@@ -368,19 +367,6 @@ union qt_semun {
     struct semid_ds *buf;       /* buffer for IPC_STAT, IPC_SET */
     unsigned short *array;      /* array for GETALL, SETALL */
 };
-
-#ifndef QT_POSIX_IPC
-#ifndef QT_NO_SHAREDMEMORY
-#ifndef Q_OS_ANDROID
-static inline key_t qt_safe_ftok(const QByteArray &filename, int proj_id)
-{
-    // Unfortunately ftok can return colliding keys even for different files.
-    // Try to add some more entropy via qHash.
-    return ::ftok(filename.constData(), qHash(filename, proj_id));
-}
-#endif // !Q_OS_ANDROID
-#endif // !QT_NO_SHAREDMEMORY
-#endif // !QT_POSIX_IPC
 
 QT_END_NAMESPACE
 

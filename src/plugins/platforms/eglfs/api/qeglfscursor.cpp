@@ -146,8 +146,8 @@ void QEglFSCursor::createShaderPrograms()
 
     GraphicsContextData &gfx(m_gfx[QOpenGLContext::currentContext()]);
     gfx.program = new QOpenGLShaderProgram;
-    gfx.program->addShaderFromSourceCode(QOpenGLShader::Vertex, textureVertexProgram);
-    gfx.program->addShaderFromSourceCode(QOpenGLShader::Fragment, textureFragmentProgram);
+    gfx.program->addCacheableShaderFromSourceCode(QOpenGLShader::Vertex, textureVertexProgram);
+    gfx.program->addCacheableShaderFromSourceCode(QOpenGLShader::Fragment, textureFragmentProgram);
     gfx.program->bindAttributeLocation("vertexCoordEntry", 0);
     gfx.program->bindAttributeLocation("textureCoordEntry", 1);
     gfx.program->link();
@@ -410,6 +410,8 @@ struct StateSaver
         f->glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuf);
         if (vaoHelper->isValid())
             f->glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
+        else
+            vao = 0;
         for (int i = 0; i < 2; ++i) {
             f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &va[i].enabled);
             f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_SIZE, &va[i].size);

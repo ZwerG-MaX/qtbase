@@ -97,7 +97,11 @@ QT_BEGIN_NAMESPACE
   \value On  Display the pixmap when the widget is in an "on" state
 */
 
-static QBasicAtomicInt serialNumCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int nextSerialNumCounter()
+{
+    static QBasicAtomicInt serial = Q_BASIC_ATOMIC_INITIALIZER(0);
+    return 1 + serial.fetchAndAddRelaxed(1);
+}
 
 static void qt_cleanup_icon_cache();
 namespace {
@@ -137,9 +141,9 @@ static qreal qt_effective_device_pixel_ratio(QWindow *window = 0)
     return qApp->devicePixelRatio(); // Don't know which window to target.
 }
 
-QIconPrivate::QIconPrivate()
-    : engine(0), ref(1),
-    serialNum(serialNumCounter.fetchAndAddRelaxed(1)),
+QIconPrivate::QIconPrivate(QIconEngine *e)
+    : engine(e), ref(1),
+      serialNum(nextSerialNumCounter()),
     detach_no(0),
     is_mask(false)
 {
@@ -572,11 +576,11 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
   When you retrieve a pixmap using pixmap(QSize, Mode, State), and no
   pixmap for this given size, mode and state has been added with
   addFile() or addPixmap(), then QIcon will generate one on the
-  fly. This pixmap generation happens in a QIconEngineV2. The default
+  fly. This pixmap generation happens in a QIconEngine. The default
   engine scales pixmaps down if required, but never up, and it uses
   the current style to calculate a disabled appearance. By using
   custom icon engines, you can customize every aspect of generated
-  icons. With QIconEnginePluginV2 it is possible to register different
+  icons. With QIconEnginePlugin it is possible to register different
   icon engines for different file suffixes, making it possible for
   third parties to provide additional icon engines to those included
   with Qt.
@@ -604,6 +608,51 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
   \image icon.png QIcon
 
   \note QIcon needs a QGuiApplication instance before the icon is created.
+
+  \section1 High DPI Icons
+
+  There are two ways that QIcon supports \l {High DPI Displays}{high DPI}
+  icons: via \l addFile() and \l fromTheme().
+
+  \l addFile() is useful if you have your own custom directory structure and do
+  not need to use the \l {Icon Theme Specification}{freedesktop.org Icon Theme
+  Specification}. Icons created via this approach use Qt's \l {High Resolution
+  Versions of Images}{"@nx" high DPI syntax}.
+
+  Using \l fromTheme() is necessary if you plan on following the Icon Theme
+  Specification. To make QIcon use the high DPI version of an image, add an
+  additional entry to the appropriate \c index.theme file:
+
+  \badcode
+  [Icon Theme]
+  Name=Test
+  Comment=Test Theme
+
+  Directories=32x32/actions,32x32@2/actions
+
+  [32x32/actions]
+  Size=32
+  Context=Actions
+  Type=Fixed
+
+  # High DPI version of the entry above.
+  [32x32@2/actions]
+  Size=32
+  Scale=2
+  Type=Fixed
+  \endcode
+
+  Your icon theme directory would then look something like this:
+
+  \badcode
+    ├── 32x32
+    │   └── actions
+    │       └── appointment-new.png
+    ├── 32x32@2
+    │   └── actions
+    │       └── appointment-new.png
+    └── index.theme
+  \endcode
 
   \sa {fowler}{GUI Design Handbook: Iconic Label}, {Icons Example}
 */
@@ -651,7 +700,7 @@ QIcon::QIcon(const QIcon &other)
     the relevant file must be found relative to the runtime working
     directory.
 
-    The file name can be either refer to an actual file on disk or to
+    The file name can refer to an actual file on disk or to
     one of the application's embedded resources.  See the
     \l{resources.html}{Resource System} overview for details on how to
     embed images and other resource files in the application's
@@ -673,9 +722,8 @@ QIcon::QIcon(const QString &fileName)
     ownership of the engine.
 */
 QIcon::QIcon(QIconEngine *engine)
-    :d(new QIconPrivate)
+    :d(new QIconPrivate(engine))
 {
-    d->engine = engine;
 }
 
 /*!
@@ -848,9 +896,10 @@ QPixmap QIcon::pixmap(QWindow *window, const QSize &size, Mode mode, State state
     }
 
     // Try get a pixmap that is big enough to be displayed at device pixel resolution.
-    QPixmap pixmap = d->engine->pixmap(size * devicePixelRatio, mode, state);
-    pixmap.setDevicePixelRatio(d->pixmapDevicePixelRatio(devicePixelRatio, size, pixmap.size()));
-    return pixmap;
+    QIconEngine::ScaledPixmapArgument scalePixmapArg = { size * devicePixelRatio, mode, state, devicePixelRatio, QPixmap() };
+    d->engine->virtual_hook(QIconEngine::ScaledPixmapHook, reinterpret_cast<void*>(&scalePixmapArg));
+    scalePixmapArg.pixmap.setDevicePixelRatio(d->pixmapDevicePixelRatio(devicePixelRatio, size, scalePixmapArg.pixmap.size()));
+    return scalePixmapArg.pixmap;
 }
 
 /*!
@@ -950,8 +999,7 @@ void QIcon::detach()
             d = 0;
             return;
         } else if (d->ref.load() != 1) {
-            QIconPrivate *x = new QIconPrivate;
-            x->engine = d->engine->clone();
+            QIconPrivate *x = new QIconPrivate(d->engine->clone());
             if (!d->ref.deref())
                 delete d;
             d = x;
@@ -974,10 +1022,8 @@ void QIcon::addPixmap(const QPixmap &pixmap, Mode mode, State state)
     if (pixmap.isNull())
         return;
     detach();
-    if (!d) {
-        d = new QIconPrivate;
-        d->engine = new QPixmapIconEngine;
-    }
+    if (!d)
+        d = new QIconPrivate(new QPixmapIconEngine);
     d->engine->addPixmap(pixmap, mode, state);
 }
 
@@ -1003,7 +1049,7 @@ static QIconEngine *iconEngineFromSuffix(const QString &fileName, const QString 
      the relevant file must be found relative to the runtime working
      directory.
 
-    The file name can be either refer to an actual file on disk or to
+    The file name can refer to an actual file on disk or to
     one of the application's embedded resources. See the
     \l{resources.html}{Resource System} overview for details on how to
     embed images and other resource files in the application's
@@ -1037,8 +1083,7 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
         if (!engine)
             engine = iconEngineFromSuffix(fileName, QMimeDatabase().mimeTypeForFile(info).preferredSuffix());
 #endif // !QT_NO_MIMETYPE
-        d = new QIconPrivate;
-        d->engine = engine ? engine : new QPixmapIconEngine;
+        d = new QIconPrivate(engine ? engine : new QPixmapIconEngine);
     }
 
     d->engine->addFile(fileName, size, mode, state);
@@ -1069,7 +1114,7 @@ QList<QSize> QIcon::availableSizes(Mode mode, State state) const
 
     Depending on the way the icon was created, it may have an associated
     name. This is the case for icons created with fromTheme() or icons
-    using a QIconEngine which supports the QIconEngineV2::IconNameHook.
+    using a QIconEngine which supports the QIconEngine::IconNameHook.
 
     \sa fromTheme(), QIconEngine
 */
@@ -1240,12 +1285,10 @@ bool QIcon::hasThemeIcon(const QString &name)
 */
 void QIcon::setIsMask(bool isMask)
 {
-    if (!d) {
-        d = new QIconPrivate;
-        d->engine = new QPixmapIconEngine;
-    } else {
+    if (!d)
+        d = new QIconPrivate(new QPixmapIconEngine);
+    else
         detach();
-    }
     d->is_mask = isMask;
 }
 
@@ -1326,22 +1369,17 @@ QDataStream &operator>>(QDataStream &s, QIcon &icon)
         QString key;
         s >> key;
         if (key == QLatin1String("QPixmapIconEngine")) {
-            icon.d = new QIconPrivate;
-            QIconEngine *engine = new QPixmapIconEngine;
-            icon.d->engine = engine;
-            engine->read(s);
+            icon.d = new QIconPrivate(new QPixmapIconEngine);
+            icon.d->engine->read(s);
         } else if (key == QLatin1String("QIconLoaderEngine")) {
-            icon.d = new QIconPrivate;
-            QIconEngine *engine = new QIconLoaderEngine();
-            icon.d->engine = engine;
-            engine->read(s);
+            icon.d = new QIconPrivate(new QIconLoaderEngine());
+            icon.d->engine->read(s);
         } else {
             const int index = loader()->indexOf(key);
             if (index != -1) {
                 if (QIconEnginePlugin *factory = qobject_cast<QIconEnginePlugin*>(loader()->instance(index))) {
                     if (QIconEngine *engine= factory->create()) {
-                        icon.d = new QIconPrivate;
-                        icon.d->engine = engine;
+                        icon.d = new QIconPrivate(engine);
                         engine->read(s);
                     } // factory
                 } // instance

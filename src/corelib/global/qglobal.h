@@ -44,6 +44,7 @@
 #ifdef __cplusplus
 #  include <type_traits>
 #  include <cstddef>
+#  include <utility>
 #endif
 
 #include <stddef.h>
@@ -81,7 +82,7 @@
         1: The feature is available
 */
 #define QT_CONFIG(feature) (1/QT_FEATURE_##feature == 1)
-#define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not vailable.")
+#define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
 
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
 #  define QT_NO_UNSHARABLE_CONTAINERS
@@ -460,7 +461,7 @@ typedef qptrdiff qintptr;
 #endif
 
 #ifdef QT_ASCII_CAST_WARNINGS
-#  define QT_ASCII_CAST_WARN Q_DECL_DEPRECATED
+#  define QT_ASCII_CAST_WARN Q_DECL_DEPRECATED_X("Use fromUtf8, QStringLiteral, or QLatin1String")
 #else
 #  define QT_ASCII_CAST_WARN
 #endif
@@ -769,26 +770,22 @@ typedef void (*QFunctionPointer)();
 #  define Q_UNIMPLEMENTED() qWarning("Unimplemented code.")
 #endif
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyCompare(double p1, double p2)
 {
     return (qAbs(p1 - p2) * 1000000000000. <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyCompare(float p1, float p2)
 {
     return (qAbs(p1 - p2) * 100000.f <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyIsNull(double d)
 {
     return qAbs(d) <= 0.000000000001;
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED  bool qFuzzyIsNull(float f)
 {
     return qAbs(f) <= 0.00001f;
 }
@@ -798,8 +795,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-static inline bool qIsNull(double d)
+Q_REQUIRED_RESULT static inline Q_DECL_UNUSED bool qIsNull(double d)
 {
     union U {
         double d;
@@ -815,8 +811,7 @@ static inline bool qIsNull(double d)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-static inline bool qIsNull(float f)
+Q_REQUIRED_RESULT static inline Q_DECL_UNUSED bool qIsNull(float f)
 {
     union U {
         float f;
@@ -915,19 +910,57 @@ QT_WARNING_DISABLE_MSVC(4530) /* C++ exception handler used, but unwind semantic
 #  endif
 #endif
 
+namespace QtPrivate {
+template <typename T> struct QAddConst { typedef const T Type; };
+}
+
+// this adds const to non-const objects (like std::as_const)
+template <typename T>
+Q_DECL_CONSTEXPR typename QtPrivate::QAddConst<T>::Type &qAsConst(T &t) Q_DECL_NOTHROW { return t; }
+// prevent rvalue arguments:
+template <typename T>
+void qAsConst(const T &&) Q_DECL_EQ_DELETE;
+
 #ifndef QT_NO_FOREACH
+
+namespace QtPrivate {
 
 template <typename T>
 class QForeachContainer {
-    QForeachContainer &operator=(const QForeachContainer &) Q_DECL_EQ_DELETE;
+    Q_DISABLE_COPY(QForeachContainer)
 public:
-    QForeachContainer(const T &t) : c(t), i(c.begin()), e(c.end()) {}
-    QForeachContainer(T &&t) : c(std::move(t)), i(c.begin()), e(c.end())  {}
-    const T c;
+    QForeachContainer(const T &t) : c(t), i(qAsConst(c).begin()), e(qAsConst(c).end()) {}
+    QForeachContainer(T &&t) : c(std::move(t)), i(qAsConst(c).begin()), e(qAsConst(c).end())  {}
+
+    QForeachContainer(QForeachContainer &&other)
+        : c(std::move(other.c)),
+          i(qAsConst(c).begin()),
+          e(qAsConst(c).end()),
+          control(std::move(other.control))
+    {
+    }
+
+    QForeachContainer &operator=(QForeachContainer &&other)
+    {
+        c = std::move(other.c);
+        i = qAsConst(c).begin();
+        e = qAsConst(c).end();
+        control = std::move(other.control);
+        return *this;
+    }
+
+    T c;
     typename T::const_iterator i, e;
     int control = 1;
 };
 
+template<typename T>
+QForeachContainer<typename std::decay<T>::type> qMakeForeachContainer(T &&t)
+{
+    return QForeachContainer<typename std::decay<T>::type>(std::forward<T>(t));
+}
+
+}
 // Explanation of the control word:
 //  - it's initialized to 1
 //  - that means both the inner and outer loops start
@@ -938,7 +971,7 @@ public:
 //  - if there was a break inside the inner loop, it will exit with control still
 //    set to 1; in that case, the outer loop will invert it to 0 and will exit too
 #define Q_FOREACH(variable, container)                                \
-for (QForeachContainer<typename std::remove_reference<decltype(container)>::type> _container_((container)); \
+for (auto _container_ = QtPrivate::qMakeForeachContainer(container); \
      _container_.control && _container_.i != _container_.e;         \
      ++_container_.i, _container_.control ^= 1)                     \
     for (variable = *_container_.i; _container_.control; _container_.control = 0)
@@ -966,8 +999,8 @@ template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelpe
     friend class Class##Private;
 
 #define Q_DECLARE_PRIVATE_D(Dptr, Class) \
-    inline Class##Private* d_func() { return reinterpret_cast<Class##Private *>(Dptr); } \
-    inline const Class##Private* d_func() const { return reinterpret_cast<const Class##Private *>(Dptr); } \
+    inline Class##Private* d_func() { return reinterpret_cast<Class##Private *>(qGetPtrHelper(Dptr)); } \
+    inline const Class##Private* d_func() const { return reinterpret_cast<const Class##Private *>(qGetPtrHelper(Dptr)); } \
     friend class Class##Private;
 
 #define Q_DECLARE_PUBLIC(Class)                                    \
@@ -1105,16 +1138,7 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
 
 template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
 template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
-
-template <typename T> struct QAddConst { typedef const T Type; };
 }
-
-// this adds const to non-const objects (like std::as_const)
-template <typename T>
-Q_DECL_CONSTEXPR typename QtPrivate::QAddConst<T>::Type &qAsConst(T &t) Q_DECL_NOTHROW { return t; }
-// prevent rvalue arguments:
-template <typename T>
-void qAsConst(const T &&) Q_DECL_EQ_DELETE;
 
 QT_END_NAMESPACE
 

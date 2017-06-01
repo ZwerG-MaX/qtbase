@@ -44,12 +44,6 @@
 #include <QtCore/QBuffer>
 #include <qdebug.h>
 
-#include <X11/Xutil.h>
-
-#undef XCB_ATOM_STRING
-#undef XCB_ATOM_PIXMAP
-#undef XCB_ATOM_BITMAP
-
 QT_BEGIN_NAMESPACE
 
 #if !(defined(QT_NO_DRAGANDDROP) && defined(QT_NO_CLIPBOARD))
@@ -305,7 +299,7 @@ xcb_atom_t QXcbMime::mimeAtomForFormat(QXcbConnection *connection, const QString
         QString formatWithCharset = format;
         formatWithCharset.append(QLatin1String(";charset=utf-8"));
 
-        xcb_atom_t a = connection->internAtom(formatWithCharset.toLatin1());
+        xcb_atom_t a = connection->internAtom(std::move(formatWithCharset).toLatin1());
         if (a && atoms.contains(a)) {
             *requestedEncoding = "utf-8";
             return a;

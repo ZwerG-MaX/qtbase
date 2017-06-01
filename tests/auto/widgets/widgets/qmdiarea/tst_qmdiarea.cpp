@@ -106,7 +106,8 @@ static bool tabBetweenSubWindowsIn(QMdiArea *mdiArea, int tabCount = -1, bool re
             }
             QMdiSubWindow *subWindow = subWindows.at(reverse ? subWindows.size() -1 - i : i);
             if (rubberBand->geometry() != subWindow->geometry()) {
-                qWarning("Rubber band has different geometry");
+                qWarning().nospace() << "Rubber band of tab " << i << " has different geometry: "
+                    << rubberBand->geometry() << " (sub window: " << subWindow->geometry() << ").";
                 return false;
             }
         }
@@ -1506,6 +1507,10 @@ void tst_QMdiArea::setBackground()
 
 void tst_QMdiArea::setViewport()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Sometimes crashes in the CI, see QTBUG-58520");
+#endif
+
     QMdiArea workspace;
     workspace.show();
 

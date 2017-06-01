@@ -694,6 +694,10 @@ void QAbstractSpinBox::setLineEdit(QLineEdit *lineEdit)
                 this, SLOT(_q_editorTextChanged(QString)));
         connect(d->edit, SIGNAL(cursorPositionChanged(int,int)),
                 this, SLOT(_q_editorCursorPositionChanged(int,int)));
+        connect(d->edit, SIGNAL(cursorPositionChanged(int,int)),
+                this, SLOT(updateMicroFocus()));
+        connect(d->edit->d_func()->control, SIGNAL(updateMicroFocus()),
+                this, SLOT(updateMicroFocus()));
     }
     d->updateEditFieldGeometry();
     d->edit->setContextMenuPolicy(Qt::NoContextMenu);
@@ -976,6 +980,7 @@ void QAbstractSpinBox::keyPressEvent(QKeyEvent *event)
     case Qt::Key_PageDown:
         steps *= 10;
         isPgUpOrDown = true;
+        Q_FALLTHROUGH();
     case Qt::Key_Up:
     case Qt::Key_Down: {
 #ifdef QT_KEYPAD_NAVIGATION
@@ -1246,11 +1251,9 @@ void QAbstractSpinBox::timerEvent(QTimerEvent *event)
     \reimp
 */
 
+#if QT_CONFIG(contextmenu)
 void QAbstractSpinBox::contextMenuEvent(QContextMenuEvent *event)
 {
-#ifdef QT_NO_CONTEXTMENU
-    Q_UNUSED(event);
-#else
     Q_D(QAbstractSpinBox);
 
     QPointer<QMenu> menu = d->edit->createStandardContextMenu();
@@ -1286,8 +1289,8 @@ void QAbstractSpinBox::contextMenuEvent(QContextMenuEvent *event)
         }
     }
     event->accept();
-#endif // QT_NO_CONTEXTMENU
 }
+#endif // QT_CONFIG(contextmenu)
 
 /*!
     \reimp
@@ -2113,11 +2116,12 @@ int QAbstractSpinBoxPrivate::variantCompare(const QVariant &arg1, const QVariant
     case QVariant::Invalid:
         if (arg2.type() == QVariant::Invalid)
             return 0;
+        Q_FALLTHROUGH();
     default:
         Q_ASSERT_X(0, "QAbstractSpinBoxPrivate::variantCompare",
                    qPrintable(QString::fromLatin1("Internal error 3 (%1 %2)").
-                              arg(QString::fromLatin1(arg1.typeName())).
-                              arg(QString::fromLatin1(arg2.typeName()))));
+                              arg(QString::fromLatin1(arg1.typeName()),
+                                  QString::fromLatin1(arg2.typeName()))));
     }
     return -2;
 }

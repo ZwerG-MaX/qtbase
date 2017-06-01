@@ -121,8 +121,10 @@ static inline void qt_socket_getPortAndAddress(const qt_sockaddr *s, quint16 *po
             QHostAddress tmpAddress;
             tmpAddress.setAddress(tmp);
             *addr = tmpAddress;
+#if QT_CONFIG(networkinterface)
             if (s->a6.sin6_scope_id)
                 addr->setScopeId(QNetworkInterface::interfaceNameFromIndex(s->a6.sin6_scope_id));
+#endif
         }
         if (port)
             *port = ntohs(s->a6.sin6_port);
@@ -679,10 +681,16 @@ static bool multicastMembershipHelper(QNativeSocketEnginePrivate *d,
 
         if (interface.isValid()) {
             const QList<QNetworkAddressEntry> addressEntries = interface.addressEntries();
-            if (!addressEntries.isEmpty()) {
-                QHostAddress firstIP = addressEntries.first().ip();
-                mreq4.imr_interface.s_addr = htonl(firstIP.toIPv4Address());
-            } else {
+            bool found = false;
+            for (const QNetworkAddressEntry &entry : addressEntries) {
+                const QHostAddress ip = entry.ip();
+                if (ip.protocol() == QAbstractSocket::IPv4Protocol) {
+                    mreq4.imr_interface.s_addr = htonl(ip.toIPv4Address());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
                 d->setError(QAbstractSocket::NetworkError,
                             QNativeSocketEnginePrivate::NetworkUnreachableErrorString);
                 return false;
@@ -979,7 +987,8 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
             if (cmsgptr->cmsg_len == CMSG_LEN(sizeof(int))
                     && ((cmsgptr->cmsg_level == IPPROTO_IPV6 && cmsgptr->cmsg_type == IPV6_HOPLIMIT)
                         || (cmsgptr->cmsg_level == IPPROTO_IP && cmsgptr->cmsg_type == IP_TTL))) {
-                header->hopLimit = *reinterpret_cast<int *>(CMSG_DATA(cmsgptr));
+                Q_STATIC_ASSERT(sizeof(header->hopLimit) == sizeof(int));
+                memcpy(&header->hopLimit, CMSG_DATA(cmsgptr), sizeof(header->hopLimit));
             }
 
 #ifndef QT_NO_SCTP

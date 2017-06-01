@@ -243,13 +243,24 @@ public class QtNative
         }
     }
 
-    private static void runPendingCppRunnablesOnUiThread()
+    private static void runPendingCppRunnablesOnAndroidThread()
     {
         synchronized (m_mainActivityMutex) {
-            if (!m_activityPaused && m_activity != null)
-                m_activity.runOnUiThread(runPendingCppRunnablesRunnable);
-            else
-                runAction(runPendingCppRunnablesRunnable);
+            if (m_activity != null) {
+                if (!m_activityPaused)
+                    m_activity.runOnUiThread(runPendingCppRunnablesRunnable);
+                else
+                    runAction(runPendingCppRunnablesRunnable);
+            } else {
+                final Looper mainLooper = Looper.getMainLooper();
+                final Thread looperThread = mainLooper.getThread();
+                if (looperThread.equals(Thread.currentThread())) {
+                    runPendingCppRunnablesRunnable.run();
+                } else {
+                    final Handler handler = new Handler(mainLooper);
+                    handler.post(runPendingCppRunnablesRunnable);
+                }
+            }
         }
     }
 
@@ -337,6 +348,7 @@ public class QtNative
     // application methods
     public static native void startQtApplication(String params, String env);
     public static native boolean startQtAndroidPlugin();
+    public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
     // application methods
@@ -411,7 +423,9 @@ public class QtNative
                              i == 0,
                              (int)event.getX(i),
                              (int)event.getY(i),
-                             event.getSize(i),
+                             event.getTouchMajor(i),
+                             event.getTouchMinor(i),
+                             event.getOrientation(i),
                              event.getPressure(i));
             }
 
@@ -779,7 +793,7 @@ public class QtNative
     public static native void mouseUp(int winId, int x, int y);
     public static native void mouseMove(int winId, int x, int y);
     public static native void touchBegin(int winId);
-    public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float size, float pressure);
+    public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float major, float minor, float rotation, float pressure);
     public static native void touchEnd(int winId, int action);
     public static native void longPress(int winId, int x, int y);
     // pointer methods

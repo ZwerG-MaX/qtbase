@@ -133,6 +133,7 @@ private Q_SLOTS:
     void attentionTimerExpired();
     void actionInvoked(uint id, const QString &action);
     void notificationClosed(uint id, uint reason);
+    void watcherServiceRegistered(const QString &serviceName);
 
 private:
     void setStatus(const QString &status);
@@ -158,8 +159,6 @@ private:
     QTemporaryFile *m_tempAttentionIcon;
     QString m_attentionIconName;
     QTimer m_attentionTimer;
-    bool m_isRequestingAttention;
-    bool m_hasMenu;
     bool m_registered;
 };
 

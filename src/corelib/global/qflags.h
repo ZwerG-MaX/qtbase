@@ -42,14 +42,13 @@
 #ifndef QFLAGS_H
 #define QFLAGS_H
 
-#include <QtCore/qtypeinfo.h>
-#include <QtCore/qtypetraits.h>
-
 #ifdef Q_COMPILER_INITIALIZER_LISTS
 #include <initializer_list>
 #endif
 
 QT_BEGIN_NAMESPACE
+
+class QDataStream;
 
 class QFlag
 {
@@ -94,8 +93,12 @@ class QFlags
     Q_STATIC_ASSERT_X((sizeof(Enum) <= sizeof(int)),
                       "QFlags uses an int as storage, so an enum with underlying "
                       "long long will overflow.");
+    Q_STATIC_ASSERT_X((std::is_enum<Enum>::value), "QFlags is only usable on enumeration types.");
+
     struct Private;
     typedef int (Private::*Zero);
+    template <typename E> friend QDataStream &operator>>(QDataStream &, QFlags<E> &);
+    template <typename E> friend QDataStream &operator<<(QDataStream &, QFlags<E>);
 public:
 #if defined(Q_CC_MSVC) || defined(Q_QDOC)
     // see above for MSVC
@@ -103,7 +106,7 @@ public:
     typedef int Int;
 #else
     typedef typename std::conditional<
-            QtPrivate::QIsUnsignedEnum<Enum>::value,
+            std::is_unsigned<typename std::underlying_type<Enum>::type>::value,
             unsigned int,
             signed int
         >::type Int;

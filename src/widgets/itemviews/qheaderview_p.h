@@ -58,7 +58,9 @@
 
 #include "QtCore/qbitarray.h"
 #include "QtWidgets/qapplication.h"
+#if QT_CONFIG(label)
 #include "QtWidgets/qlabel.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -99,7 +101,9 @@ public:
           lastSectionSize(0),
           lastSectionLogicalIdx(-1), // Only trust when we stretch last section
           sectionIndicatorOffset(0),
+#if QT_CONFIG(label)
           sectionIndicator(0),
+#endif
           globalResizeMode(QHeaderView::Interactive),
           sectionStartposRecalc(true),
           resizeContentsPrecision(1000)
@@ -117,7 +121,7 @@ public:
     void resizeSections(QHeaderView::ResizeMode globalMode, bool useGlobalMode = false);
     void _q_sectionsRemoved(const QModelIndex &,int,int);
     void _q_layoutAboutToBeChanged();
-    void _q_layoutChanged();
+    void _q_layoutChanged() override;
 
     bool isSectionSelected(int section) const;
     bool isFirstVisibleSection(int section) const;
@@ -296,7 +300,9 @@ public:
     int lastSectionLogicalIdx; // Only trust if we stretch LastSection
     int sectionIndicatorOffset;
     Qt::Alignment defaultAlignment;
+#if QT_CONFIG(label)
     QLabel *sectionIndicator;
+#endif
     QHeaderView::ResizeMode globalResizeMode;
     QList<QPersistentModelIndex> persistentHiddenSections;
     mutable bool sectionStartposRecalc;

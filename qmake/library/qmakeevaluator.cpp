@@ -152,6 +152,7 @@ void QMakeEvaluator::initStatics()
     statics.strhost_build = QLatin1String("host_build");
     statics.strTEMPLATE = ProKey("TEMPLATE");
     statics.strQMAKE_PLATFORM = ProKey("QMAKE_PLATFORM");
+    statics.strQMAKE_DIR_SEP = ProKey("QMAKE_DIR_SEP");
     statics.strQMAKESPEC = ProKey("QMAKESPEC");
 #ifdef PROEVALUATOR_FULL
     statics.strREQUIRES = ProKey("REQUIRES");
@@ -594,6 +595,24 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProBlock(
             tokPtr += blockLen;
             okey = true, or_op = false; // force next evaluation
             break;
+        case TokBypassNesting:
+            blockLen = getBlockLen(tokPtr);
+            if ((m_cumulative || okey != or_op) && blockLen) {
+                ProValueMapStack savedValuemapStack = m_valuemapStack;
+                m_valuemapStack.clear();
+                m_valuemapStack.append(savedValuemapStack.takeFirst());
+                traceMsg("visiting nesting-bypassing block");
+                ret = visitProBlock(tokPtr);
+                traceMsg("visited nesting-bypassing block");
+                savedValuemapStack.prepend(m_valuemapStack.first());
+                m_valuemapStack = savedValuemapStack;
+            } else {
+                traceMsg("skipped nesting-bypassing block");
+                ret = ReturnTrue;
+            }
+            tokPtr += blockLen;
+            okey = true, or_op = false; // force next evaluation
+            break;
         case TokTestDef:
         case TokReplaceDef:
             if (m_cumulative || okey != or_op) {
@@ -920,11 +939,14 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProVariable(
         setTemplate();
     else if (varName == statics.strQMAKE_PLATFORM)
         m_featureRoots = 0;
+    else if (varName == statics.strQMAKE_DIR_SEP)
+        m_dirSep = first(varName);
     else if (varName == statics.strQMAKESPEC) {
         if (!values(varName).isEmpty()) {
             QString spec = values(varName).first().toQString();
             if (IoUtils::isAbsolutePath(spec)) {
                 m_qmakespec = spec;
+                m_qmakespecName = IoUtils::fileName(m_qmakespec).toString();
                 m_featureRoots = 0;
             }
         }
@@ -1031,21 +1053,8 @@ void QMakeEvaluator::loadDefaults()
     if (GetComputerName(name, &name_length))
         vars[ProKey("QMAKE_HOST.name")] << ProString(QString::fromWCharArray(name));
 
-    QSysInfo::WinVersion ver = QSysInfo::WindowsVersion;
-    vars[ProKey("QMAKE_HOST.version")] << ProString(QString::number(ver));
-    ProString verStr;
-    switch (ver) {
-    case QSysInfo::WV_Me: verStr = ProString("WinMe"); break;
-    case QSysInfo::WV_95: verStr = ProString("Win95"); break;
-    case QSysInfo::WV_98: verStr = ProString("Win98"); break;
-    case QSysInfo::WV_NT: verStr = ProString("WinNT"); break;
-    case QSysInfo::WV_2000: verStr = ProString("Win2000"); break;
-    case QSysInfo::WV_2003: verStr = ProString("Win2003"); break;
-    case QSysInfo::WV_XP: verStr = ProString("WinXP"); break;
-    case QSysInfo::WV_VISTA: verStr = ProString("WinVista"); break;
-    default: verStr = ProString("Unknown"); break;
-    }
-    vars[ProKey("QMAKE_HOST.version_string")] << verStr;
+    vars[ProKey("QMAKE_HOST.version")] << ProString(QSysInfo::kernelVersion());
+    vars[ProKey("QMAKE_HOST.version_string")] << ProString(QSysInfo::productVersion());
 
     SYSTEM_INFO info;
     GetSystemInfo(&info);
@@ -1200,8 +1209,6 @@ bool QMakeEvaluator::loadSpecInternal()
     // This also ensures that m_featureRoots is valid.
     if (evaluateFeatureFile(QLatin1String("spec_post.prf")) != ReturnTrue)
         return false;
-    // The MinGW and x-build specs may change the separator; $$shell_{path,quote}() need it
-    m_dirSep = first(ProKey("QMAKE_DIR_SEP"));
     return true;
 }
 
@@ -1423,6 +1430,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
     if (flags & LoadPreFiles) {
         setupProject();
 
+        if (!m_option->extra_cmds[QMakeEvalEarly].isEmpty())
+            evaluateCommand(m_option->extra_cmds[QMakeEvalEarly], fL1S("(command line -early)"));
+
         for (ProValueMap::ConstIterator it = m_extraVars.constBegin();
              it != m_extraVars.constEnd(); ++it)
             m_valuemapStack.first().insert(it.key(), it.value());
@@ -1434,8 +1444,8 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
         if ((vr = evaluateFeatureFile(QLatin1String("default_pre.prf"))) == ReturnError)
             goto failed;
 
-        if (!m_option->precmds.isEmpty()) {
-            evaluateCommand(m_option->precmds, fL1S("(command line)"));
+        if (!m_option->extra_cmds[QMakeEvalBefore].isEmpty()) {
+            evaluateCommand(m_option->extra_cmds[QMakeEvalBefore], fL1S("(command line)"));
 
             // Again, after user configs, to override them
             applyExtraConfigs();
@@ -1448,7 +1458,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
     debugMsg(1, "done visiting file %s", qPrintable(pro->fileName()));
 
     if (flags & LoadPostFiles) {
-        evaluateCommand(m_option->postcmds, fL1S("(command line -after)"));
+        evaluateCommand(m_option->extra_cmds[QMakeEvalAfter], fL1S("(command line -after)"));
 
         // Again, to ensure the project does not mess with us.
         // Specifically, do not allow a project to override debug/release within a
@@ -1457,6 +1467,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
 
         if ((vr = evaluateFeatureFile(QLatin1String("default_post.prf"))) == ReturnError)
             goto failed;
+
+        if (!m_option->extra_cmds[QMakeEvalLate].isEmpty())
+            evaluateCommand(m_option->extra_cmds[QMakeEvalLate], fL1S("(command line -late)"));
 
         if ((vr = evaluateConfigFeatures()) == ReturnError)
             goto failed;
@@ -1774,8 +1787,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateExpandFunction(
         ProStringList args;
         if (expandVariableReferences(tokPtr, 5, &args, true) == ReturnError)
             return ReturnError;
-        *ret = evaluateBuiltinExpand(func_t, func, args);
-        return ReturnTrue;
+        return evaluateBuiltinExpand(func_t, func, args, *ret);
     }
 
     QHash<ProKey, ProFunctionDef>::ConstIterator it =

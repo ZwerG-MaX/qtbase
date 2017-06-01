@@ -56,7 +56,6 @@
 
 #ifdef Q_OS_UNIX
 #include <time.h>
-#include <utime.h>
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
@@ -101,7 +100,7 @@ enum TestFunc {
     T_EXISTS, T_EXPORT, T_CLEAR, T_UNSET, T_EVAL, T_CONFIG, T_SYSTEM,
     T_DEFINED, T_DISCARD_FROM, T_CONTAINS, T_INFILE,
     T_COUNT, T_ISEMPTY, T_PARSE_JSON, T_INCLUDE, T_LOAD, T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
-    T_MKPATH, T_WRITE_FILE, T_TOUCH, T_CACHE
+    T_MKPATH, T_WRITE_FILE, T_TOUCH, T_CACHE, T_RELOAD_PROPERTIES
 };
 
 void QMakeEvaluator::initFunctionStatics()
@@ -200,6 +199,7 @@ void QMakeEvaluator::initFunctionStatics()
         { "write_file", T_WRITE_FILE },
         { "touch", T_TOUCH },
         { "cache", T_CACHE },
+        { "reload_properties", T_RELOAD_PROPERTIES },
     };
     statics.functions.reserve((int)(sizeof(testInits)/sizeof(testInits[0])));
     for (unsigned i = 0; i < sizeof(testInits)/sizeof(testInits[0]); ++i)
@@ -253,23 +253,6 @@ QMakeEvaluator::getMemberArgs(const ProKey &func, int srclen, const ProStringLis
         return false;
     return true;
 }
-
-#if defined(Q_OS_WIN) && defined(PROEVALUATOR_FULL)
-static QString windowsErrorCode()
-{
-    wchar_t *string = 0;
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
-                  NULL,
-                  GetLastError(),
-                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                  (LPWSTR)&string,
-                  0,
-                  NULL);
-    QString ret = QString::fromWCharArray(string);
-    LocalFree((HLOCAL)string);
-    return ret.trimmed();
-}
-#endif
 
 QString
 QMakeEvaluator::quoteValue(const ProString &val)
@@ -468,7 +451,7 @@ QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::Open
     return ReturnTrue;
 }
 
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(process)
 void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
 {
     proc->setWorkingDirectory(currentDirectory());
@@ -489,7 +472,7 @@ void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
 QByteArray QMakeEvaluator::getCommandOutput(const QString &args, int *exitCode) const
 {
     QByteArray out;
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(process)
     QProcess proc;
     runProcess(&proc, args);
     *exitCode = (proc.exitStatus() == QProcess::NormalExit) ? proc.exitCode() : -1;
@@ -560,11 +543,9 @@ void QMakeEvaluator::populateDeps(
         }
 }
 
-ProStringList QMakeEvaluator::evaluateBuiltinExpand(
-        int func_t, const ProKey &func, const ProStringList &args)
+QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinExpand(
+        int func_t, const ProKey &func, const ProStringList &args, ProStringList &ret)
 {
-    ProStringList ret;
-
     traceMsg("calling built-in $$%s(%s)", dbgKey(func), dbgSepStrList(args));
 
     switch (func_t) {
@@ -1110,6 +1091,11 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             if (qfile.open(stdin, QIODevice::ReadOnly)) {
                 QTextStream t(&qfile);
                 const QString &line = t.readLine();
+                if (t.atEnd()) {
+                    fputs("\n", stderr);
+                    evalError(fL1S("Unexpected EOF."));
+                    return ReturnError;
+                }
                 ret = split_value_list(QStringRef(&line));
             }
         }
@@ -1279,7 +1265,7 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         break;
     }
 
-    return ret;
+    return ReturnTrue;
 }
 
 QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
@@ -1707,7 +1693,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
 #ifdef PROEVALUATOR_FULL
         if (m_cumulative) // Anything else would be insanity
             return ReturnFalse;
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(process)
         QProcess proc;
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
         runProcess(&proc, args.at(0).toQString(m_tmp2));
@@ -1808,40 +1794,11 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
 #ifdef PROEVALUATOR_FULL
         const QString &tfn = resolvePath(args.at(0).toQString(m_tmp1));
         const QString &rfn = resolvePath(args.at(1).toQString(m_tmp2));
-#ifdef Q_OS_UNIX
-        struct stat st;
-        if (stat(rfn.toLocal8Bit().constData(), &st)) {
-            evalError(fL1S("Cannot stat() reference file %1: %2.").arg(rfn, fL1S(strerror(errno))));
+        QString error;
+        if (!IoUtils::touchFile(tfn, rfn, &error)) {
+            evalError(error);
             return ReturnFalse;
         }
-        struct utimbuf utb;
-        utb.actime = time(0);
-        utb.modtime = st.st_mtime;
-        if (utime(tfn.toLocal8Bit().constData(), &utb)) {
-            evalError(fL1S("Cannot touch %1: %2.").arg(tfn, fL1S(strerror(errno))));
-            return ReturnFalse;
-        }
-#else
-        HANDLE rHand = CreateFile((wchar_t*)rfn.utf16(),
-                                  GENERIC_READ, FILE_SHARE_READ,
-                                  NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (rHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open reference file %1: %2").arg(rfn, windowsErrorCode()));
-            return ReturnFalse;
-        }
-        FILETIME ft;
-        GetFileTime(rHand, 0, 0, &ft);
-        CloseHandle(rHand);
-        HANDLE wHand = CreateFile((wchar_t*)tfn.utf16(),
-                                  GENERIC_WRITE, FILE_SHARE_READ,
-                                  NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (wHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open %1: %2").arg(tfn, windowsErrorCode()));
-            return ReturnFalse;
-        }
-        SetFileTime(wHand, 0, 0, &ft);
-        CloseHandle(wHand);
-#endif
 #endif
         return ReturnTrue;
     }
@@ -2012,6 +1969,11 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         }
         return writeFile(fL1S("cache "), fn, QIODevice::Append, false, varstr);
     }
+    case T_RELOAD_PROPERTIES:
+#ifdef QT_BUILD_QMAKE
+        m_option->reloadProperties();
+#endif
+        return ReturnTrue;
     default:
         evalError(fL1S("Function '%1' is not implemented.").arg(function.toQString(m_tmp1)));
         return ReturnFalse;

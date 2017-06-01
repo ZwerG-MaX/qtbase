@@ -39,12 +39,14 @@ depends += \
     qtquick \
     qtwidgets \
     qtdoc \
-    qmake
+    qmake \
+    qttestlib
 
 headerdirs  += ..
 
 sourcedirs  += .. \
-               ../../../examples/gui/doc/src
+               ../../../examples/gui/doc/src \
+               src/includes
 
 exampledirs += ../../../examples/gui \
                snippets

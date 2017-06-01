@@ -7,8 +7,9 @@
 
     "commandline": {
         "options": {
-            "android-style-assets": "boolean",
+            "accessibility": "boolean",
             "angle": "boolean",
+            "combined-angle-lib": "boolean",
             "direct2d": "boolean",
             "directfb": "boolean",
             "directwrite": "boolean",
@@ -33,6 +34,7 @@
             "opengl": { "type": "optionalString", "values": [ "no", "yes", "desktop", "es2", "dynamic" ] },
             "opengl-es-2": { "type": "void", "name": "opengl", "value": "es2" },
             "opengles3": "boolean",
+            "openvg": "boolean",
             "qpa": { "type": "string", "name": "qpa_default_platform" },
             "qpa-platform-guard": "boolean",
             "sm": { "type": "boolean", "name": "sessionmanager" },
@@ -44,8 +46,7 @@
             "xkb-config-root": "string",
             "xkbcommon": { "type": "enum", "values": [ "no", "qt", "system" ] },
             "xkbcommon-evdev": "boolean",
-            "xkbcommon-x11": { "type": "enum", "name": "xkbcommon", "values": [ "no", "qt", "system" ] },
-            "xrender": "boolean"
+            "xkbcommon-x11": { "type": "enum", "name": "xkbcommon", "values": [ "no", "qt", "system" ] }
         }
     },
 
@@ -162,13 +163,16 @@
                 { "type": "pkgConfig", "args": "libpng" },
                 { "libs": "-llibpng", "condition": "config.msvc" },
                 { "libs": "-lpng", "condition": "!config.msvc" }
+            ],
+            "use": [
+                { "lib": "zlib", "condition": "features.system-zlib" }
             ]
         },
         "mirclient": {
             "label": "Mir client libraries",
             "test": "qpa/mirclient",
             "sources": [
-                { "type": "pkgConfig", "args": "egl mirclient ubuntu-platform-api" }
+                { "type": "pkgConfig", "args": "egl mirclient ubuntu-platform-api libcontent-hub >= 0.2.0" }
             ]
         },
         "mtdev": {
@@ -182,7 +186,7 @@
             "label": "Desktop OpenGL",
             "test": "unix/opengldesktop",
             "sources": [
-                { "type": "pkgConfig", "args": "gl" },
+                { "type": "pkgConfig", "args": "gl", "condition": "!config.darwin" },
                 { "type": "makeSpec", "spec": "OPENGL" }
             ]
         },
@@ -190,8 +194,16 @@
             "label": "OpenGL ES 2.0",
             "test": "unix/opengles2",
             "sources": [
-                { "type": "pkgConfig", "args": "glesv2" },
+                { "type": "pkgConfig", "args": "glesv2", "condition": "!config.darwin" },
                 { "type": "makeSpec", "spec": "OPENGL_ES2" }
+            ]
+        },
+        "openvg": {
+            "label": "OpenVG",
+            "test": "unix/openvg",
+            "sources": [
+                { "type": "pkgConfig", "args": "vg" },
+                { "type": "makeSpec", "spec": "OPENVG" }
             ]
         },
         "tslib": {
@@ -223,7 +235,7 @@
             ]
         },
         "xcb_syslibs": {
-            "label": "XCB (secondary)",
+            "label": "XCB (extensions)",
             "test": "qpa/xcb-syslibs",
             "sources": [
                 { "type": "pkgConfig",
@@ -285,13 +297,6 @@
             "sources": [
                 { "type": "pkgConfig", "args": "xkbcommon xkbcommon-x11 >= 0.4.1" }
             ]
-        },
-        "xrender": {
-            "label": "XRender",
-            "test": "x11/xrender",
-            "sources": [
-                "-lXrender"
-            ]
         }
     },
 
@@ -323,7 +328,7 @@
             "use": "egl xcb_xlib"
         },
         "egl-brcm": {
-            "label": "Broadcom EGL (Rasberry Pi)",
+            "label": "Broadcom EGL (Raspberry Pi)",
             "type": "compile",
             "test": "qpa/eglfs-brcm",
             "use": "egl bcm_host"
@@ -413,11 +418,6 @@
             "condition": "features.accessibility && features.xcb && features.dbus",
             "output": [ "privateFeature", "feature" ]
         },
-        "android-style-assets": {
-            "label": "Android Style Assets",
-            "condition": "config.android",
-            "output": [ "privateFeature" ]
-        },
         "angle": {
             "label": "ANGLE",
             "autoDetect": "features.opengles2 || features.opengl-dynamic",
@@ -427,8 +427,15 @@
                 { "type": "define", "name": "QT_OPENGL_ES_2_ANGLE" }
             ]
         },
+        "combined-angle-lib": {
+            "label": "Combined ANGLE Library",
+            "autoDetect": false,
+            "condition": "features.angle",
+            "output": [ "publicFeature" ]
+        },
         "directfb": {
             "label": "DirectFB",
+            "section": "Platform plugins",
             "autoDetect": false,
             "condition": "libs.directfb",
             "output": [ "privateFeature" ]
@@ -447,6 +454,7 @@
         },
         "direct2d": {
             "label": "Direct 2D",
+            "section": "Platform plugins",
             "condition": "config.win32 && !config.winrt && libs.direct2d",
             "output": [ "privateFeature" ]
         },
@@ -499,13 +507,14 @@
         },
         "integrityfb": {
             "label": "INTEGRITY framebuffer",
+            "section": "Platform plugins",
             "condition": "config.integrity",
             "output": [ "privateFeature" ]
         },
         "kms": {
             "label": "KMS",
             "condition": "libs.drm",
-            "output": [ "publicQtConfig" ]
+            "output": [ "publicQtConfig", "privateFeature" ]
         },
         "libinput": {
             "label": "libinput",
@@ -514,7 +523,7 @@
         },
         "libinput-axis-api": {
             "label": "axis API in libinput",
-            "condition": "tests.libinput_axis_api",
+            "condition": "features.libinput && tests.libinput_axis_api",
             "output": [ "privateFeature" ]
         },
         "lgmon": {
@@ -525,11 +534,20 @@
         },
         "linuxfb": {
             "label": "LinuxFB",
-            "condition": "tests.linuxfb",
+            "section": "Platform plugins",
+            "condition": "tests.linuxfb && features.regularexpression",
+            "output": [ "privateFeature" ]
+        },
+        "vnc": {
+            "label": "VNC",
+            "section": "Platform plugins",
+            "condition": "config.unix && !config.android && !config.darwin && features.regularexpression",
             "output": [ "privateFeature" ]
         },
         "mirclient": {
             "label": "Mir client",
+            "section": "Platform plugins",
+            "autoDetect": false,
             "condition": "libs.mirclient",
             "output": [ "privateFeature" ]
         },
@@ -588,9 +606,14 @@
             "condition": "features.opengl-desktop || features.opengl-dynamic || features.opengles2",
             "output": [ "publicFeature", "feature" ]
         },
+        "openvg": {
+            "label": "OpenVG",
+            "condition": "libs.openvg",
+            "output": [ "publicFeature" ]
+        },
         "egl": {
             "label": "EGL",
-            "condition": "features.opengl && (features.angle || libs.egl)",
+            "condition": "(features.opengl || features.openvg) && (features.angle || libs.egl)",
             "output": [ "privateFeature", "feature" ]
         },
         "egl_x11": {
@@ -600,12 +623,12 @@
         },
         "eglfs": {
             "label": "EGLFS",
-            "autoDetect": "!config.android && !config.win32",
-            "condition": "features.egl",
+            "section": "Platform plugins",
+            "condition": "!config.android && !config.darwin && !config.win32 && features.egl",
             "output": [ "privateFeature" ]
         },
         "eglfs_brcm": {
-            "label": "EGLFS Rasberry Pi",
+            "label": "EGLFS Raspberry Pi",
             "condition": "features.eglfs && tests.egl-brcm",
             "output": [ "privateFeature" ]
         },
@@ -636,6 +659,7 @@
         },
         "gif": {
             "label": "GIF",
+            "condition": "features.imageformatplugin",
             "output": [
                 "privateFeature",
                 { "type": "define", "negative": true, "name": "QT_NO_IMAGEFORMAT_GIF" }
@@ -643,11 +667,13 @@
         },
         "ico": {
             "label": "ICO",
+            "condition": "features.imageformatplugin",
             "output": [ "privateFeature", "feature" ]
         },
         "jpeg": {
             "label": "JPEG",
             "disable": "input.libjpeg == 'no'",
+            "condition": "features.imageformatplugin",
             "output": [
                 "privateFeature",
                 { "type": "define", "negative": true, "name": "QT_NO_IMAGEFORMAT_JPEG" }
@@ -672,6 +698,7 @@
             "label": "  Using system libpng",
             "disable": "input.libpng == 'qt'",
             "enable": "input.libpng == 'system'",
+            "autoDetect": "features.system-zlib",
             "condition": "features.png && libs.libpng",
             "output": [ "privateFeature" ]
         },
@@ -697,16 +724,17 @@
         },
         "xcb": {
             "label": "XCB",
+            "section": "Platform plugins",
             "autoDetect": "!config.darwin",
             "condition": "libs.xcb",
             "output": [ "privateFeature" ]
         },
         "system-xcb": {
-            "label": "Using system provided XCB libraries",
-            "enable": "input.xcb == 'system' || input.xcb == 'yes'",
-            "disable": "input.xcb == 'qt' || input.xcb == 'no'",
+            "label": "Using system-provided XCB libraries",
+            "enable": "input.xcb == 'system'",
+            "disable": "input.xcb == 'qt'",
             "autoDetect": "!config.darwin",
-            "condition": "libs.xcb && libs.xcb_syslibs",
+            "condition": "features.xcb && libs.xcb_syslibs",
             "output": [ "privateFeature" ]
         },
         "x11-prefix": {
@@ -722,14 +750,20 @@
         },
         "xcb-render": {
             "label": "XCB render",
-            "emitIf": "features.system-xcb",
-            "condition": "libs.xcb_render",
+            "emitIf": "features.xcb",
+            "condition": "!features.system-xcb || libs.xcb_render",
+            "output": [ "privateFeature" ]
+        },
+        "xkb": {
+            "label": "XCB XKB",
+            "emitIf": "features.xcb",
+            "condition": "!features.system-xcb || libs.xcb_xkb",
             "output": [ "privateFeature" ]
         },
         "xcb-xlib": {
             "label": "XCB Xlib",
             "emitIf": "features.xcb",
-            "condition": "libs.xcb_xlib",
+            "condition": "features.xlib && libs.xcb_xlib",
             "output": [ "privateFeature" ]
         },
         "xcb-sm": {
@@ -740,6 +774,7 @@
         },
         "xinput2": {
             "label": "Xinput2",
+            "emitIf": "features.xcb",
             "condition": "libs.xinput2",
             "output": [ "privateFeature" ]
         },
@@ -756,11 +791,6 @@
             "condition": "libs.xkbcommon_x11",
             "output": [ "privateFeature" ]
         },
-        "xkb": {
-            "label": "XCB XKB",
-            "condition": "features.system-xcb && libs.xcb_xkb",
-            "output": [ "privateFeature" ]
-        },
         "xkb-config-root": {
             "label": "XKB config root",
             "emitIf": "features.xcb",
@@ -771,11 +801,6 @@
             "label": "XLib",
             "condition": "tests.xlib",
             "output": [ "privateFeature" ]
-        },
-        "xrender": {
-            "label": "Xrender",
-            "condition": "libs.xrender",
-            "output": [ "privateFeature", "feature" ]
         },
         "texthtmlparser": {
             "label": "HtmlParser",
@@ -870,7 +895,6 @@
             "label": "QImageIOPlugin",
             "purpose": "Provides a base for writing a image format plugins.",
             "section": "Images",
-            "condition": "features.library",
             "output": [ "publicFeature", "feature" ]
         },
         "movie": {
@@ -956,6 +980,7 @@
             "label": "QSystemTrayIcon",
             "purpose": "Provides an icon for an application in the system tray.",
             "section": "Utilities",
+            "condition": "features.temporaryfile",
             "output": [ "publicFeature", "feature" ]
         },
         "accessibility": {
@@ -1025,6 +1050,11 @@ Specify -opengl desktop to use regular OpenGL."
             "message": "The OpenGL functionality tests failed!
 You might need to modify the include and library search paths by editing QMAKE_INCDIR_OPENGL[_ES2],
 QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your platform."
+        },
+        {
+            "type": "warning",
+            "condition": "!features.accessibility",
+            "message": "Accessibility disabled. This configuration of Qt is unsupported."
         }
     ],
 
@@ -1032,6 +1062,7 @@ QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your pla
         {
             "section": "Qt Gui",
             "entries": [
+                "accessibility",
                 "freetype",
                 "system-freetype",
                 "harfbuzz",
@@ -1043,6 +1074,8 @@ QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your pla
                         "gif", "ico", "jpeg", "system-jpeg", "png", "system-png"
                     ]
                 },
+                "egl",
+                "openvg",
                 {
                     "section": "OpenGL",
                     "entries": [
@@ -1051,7 +1084,11 @@ QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your pla
                             "args": "angle",
                             "condition": "config.win32"
                         },
-                        "egl",
+                        {
+                            "type": "feature",
+                            "args": "combined-angle-lib",
+                            "condition": "features.angle"
+                        },
                         "opengl-desktop",
                         {
                             "type": "feature",
@@ -1087,8 +1124,9 @@ QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your pla
                         "eglfs_viv", "eglfs_viv_wl", "eglfs_egldevice", "eglfs_gbm", "eglfs_mali", "eglfs_brcm", "egl_x11"
                     ]
                 },
-                "linuxfb", "mirclient",
+                "linuxfb", "vnc", "mirclient",
                 {
+                    "type": "feature",
                     "message": "INTEGRITY framebuffer",
                     "condition": "config.integrity",
                     "args": "integrityfb"
@@ -1104,7 +1142,7 @@ QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your pla
                     "section": "X11",
                     "condition": "features.xcb",
                     "entries": [
-                        "system-xcb", "egl_x11", "xinput2", "xkb", "xlib", "xrender", "xcb-render", "xcb-glx", "xcb-xlib", "xkbcommon-system"
+                        "system-xcb", "egl_x11", "xinput2", "xkb", "xlib", "xcb-render", "xcb-glx", "xcb-xlib", "xkbcommon-system"
                     ]
                 },
                 {

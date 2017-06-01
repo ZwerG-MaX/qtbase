@@ -1030,6 +1030,7 @@ void QWidgetLineControl::parseInputMask(const QString &maskFields)
                 break;
             case '\\':
                 escape = true;
+                Q_FALLTHROUGH();
             default:
                 s = true;
                 break;
@@ -1703,7 +1704,9 @@ void QWidgetLineControl::processKeyEvent(QKeyEvent* event)
     }
 
     bool unknown = false;
+#if QT_CONFIG(shortcut)
     bool visual = cursorMoveStyle() == Qt::VisualMoveStyle;
+#endif
 
     if (false) {
     }
@@ -1924,19 +1927,15 @@ void QWidgetLineControl::processKeyEvent(QKeyEvent* event)
         unknown = false;
     }
 
-    // QTBUG-35734: ignore Ctrl/Ctrl+Shift; accept only AltGr (Alt+Ctrl) on German keyboards
-    if (unknown && !isReadOnly()
-        && event->modifiers() != Qt::ControlModifier
-        && event->modifiers() != (Qt::ControlModifier | Qt::ShiftModifier)) {
-        QString t = event->text();
-        if (!t.isEmpty() && t.at(0).isPrint()) {
-            insert(t);
+    if (unknown
+        && !isReadOnly()
+        && isAcceptableInput(event)) {
+        insert(event->text());
 #ifndef QT_NO_COMPLETER
-            complete(event->key());
+        complete(event->key());
 #endif
-            event->accept();
-            return;
-        }
+        event->accept();
+        return;
     }
 
     if (unknown)

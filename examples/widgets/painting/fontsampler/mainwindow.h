@@ -78,13 +78,10 @@ public slots:
     void on_clearAction_triggered();
     void on_markAction_triggered();
     void on_unmarkAction_triggered();
-
-#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
     void on_printAction_triggered();
     void on_printPreviewAction_triggered();
     void printDocument(QPrinter *printer);
     void printPage(int index, QPainter *painter, QPrinter *printer);
-#endif
     void showFont(QTreeWidgetItem *item);
     void updateStyles(QTreeWidgetItem *item, int column);
 

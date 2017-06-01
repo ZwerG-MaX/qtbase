@@ -7,7 +7,7 @@ SUBDIRS = \
     fbconvenience \
     themes
 
-qtConfig(freetype)|if(darwin:!if(watchos:CONFIG(simulator, simulator|device)))|win32: \
+qtConfig(freetype)|darwin|win32: \
     SUBDIRS += fontdatabases
 
 qtConfig(evdev)|qtConfig(tslib)|qtConfig(libinput) {
@@ -24,6 +24,8 @@ qtConfig(egl): \
     SUBDIRS += eglconvenience
 qtConfig(xlib):qtConfig(opengl):!qtConfig(opengles2): \
     SUBDIRS += glxconvenience
+qtConfig(kms): \
+    SUBDIRS += kmsconvenience
 
 qtConfig(accessibility) {
     SUBDIRS += accessibility

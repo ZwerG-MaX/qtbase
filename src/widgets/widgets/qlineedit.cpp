@@ -64,6 +64,8 @@
 #include "qdebug.h"
 #include "qtextedit.h"
 #include <private/qtextedit_p.h>
+#include <private/qwidgettextcontrol_p.h>
+
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
@@ -437,6 +439,7 @@ bool QLineEdit::hasFrame() const
     \since 5.2
 */
 
+#if QT_CONFIG(action)
 /*!
     \overload
 
@@ -466,7 +469,7 @@ QAction *QLineEdit::addAction(const QIcon &icon, ActionPosition position)
     addAction(result, position);
     return result;
 }
-
+#endif // QT_CONFIG(action)
 /*!
     \property QLineEdit::clearButtonEnabled
     \brief Whether the line edit displays a clear button when it is not empty.
@@ -483,6 +486,7 @@ static const char clearButtonActionNameC[] = "_q_qlineeditclearaction";
 
 void QLineEdit::setClearButtonEnabled(bool enable)
 {
+#if QT_CONFIG(action)
     Q_D(QLineEdit);
     if (enable == isClearButtonEnabled())
         return;
@@ -497,11 +501,16 @@ void QLineEdit::setClearButtonEnabled(bool enable)
         d->removeAction(clearAction);
         delete clearAction;
     }
+#endif // QT_CONFIG(action)
 }
 
 bool QLineEdit::isClearButtonEnabled() const
 {
+#if QT_CONFIG(action)
     return findChild<QAction *>(QLatin1String(clearButtonActionNameC));
+#else
+    return false;
+#endif
 }
 
 void QLineEdit::setFrame(bool enable)
@@ -737,10 +746,10 @@ void QLineEdit::setCursorPosition(int pos)
     d->control->setCursorPosition(pos);
 }
 
+// ### What should this do if the point is outside of contentsRect? Currently returns 0.
 /*!
     Returns the cursor position under the point \a pos.
 */
-// ### What should this do if the point is outside of contentsRect? Currently returns 0.
 int QLineEdit::cursorPositionAt(const QPoint &pos)
 {
     Q_D(QLineEdit);
@@ -1432,8 +1441,10 @@ bool QLineEdit::event(QEvent * e)
                 || style()->styleHint(QStyle::SH_BlinkCursorWhenTextSelected, &opt, this))
                 d->setCursorVisible(true);
         }
+#if QT_CONFIG(action)
     } else if (e->type() == QEvent::ActionRemoved) {
         d->removeAction(static_cast<QActionEvent *>(e)->action());
+#endif
     } else if (e->type() == QEvent::Resize) {
         d->positionSideWidgets();
     }
@@ -2195,10 +2206,12 @@ void QLineEdit::changeEvent(QEvent *ev)
         update();
         break;
     case QEvent::LayoutDirectionChange:
+#if QT_CONFIG(toolbutton)
         for (const auto &e : d->trailingSideWidgets) { // Refresh icon to show arrow in right direction.
             if (e.flags & QLineEditPrivate::SideWidgetClearButton)
                 static_cast<QLineEditIconButton *>(e.widget)->setIcon(d->clearButtonIcon());
         }
+#endif
         d->positionSideWidgets();
         break;
     default:

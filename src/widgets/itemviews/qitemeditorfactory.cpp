@@ -45,7 +45,9 @@
 
 #include <qcombobox.h>
 #include <qdatetimeedit.h>
+#if QT_CONFIG(label)
 #include <qlabel.h>
+#endif
 #include <qlineedit.h>
 #include <qspinbox.h>
 #include <limits.h>
@@ -53,6 +55,7 @@
 #include <qapplication.h>
 #include <qdebug.h>
 
+#include <vector>
 #include <algorithm>
 QT_BEGIN_NAMESPACE
 
@@ -189,9 +192,11 @@ QByteArray QItemEditorFactory::valuePropertyName(int userType) const
 QItemEditorFactory::~QItemEditorFactory()
 {
     //we make sure we delete all the QItemEditorCreatorBase
-    //this has to be done only once, hence the QSet
-    QSet<QItemEditorCreatorBase*> set = creatorMap.values().toSet();
-    qDeleteAll(set);
+    //this has to be done only once, hence the sort-unique idiom
+    std::vector<QItemEditorCreatorBase*> creators(creatorMap.cbegin(), creatorMap.cend());
+    std::sort(creators.begin(), creators.end());
+    const auto it = std::unique(creators.begin(), creators.end());
+    qDeleteAll(creators.begin(), it);
 }
 
 /*!
@@ -261,8 +266,10 @@ QWidget *QDefaultItemEditorFactory::createEditor(int userType, QWidget *parent) 
         ed->setFrame(false);
         return ed; }
 #endif
+#if QT_CONFIG(label)
     case QVariant::Pixmap:
         return new QLabel(parent);
+#endif
 #ifndef QT_NO_SPINBOX
     case QVariant::Double: {
         QDoubleSpinBox *sb = new QDoubleSpinBox(parent);

@@ -130,9 +130,9 @@ public:
     ~QXcbDropData();
 
 protected:
-    bool hasFormat_sys(const QString &mimeType) const Q_DECL_OVERRIDE;
-    QStringList formats_sys() const Q_DECL_OVERRIDE;
-    QVariant retrieveData_sys(const QString &mimeType, QVariant::Type type) const Q_DECL_OVERRIDE;
+    bool hasFormat_sys(const QString &mimeType) const override;
+    QStringList formats_sys() const override;
+    QVariant retrieveData_sys(const QString &mimeType, QVariant::Type type) const override;
 
     QVariant xdndObtainData(const QByteArray &format, QVariant::Type requestedType) const;
 
@@ -1121,6 +1121,9 @@ void QXcbDrag::cancel()
     QBasicDrag::cancel();
     if (current_target)
         send_leave();
+
+    // remove canceled object
+    currentDrag()->deleteLater();
 }
 
 // find an ancestor with XdndAware on it
@@ -1160,7 +1163,7 @@ static xcb_window_t findXdndAwareParent(QXcbConnection *c, xcb_window_t window)
 
 void QXcbDrag::handleSelectionRequest(const xcb_selection_request_event_t *event)
 {
-    xcb_selection_notify_event_t notify;
+    Q_DECLARE_XCB_EVENT(notify, xcb_selection_notify_event_t);
     notify.response_type = XCB_SELECTION_NOTIFY;
     notify.requestor = event->requestor;
     notify.selection = event->selection;

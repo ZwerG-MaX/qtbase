@@ -61,7 +61,7 @@ public:
 
     void notifyManagerClientMessageEvent(const xcb_client_message_event_t *);
 
-    void handleDestroyNotifyEvent(const xcb_destroy_notify_event_t *) Q_DECL_OVERRIDE;
+    void handleDestroyNotifyEvent(const xcb_destroy_notify_event_t *) override;
 
     bool visualHasAlphaChannel();
 signals:
@@ -77,7 +77,7 @@ private:
     const xcb_atom_t m_selection;
     const xcb_atom_t m_trayAtom;
     QXcbConnection *m_connection;
-    xcb_window_t m_trayWindow;
+    xcb_window_t m_trayWindow = 0;
 };
 
 QT_END_NAMESPACE

@@ -59,6 +59,8 @@ QDBusMenuBar::QDBusMenuBar()
             m_menuAdaptor, &QDBusMenuAdaptor::ItemsPropertiesUpdated);
     connect(m_menu, &QDBusPlatformMenu::updated,
             m_menuAdaptor, &QDBusMenuAdaptor::LayoutUpdated);
+    connect(m_menu, &QDBusPlatformMenu::popupRequested,
+            m_menuAdaptor, &QDBusMenuAdaptor::ItemActivationRequested);
 }
 
 QDBusMenuBar::~QDBusMenuBar()
@@ -118,7 +120,7 @@ void QDBusMenuBar::syncMenu(QPlatformMenu *menu)
 
 void QDBusMenuBar::handleReparent(QWindow *newParentWindow)
 {
-    if (newParentWindow && newParentWindow->winId() != m_windowId) {
+    if (newParentWindow) {
         unregisterMenuBar();
         m_windowId = newParentWindow->winId();
         registerMenuBar();

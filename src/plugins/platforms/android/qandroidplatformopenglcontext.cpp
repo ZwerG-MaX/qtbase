@@ -41,16 +41,19 @@
 #include "qandroidplatformopenglcontext.h"
 #include "qandroidplatformopenglwindow.h"
 #include "qandroidplatformintegration.h"
+#include "qandroidplatformoffscreensurface.h"
 
 #include <QtEglSupport/private/qeglpbuffer_p.h>
 
 #include <QSurface>
 #include <QtGui/private/qopenglcontext_p.h>
+#include <QtGui/QOffscreenSurface>
 
 QT_BEGIN_NAMESPACE
 
-QAndroidPlatformOpenGLContext::QAndroidPlatformOpenGLContext(const QSurfaceFormat &format, QPlatformOpenGLContext *share, EGLDisplay display)
-    :QEGLPlatformContext(format, share, display)
+QAndroidPlatformOpenGLContext::QAndroidPlatformOpenGLContext(const QSurfaceFormat &format, QPlatformOpenGLContext *share, EGLDisplay display,
+                                                             const QVariant &nativeHandle)
+    :QEGLPlatformContext(format, share, display, nullptr, nativeHandle)
 {
 }
 
@@ -64,55 +67,22 @@ void QAndroidPlatformOpenGLContext::swapBuffers(QPlatformSurface *surface)
     QEGLPlatformContext::swapBuffers(surface);
 }
 
-bool QAndroidPlatformOpenGLContext::needsFBOReadBackWorkaround()
-{
-    static bool set = false;
-    static bool needsWorkaround = false;
-
-    if (!set) {
-        QByteArray env = qgetenv("QT_ANDROID_DISABLE_GLYPH_CACHE_WORKAROUND");
-        needsWorkaround = env.isEmpty() || env == "0" || env == "false";
-
-        if (!needsWorkaround) {
-            const char *rendererString = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-            needsWorkaround =
-                    qstrncmp(rendererString, "Mali-4xx", 6) == 0 // Mali-400, Mali-450
-                    || qstrncmp(rendererString, "Adreno (TM) 2xx", 13) == 0 // Adreno 200, 203, 205
-                    || qstrncmp(rendererString, "Adreno 2xx", 8) == 0 // Same as above but without the '(TM)'
-                    || qstrncmp(rendererString, "Adreno (TM) 30x", 14) == 0 // Adreno 302, 305
-                    || qstrncmp(rendererString, "Adreno 30x", 9) == 0 // Same as above but without the '(TM)'
-                    || qstrcmp(rendererString, "GC800 core") == 0
-                    || qstrcmp(rendererString, "GC1000 core") == 0
-                    || qstrcmp(rendererString, "Immersion.16") == 0;
-        }
-
-        set = true;
-    }
-
-    return needsWorkaround;
-}
-
 bool QAndroidPlatformOpenGLContext::makeCurrent(QPlatformSurface *surface)
 {
-    bool ret = QEGLPlatformContext::makeCurrent(surface);
-    QOpenGLContextPrivate *ctx_d = QOpenGLContextPrivate::get(context());
-
-    const char *rendererString = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    if (rendererString != 0 && qstrncmp(rendererString, "Android Emulator", 16) == 0)
-        ctx_d->workaround_missingPrecisionQualifiers = true;
-
-    if (!ctx_d->workaround_brokenFBOReadBack && needsFBOReadBackWorkaround())
-        ctx_d->workaround_brokenFBOReadBack = true;
-
-    return ret;
+    return QEGLPlatformContext::makeCurrent(surface);
 }
 
 EGLSurface QAndroidPlatformOpenGLContext::eglSurfaceForPlatformSurface(QPlatformSurface *surface)
 {
-    if (surface->surface()->surfaceClass() == QSurface::Window)
+    if (surface->surface()->surfaceClass() == QSurface::Window) {
         return static_cast<QAndroidPlatformOpenGLWindow *>(surface)->eglSurface(eglConfig());
-    else
-        return static_cast<QEGLPbuffer *>(surface)->pbuffer();
+    } else {
+        auto platformOffscreenSurface = static_cast<QPlatformOffscreenSurface*>(surface);
+        if (platformOffscreenSurface->offscreenSurface()->nativeHandle())
+            return static_cast<QAndroidPlatformOffscreenSurface *>(surface)->surface();
+        else
+            return static_cast<QEGLPbuffer *>(surface)->pbuffer();
+    }
 }
 
 QT_END_NAMESPACE

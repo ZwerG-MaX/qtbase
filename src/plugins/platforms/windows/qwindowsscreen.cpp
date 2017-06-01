@@ -56,13 +56,6 @@
 
 QT_BEGIN_NAMESPACE
 
-QWindowsScreenData::QWindowsScreenData() :
-    dpi(96, 96), depth(32), format(QImage::Format_ARGB32_Premultiplied),
-    flags(VirtualDesktop), orientation(Qt::LandscapeOrientation),
-    refreshRateHz(60)
-{
-}
-
 static inline QDpi deviceDPI(HDC hdc)
 {
     return QDpi(GetDeviceCaps(hdc, LOGPIXELSX), GetDeviceCaps(hdc, LOGPIXELSY));
@@ -89,6 +82,7 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     if (GetMonitorInfo(hMonitor, &info) == FALSE)
         return false;
 
+    data->hMonitor = hMonitor;
     data->geometry = QRect(QPoint(info.rcMonitor.left, info.rcMonitor.top), QPoint(info.rcMonitor.right - 1, info.rcMonitor.bottom - 1));
     data->availableGeometry = QRect(QPoint(info.rcWork.left, info.rcWork.top), QPoint(info.rcWork.right - 1, info.rcWork.bottom - 1));
     data->name = QString::fromWCharArray(info.szDevice);
@@ -188,14 +182,30 @@ QWindowsScreen::QWindowsScreen(const QWindowsScreenData &data) :
 
 Q_GUI_EXPORT QPixmap qt_pixmapFromWinHBITMAP(HBITMAP bitmap, int hbitmapFormat = 0);
 
-QPixmap QWindowsScreen::grabWindow(WId window, int x, int y, int width, int height) const
+QPixmap QWindowsScreen::grabWindow(WId window, int xIn, int yIn, int width, int height) const
 {
-    RECT r;
-    HWND hwnd = window ? reinterpret_cast<HWND>(window) : GetDesktopWindow();
-    GetClientRect(hwnd, &r);
+    QSize windowSize;
+    int x = xIn;
+    int y = yIn;
+    HWND hwnd = reinterpret_cast<HWND>(window);
+    if (hwnd) {
+        RECT r;
+        GetClientRect(hwnd, &r);
+        windowSize = QSize(r.right - r.left, r.bottom - r.top);
+    } else {
+        // Grab current screen. The client rectangle of GetDesktopWindow() is the
+        // primary screen, but it is possible to grab other screens from it.
+        hwnd = GetDesktopWindow();
+        const QRect screenGeometry = geometry();
+        windowSize = screenGeometry.size();
+        x += screenGeometry.x();
+        y += screenGeometry.y();
+    }
 
-    if (width < 0) width = r.right - r.left;
-    if (height < 0) height = r.bottom - r.top;
+    if (width < 0)
+        width = windowSize.width() - xIn;
+    if (height < 0)
+        height = windowSize.height() - yIn;
 
     // Create and setup bitmap
     HDC display_dc = GetDC(0);
@@ -249,7 +259,7 @@ qreal QWindowsScreen::pixelDensity() const
     // the pixel density since it is reflects the Windows UI scaling.
     // High DPI auto scaling should be disabled when the user chooses
     // small fonts on a High DPI monitor, resulting in lower logical DPI.
-    return qRound(logicalDpi().first / 96);
+    return qMax(1, qRound(logicalDpi().first / 96));
 }
 
 /*!
@@ -407,10 +417,7 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
     \ingroup qt-lighthouse-win
 */
 
-QWindowsScreenManager::QWindowsScreenManager() :
-    m_lastDepth(-1), m_lastHorizontalResolution(0), m_lastVerticalResolution(0)
-{
-}
+QWindowsScreenManager::QWindowsScreenManager() = default;
 
 /*!
     \brief Triggers synchronization of screens (WM_DISPLAYCHANGE).

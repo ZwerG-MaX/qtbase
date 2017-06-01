@@ -299,6 +299,9 @@ static void qDBusNewConnection(DBusServer *server, DBusConnection *connection, v
     Q_ASSERT(connection);
     Q_ASSERT(data);
 
+    if (!QDBusConnectionManager::instance())
+        return;
+
     // keep the connection alive
     q_dbus_connection_ref(connection);
     QDBusConnectionPrivate *serverConnection = static_cast<QDBusConnectionPrivate *>(data);
@@ -1772,7 +1775,7 @@ static QDBusConnection::ConnectionCapabilities connectionCapabilies(DBusConnecti
 # if DBUS_VERSION-0 >= 0x010400
     can_send_type = dbus_connection_can_send_type;
 # endif
-#elif !defined(QT_NO_LIBRARY)
+#elif QT_CONFIG(library)
     // run-time check if the next functions are available
     can_send_type = (can_send_type_t)qdbus_resolve_conditionally("dbus_connection_can_send_type");
 #endif

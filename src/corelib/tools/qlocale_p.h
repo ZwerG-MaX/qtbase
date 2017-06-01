@@ -134,7 +134,7 @@ Q_DECLARE_TYPEINFO(QSystemLocale::QueryType, Q_PRIMITIVE_TYPE);
 Q_DECLARE_TYPEINFO(QSystemLocale::CurrencyToStringArgument, Q_MOVABLE_TYPE);
 #endif
 
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
 namespace QIcu {
     QString toUpper(const QByteArray &localeId, const QString &str, bool *ok);
     QString toLower(const QByteArray &localeId, const QString &str, bool *ok);
@@ -193,7 +193,7 @@ public:
 
     enum Flags {
         NoFlags             = 0,
-        Alternate           = 0x01,
+        AddTrailingZeroes   = 0x01,
         ZeroPadded          = 0x02,
         LeftAdjusted        = 0x04,
         BlankBeforePositive = 0x08,
@@ -204,7 +204,7 @@ public:
         ShowBase            = 0x80,
         UppercaseBase       = 0x100,
         ZeroPadExponent     = 0x200,
-        ForcePoint          = Alternate
+        ForcePoint          = 0x400
     };
 
     enum NumberMode { IntegerMode, DoubleStandardMode, DoubleScientificMode };
@@ -331,6 +331,9 @@ public:
         retval->m_numberOptions = numberOptions;
         return retval;
     }
+
+    static QLocalePrivate *get(QLocale &l) { return l.d; }
+    static const    QLocalePrivate *get(const QLocale &l) { return l.d; }
 
     QChar decimal() const { return QChar(m_data->m_decimal); }
     QChar group() const { return QChar(m_data->m_group); }

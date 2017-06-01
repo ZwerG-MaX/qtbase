@@ -64,6 +64,9 @@
 #include <qproxystyle.h>
 #include <qfont.h>
 
+#include "../../../shared/platforminputcontext.h"
+#include <private/qinputmethod_p.h>
+
 static inline void setFrameless(QWidget *w)
 {
     Qt::WindowFlags flags = w->windowFlags();
@@ -80,6 +83,8 @@ public:
     tst_QComboBox() {}
 
 private slots:
+    void initTestCase();
+    void cleanupTestCase();
     void getSetCheck();
     void ensureReturnIsIgnored();
     void setEditable();
@@ -162,6 +167,10 @@ private slots:
     void task_QTBUG_39088_inputMethodHints();
     void task_QTBUG_49831_scrollerNotActivated();
     void task_QTBUG_56693_itemFontFromModel();
+    void inputMethodUpdate();
+
+private:
+    PlatformInputContext m_platformInputContext;
 };
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -206,6 +215,18 @@ protected:
     void setSelection(const QRect &, QItemSelectionModel::SelectionFlags) {}
     QRegion visualRegionForSelection(const QItemSelection &) const { return QRegion(); }
 };
+
+void tst_QComboBox::initTestCase()
+{
+    QInputMethodPrivate *inputMethodPrivate = QInputMethodPrivate::get(qApp->inputMethod());
+    inputMethodPrivate->testContext = &m_platformInputContext;
+}
+
+void tst_QComboBox::cleanupTestCase()
+{
+    QInputMethodPrivate *inputMethodPrivate = QInputMethodPrivate::get(qApp->inputMethod());
+    inputMethodPrivate->testContext = 0;
+}
 
 // Testing get/set functions
 void tst_QComboBox::getSetCheck()
@@ -305,17 +326,17 @@ void tst_QComboBox::getSetCheck()
     obj1.setValidator(var9);
     QCOMPARE(obj1.validator(), (const QValidator *)var9);
     obj1.setValidator((QValidator *)0);
-    QCOMPARE(obj1.validator(), (const QValidator *)0);
+    QCOMPARE(obj1.validator(), nullptr);
     delete var9;
 
     // QAbstractItemDelegate * QComboBox::itemDelegate()
     // void QComboBox::setItemDelegate(QAbstractItemDelegate *)
     MyAbstractItemDelegate *var10 = new MyAbstractItemDelegate;
     obj1.setItemDelegate(var10);
-    QCOMPARE(obj1.itemDelegate(), (QAbstractItemDelegate *)var10);
+    QCOMPARE(obj1.itemDelegate(), var10);
     QTest::ignoreMessage(QtWarningMsg, "QComboBox::setItemDelegate: cannot set a 0 delegate");
     obj1.setItemDelegate((QAbstractItemDelegate *)0);
-    QCOMPARE(obj1.itemDelegate(), (QAbstractItemDelegate *)var10);
+    QCOMPARE(obj1.itemDelegate(), var10);
     // delete var10; // No delete, since QComboBox takes ownership
 
     // QAbstractItemModel * QComboBox::model()
@@ -3322,6 +3343,60 @@ void tst_QComboBox::task_QTBUG_56693_itemFontFromModel()
     QCOMPARE(proxyStyle->italicItemsNo, 5);
 
     box.hidePopup();
+}
+
+void tst_QComboBox::inputMethodUpdate()
+{
+    TestWidget topLevel;
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QComboBox *testWidget = topLevel.comboBox();
+    // make sure we have no lineedit
+    QVERIFY(!testWidget->lineEdit());
+    // test setEditable(true)
+    testWidget->setEditable(true);
+    QVERIFY(testWidget->lineEdit());
+
+    testWidget->activateWindow();
+    testWidget->setFocus();
+    QTRY_VERIFY(testWidget->hasFocus());
+    QTRY_COMPARE(qApp->focusObject(), testWidget);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, 0, 1, QVariant());
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("preedit text");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+    QCOMPARE(testWidget->lineEdit()->text(), QString("preedit text"));
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, 0, 0, QVariant());
+        QInputMethodEvent event("", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
 }
 
 QTEST_MAIN(tst_QComboBox)

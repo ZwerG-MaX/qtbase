@@ -2939,6 +2939,7 @@ QDragMoveEvent::~QDragMoveEvent()
     type information.
 */
 
+// ### pos is in which coordinate system?
 /*!
     Constructs a drop event of a certain \a type corresponding to a
     drop at the point specified by \a pos in the destination widget's
@@ -2949,7 +2950,7 @@ QDragMoveEvent::~QDragMoveEvent()
 
     The states of the mouse buttons and keyboard modifiers at the time of
     the drop are specified by \a buttons and \a modifiers.
-*/ // ### pos is in which coordinate system?
+*/
 QDropEvent::QDropEvent(const QPointF& pos, Qt::DropActions actions, const QMimeData *data,
                        Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, Type type)
     : QEvent(type), p(pos), mouseState(buttons),
@@ -3888,12 +3889,15 @@ QDebug operator<<(QDebug dbg, const QTouchEvent::TouchPoint &tp)
 {
     QDebugStateSaver saver(dbg);
     dbg.nospace();
-    dbg << "TouchPoint(" << tp.id() << " (";
-    QtDebugUtils::formatQRect(dbg, tp.rect());
+    dbg << "TouchPoint(" << hex << tp.id() << dec << " (";
+    QtDebugUtils::formatQPoint(dbg, tp.pos());
     dbg << ") ";
     QtDebugUtils::formatQEnum(dbg, tp.state());
-    dbg << " press " << tp.pressure() << " vel " << tp.velocity()
-        << " start (";
+    dbg << " pressure " << tp.pressure() << " ellipse ("
+        << tp.ellipseDiameters().width() << " x " << tp.ellipseDiameters().height()
+        << " angle " << tp.rotation() << ") vel (";
+    QtDebugUtils::formatQPoint(dbg, tp.velocity().toPointF());
+    dbg << ") start (";
     QtDebugUtils::formatQPoint(dbg, tp.startPos());
     dbg << ") last (";
     QtDebugUtils::formatQPoint(dbg, tp.lastPos());
@@ -4085,6 +4089,20 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
             break;
         }
         dbg << ')';
+        break;
+    case QEvent::ScrollPrepare: {
+        const QScrollPrepareEvent *se = static_cast<const QScrollPrepareEvent *>(e);
+        dbg << "QScrollPrepareEvent(viewportSize=" << se->viewportSize()
+            << ", contentPosRange=" << se->contentPosRange()
+            << ", contentPos=" << se->contentPos() << ')';
+    }
+        break;
+    case QEvent::Scroll: {
+        const QScrollEvent *se = static_cast<const QScrollEvent *>(e);
+        dbg << "QScrollEvent(contentPos=" << se->contentPos()
+            << ", overshootDistance=" << se->overshootDistance()
+            << ", scrollState=" << se->scrollState() << ')';
+    }
         break;
     default:
         dbg << eventClassName(type) << '(';
@@ -4418,6 +4436,8 @@ QTouchEvent::~QTouchEvent()
     \brief The TouchPoint class provides information about a touch point in a QTouchEvent.
     \since 4.6
     \inmodule QtGui
+
+    \image touchpoint-metrics.png
 */
 
 /*! \enum TouchPoint::InfoFlag
@@ -4503,7 +4523,7 @@ Qt::TouchPointState QTouchEvent::TouchPoint::state() const
 */
 QPointF QTouchEvent::TouchPoint::pos() const
 {
-    return d->rect.center();
+    return d->pos;
 }
 
 /*!
@@ -4518,7 +4538,7 @@ QPointF QTouchEvent::TouchPoint::pos() const
 */
 QPointF QTouchEvent::TouchPoint::scenePos() const
 {
-    return d->sceneRect.center();
+    return d->scenePos;
 }
 
 /*!
@@ -4528,7 +4548,7 @@ QPointF QTouchEvent::TouchPoint::scenePos() const
 */
 QPointF QTouchEvent::TouchPoint::screenPos() const
 {
-    return d->screenRect.center();
+    return d->screenPos;
 }
 
 /*!
@@ -4651,10 +4671,19 @@ QPointF QTouchEvent::TouchPoint::lastNormalizedPos() const
     around the point returned by pos().
 
     \note This function returns an empty rect if the device does not report touch point sizes.
+
+    \obsolete This function is deprecated in 5.9 because it returns the outer bounds
+    of the touchpoint regardless of rotation, whereas a touchpoint is more correctly
+    modeled as an ellipse at position pos() with ellipseDiameters()
+    which are independent of rotation().
+
+    \sa scenePos(), ellipseDiameters()
 */
 QRectF QTouchEvent::TouchPoint::rect() const
 {
-    return d->rect;
+    QRectF ret(QPointF(), d->ellipseDiameters);
+    ret.moveCenter(d->pos);
+    return ret;
 }
 
 /*!
@@ -4662,11 +4691,18 @@ QRectF QTouchEvent::TouchPoint::rect() const
 
     \note This function returns an empty rect if the device does not report touch point sizes.
 
-    \sa scenePos(), rect()
+    \obsolete This function is deprecated in 5.9 because it returns the outer bounds
+    of the touchpoint regardless of rotation, whereas a touchpoint is more correctly
+    modeled as an ellipse at position scenePos() with ellipseDiameters()
+    which are independent of rotation().
+
+    \sa scenePos(), ellipseDiameters()
 */
 QRectF QTouchEvent::TouchPoint::sceneRect() const
 {
-    return d->sceneRect;
+    QRectF ret(QPointF(), d->ellipseDiameters);
+    ret.moveCenter(d->scenePos);
+    return ret;
 }
 
 /*!
@@ -4674,11 +4710,18 @@ QRectF QTouchEvent::TouchPoint::sceneRect() const
 
     \note This function returns an empty rect if the device does not report touch point sizes.
 
-    \sa screenPos(), rect()
+    \obsolete This function is deprecated because it returns the outer bounds of the
+    touchpoint regardless of rotation, whereas a touchpoint is more correctly
+    modeled as an ellipse at position screenPos() with ellipseDiameters()
+    which are independent of rotation().
+
+    \sa screenPos(), ellipseDiameters()
 */
 QRectF QTouchEvent::TouchPoint::screenRect() const
 {
-    return d->screenRect;
+    QRectF ret(QPointF(), d->ellipseDiameters);
+    ret.moveCenter(d->screenPos);
+    return ret;
 }
 
 /*!
@@ -4701,6 +4744,19 @@ qreal QTouchEvent::TouchPoint::pressure() const
 qreal QTouchEvent::TouchPoint::rotation() const
 {
     return d->rotation;
+}
+
+/*!
+    \since 5.9
+    Returns the width and height of the bounding ellipse of this touch point.
+    The return value is in logical pixels. Most touchscreens do not detect the
+    shape of the contact point, so a null size is the most common value.
+    In other cases the diameters may be nonzero and equal (the ellipse is
+    approximated as a circle).
+*/
+QSizeF QTouchEvent::TouchPoint::ellipseDiameters() const
+{
+    return d->ellipseDiameters;
 }
 
 /*!
@@ -4774,7 +4830,7 @@ void QTouchEvent::TouchPoint::setPos(const QPointF &pos)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->rect.moveCenter(pos);
+    d->pos = pos;
 }
 
 /*! \internal */
@@ -4782,7 +4838,7 @@ void QTouchEvent::TouchPoint::setScenePos(const QPointF &scenePos)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->sceneRect.moveCenter(scenePos);
+    d->scenePos = scenePos;
 }
 
 /*! \internal */
@@ -4790,7 +4846,7 @@ void QTouchEvent::TouchPoint::setScreenPos(const QPointF &screenPos)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->screenRect.moveCenter(screenPos);
+    d->screenPos = screenPos;
 }
 
 /*! \internal */
@@ -4865,28 +4921,32 @@ void QTouchEvent::TouchPoint::setLastNormalizedPos(const QPointF &lastNormalized
     d->lastNormalizedPos = lastNormalizedPos;
 }
 
-/*! \internal */
+// ### remove the following 3 setRect functions and their usages soon
+/*! \internal \obsolete */
 void QTouchEvent::TouchPoint::setRect(const QRectF &rect)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->rect = rect;
+    d->pos = rect.center();
+    d->ellipseDiameters = rect.size();
 }
 
-/*! \internal */
+/*! \internal \obsolete */
 void QTouchEvent::TouchPoint::setSceneRect(const QRectF &sceneRect)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->sceneRect = sceneRect;
+    d->scenePos = sceneRect.center();
+    d->ellipseDiameters = sceneRect.size();
 }
 
-/*! \internal */
+/*! \internal \obsolete */
 void QTouchEvent::TouchPoint::setScreenRect(const QRectF &screenRect)
 {
     if (d->ref.load() != 1)
         d = d->detach();
-    d->screenRect = screenRect;
+    d->screenPos = screenRect.center();
+    d->ellipseDiameters = screenRect.size();
 }
 
 /*! \internal */
@@ -4903,6 +4963,14 @@ void QTouchEvent::TouchPoint::setRotation(qreal angle)
     if (d->ref.load() != 1)
         d = d->detach();
     d->rotation = angle;
+}
+
+/*! \internal */
+void QTouchEvent::TouchPoint::setEllipseDiameters(const QSizeF &dia)
+{
+    if (d->ref.load() != 1)
+        d = d->detach();
+    d->ellipseDiameters = dia;
 }
 
 /*! \internal */

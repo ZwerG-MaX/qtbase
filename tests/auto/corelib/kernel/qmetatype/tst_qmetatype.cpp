@@ -377,6 +377,8 @@ void tst_QMetaType::typeName_data()
 
     QT_FOR_EACH_STATIC_TYPE(TYPENAME_DATA)
     QTest::newRow("QMetaType::UnknownType") << int(QMetaType::UnknownType) << static_cast<const char*>(0);
+    QTest::newRow("QMetaType::User-1") << (int(QMetaType::User) - 1) << static_cast<const char *>(nullptr);
+    QTest::newRow("QMetaType::FirstWidgetsType-1") << (int(QMetaType::FirstWidgetsType) - 1) << static_cast<const char *>(nullptr);
 
     QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << QString::fromLatin1("Whity<double>");
     QTest::newRow("Whity<int>") << ::qMetaTypeId<Whity<int> >() << QString::fromLatin1("Whity<int>");
@@ -404,10 +406,12 @@ void tst_QMetaType::typeName()
     QFETCH(int, aType);
     QFETCH(QString, aTypeName);
 
-    QString name = QString::fromLatin1(QMetaType::typeName(aType));
+    const char *rawname = QMetaType::typeName(aType);
+    QString name = QString::fromLatin1(rawname);
 
     QCOMPARE(name, aTypeName);
     QCOMPARE(name.toLatin1(), QMetaObject::normalizedType(name.toLatin1().constData()));
+    QCOMPARE(rawname == nullptr, aTypeName.isNull());
 }
 
 void tst_QMetaType::type_data()
@@ -709,8 +713,8 @@ void tst_QMetaType::flags_data()
 
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     QTest::newRow(#RealType) << MetaTypeId \
-        << bool(!QTypeInfo<RealType>::isStatic) \
-        << bool(QTypeInfo<RealType>::isComplex) \
+        << bool(QTypeInfoQuery<RealType>::isRelocatable) \
+        << bool(QTypeInfoQuery<RealType>::isComplex) \
         << bool(QtPrivate::IsPointerToTypeDerivedFromQObject<RealType>::Value) \
         << bool(std::is_enum<RealType>::value);
 QT_FOR_EACH_STATIC_CORE_CLASS(ADD_METATYPE_TEST_ROW)
@@ -731,7 +735,7 @@ QT_FOR_EACH_STATIC_CORE_POINTER(ADD_METATYPE_TEST_ROW)
     QTest::newRow("QPair<P,C>") << ::qMetaTypeId<QPair<P,C> >() << false << true  << false << false;
     QTest::newRow("QPair<P,M>") << ::qMetaTypeId<QPair<P,M> >() << true  << true  << false << false;
     QTest::newRow("QPair<P,P>") << ::qMetaTypeId<QPair<P,P> >() << true  << false << false << false;
-    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << true << false << true;
+    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << false << false << true;
 
     // invalid ids.
     QTest::newRow("-1") << -1 << false << false << false << false;
@@ -1559,7 +1563,6 @@ DECLARE_NONSTREAMABLE(QJsonArray)
 DECLARE_NONSTREAMABLE(QJsonDocument)
 DECLARE_NONSTREAMABLE(QObject*)
 DECLARE_NONSTREAMABLE(QWidget*)
-DECLARE_NONSTREAMABLE(std::nullptr_t)
 
 #define DECLARE_GUI_CLASS_NONSTREAMABLE(MetaTypeName, MetaTypeId, RealType) \
     DECLARE_NONSTREAMABLE(RealType)
@@ -1598,7 +1601,10 @@ void tst_QMetaType::saveAndLoadBuiltin()
 
     if (isStreamable) {
         QVERIFY(QMetaType::load(stream, type, value)); // Hmmm, shouldn't it return false?
-        QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
+
+        // std::nullptr_t is nullary: it doesn't actually read anything
+        if (type != QMetaType::Nullptr)
+            QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
     }
 
     stream.device()->seek(0);
@@ -1608,7 +1614,10 @@ void tst_QMetaType::saveAndLoadBuiltin()
 
     if (isStreamable) {
         QVERIFY(QMetaType::load(stream, type, value)); // Hmmm, shouldn't it return false?
-        QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
+
+        // std::nullptr_t is nullary: it doesn't actually read anything
+        if (type != QMetaType::Nullptr)
+            QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
     }
 
     QMetaType::destroy(type, value);

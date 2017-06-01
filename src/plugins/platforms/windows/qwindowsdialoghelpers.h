@@ -69,19 +69,19 @@ public:
     typedef QSharedPointer<QWindowsNativeDialogBase> QWindowsNativeDialogBasePtr;
     ~QWindowsDialogHelperBase() { cleanupThread(); }
 
-    void exec() Q_DECL_OVERRIDE;
+    void exec() override;
     bool show(Qt::WindowFlags windowFlags,
-                          Qt::WindowModality windowModality,
-                          QWindow *parent) Q_DECL_OVERRIDE;
-    void hide() Q_DECL_OVERRIDE;
+              Qt::WindowModality windowModality,
+              QWindow *parent) override;
+    void hide() override;
 
     virtual bool supportsNonModalDialog(const QWindow * /* parent */ = 0) const { return true; }
 
 protected:
-    QWindowsDialogHelperBase();
+    QWindowsDialogHelperBase() {}
     QWindowsNativeDialogBase *nativeDialog() const;
     inline bool hasNativeDialog() const { return m_nativeDialog; }
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *) override;
 
 private:
     virtual QWindowsNativeDialogBase *createNativeDialog() = 0;
@@ -91,9 +91,9 @@ private:
     void cleanupThread();
 
     QWindowsNativeDialogBasePtr m_nativeDialog;
-    HWND m_ownerWindow;
-    int m_timerId;
-    QThread *m_thread;
+    HWND m_ownerWindow = 0;
+    int m_timerId = 0;
+    QThread *m_thread = nullptr;
 };
 
 QT_END_NAMESPACE

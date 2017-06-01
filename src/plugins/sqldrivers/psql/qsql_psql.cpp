@@ -50,7 +50,7 @@
 #include <qsqlquery.h>
 #include <qsocketnotifier.h>
 #include <qstringlist.h>
-#include <qmutex.h>
+#include <qlocale.h>
 #include <QtSql/private/qsqlresult_p.h>
 #include <QtSql/private/qsqldriver_p.h>
 
@@ -618,13 +618,10 @@ static QString qCreateParamString(const QVector<QVariant> &boundValues, const QS
     return params;
 }
 
-Q_GLOBAL_STATIC(QMutex, qMutex)
 QString qMakePreparedStmtId()
 {
-    qMutex()->lock();
-    static unsigned int qPreparedStmtCount = 0;
-    QString id = QLatin1String("qpsqlpstmt_") + QString::number(++qPreparedStmtCount, 16);
-    qMutex()->unlock();
+    static QBasicAtomicInt qPreparedStmtCount = Q_BASIC_ATOMIC_INITIALIZER(0);
+    QString id = QLatin1String("qpsqlpstmt_") + QString::number(qPreparedStmtCount.fetchAndAddRelaxed(1) + 1, 16);
     return id;
 }
 
@@ -670,7 +667,7 @@ bool QPSQLResult::exec()
     if (params.isEmpty())
         stmt = QString::fromLatin1("EXECUTE %1").arg(d->preparedStmtId);
     else
-        stmt = QString::fromLatin1("EXECUTE %1 (%2)").arg(d->preparedStmtId).arg(params);
+        stmt = QString::fromLatin1("EXECUTE %1 (%2)").arg(d->preparedStmtId, params);
 
     d->result = d->drv_d_func()->exec(stmt);
 
@@ -914,7 +911,7 @@ bool QPSQLDriver::open(const QString & db,
         connectString.append(QLatin1Char(' ')).append(opt);
     }
 
-    d->connection = PQconnectdb(connectString.toLocal8Bit().constData());
+    d->connection = PQconnectdb(std::move(connectString).toLocal8Bit().constData());
     if (PQstatus(d->connection) == CONNECTION_BAD) {
         setLastError(qMakeError(tr("Unable to connect"), QSqlError::ConnectionError, d));
         setOpenError(true);
@@ -1076,12 +1073,12 @@ QSqlIndex QPSQLDriver::primaryIndex(const QString& tablename) const
     if (isIdentifierEscaped(tbl, QSqlDriver::TableName))
         tbl = stripDelimiters(tbl, QSqlDriver::TableName);
     else
-        tbl = tbl.toLower();
+        tbl = std::move(tbl).toLower();
 
     if (isIdentifierEscaped(schema, QSqlDriver::TableName))
         schema = stripDelimiters(schema, QSqlDriver::TableName);
     else
-        schema = schema.toLower();
+        schema = std::move(schema).toLower();
 
     switch(d->pro) {
     case QPSQLDriver::Version6:
@@ -1156,12 +1153,12 @@ QSqlRecord QPSQLDriver::record(const QString& tablename) const
     if (isIdentifierEscaped(tbl, QSqlDriver::TableName))
         tbl = stripDelimiters(tbl, QSqlDriver::TableName);
     else
-        tbl = tbl.toLower();
+        tbl = std::move(tbl).toLower();
 
     if (isIdentifierEscaped(schema, QSqlDriver::TableName))
         schema = stripDelimiters(schema, QSqlDriver::TableName);
     else
-        schema = schema.toLower();
+        schema = std::move(schema).toLower();
 
     QString stmt;
     switch(d->pro) {
@@ -1311,7 +1308,9 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
                 // we force the value to be considered with a timezone information, and we force it to be UTC
                 // this is safe since postgresql stores only the UTC value and not the timezone offset (only used
                 // while parsing), so we have correct behavior in both case of with timezone and without tz
-                r = QLatin1String("TIMESTAMP WITH TIME ZONE ") + QLatin1Char('\'') + field.value().toDateTime().toUTC().toString(QLatin1String("yyyy-MM-ddThh:mm:ss.zzz")) + QLatin1Char('Z') + QLatin1Char('\'');
+                r = QLatin1String("TIMESTAMP WITH TIME ZONE ") + QLatin1Char('\'') +
+                        QLocale::c().toString(field.value().toDateTime().toUTC(), QLatin1String("yyyy-MM-ddThh:mm:ss.zzz")) +
+                        QLatin1Char('Z') + QLatin1Char('\'');
             } else {
                 r = QLatin1String("NULL");
             }

@@ -892,7 +892,7 @@ bool QGraphicsAnchorLayoutPrivate::replaceVertex(Orientation orientation, Anchor
         AnchorVertex *otherV = replaceVertex_helper(ad, oldV, newV);
 
 #if defined(QT_DEBUG)
-        ad->name = QString::fromLatin1("%1 --to--> %2").arg(ad->from->toString()).arg(ad->to->toString());
+        ad->name = QString::fromLatin1("%1 --to--> %2").arg(ad->from->toString(), ad->to->toString());
 #endif
 
         bool newFeasible;
@@ -1755,7 +1755,7 @@ void QGraphicsAnchorLayoutPrivate::addAnchor_helper(QGraphicsLayoutItem *firstIt
     data->from = v1;
     data->to = v2;
 #ifdef QT_DEBUG
-    data->name = QString::fromLatin1("%1 --to--> %2").arg(v1->toString()).arg(v2->toString());
+    data->name = QString::fromLatin1("%1 --to--> %2").arg(v1->toString(), v2->toString());
 #endif
     // ### bit to track internal anchors, since inside AnchorData methods
     // we don't have access to the 'q' pointer.
@@ -2575,10 +2575,12 @@ void QGraphicsAnchorLayoutPrivate::identifyFloatItems(const QSet<AnchorData *> &
     for (const AnchorData *ad : visited)
         identifyNonFloatItems_helper(ad, &nonFloating);
 
-    QSet<QGraphicsLayoutItem *> allItems;
-    foreach (QGraphicsLayoutItem *item, items)
-        allItems.insert(item);
-    m_floatItems[orientation] = allItems - nonFloating;
+    QSet<QGraphicsLayoutItem *> floatItems;
+    for (QGraphicsLayoutItem *item : qAsConst(items)) {
+        if (!nonFloating.contains(item))
+            floatItems.insert(item);
+    }
+    m_floatItems[orientation] = std::move(floatItems);
 }
 
 

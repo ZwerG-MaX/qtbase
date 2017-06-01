@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -175,9 +181,9 @@ Q_DECL_CONST_FUNCTION static inline QPair<qint64, qint64> toSecsAndNSecs(qint64 
 */
 
 /*!
-    \fn QDeadlineTimer::QDeadlineTimer(ForeverConstant foreverConstant, Qt::TimerType timerType)
+    \fn QDeadlineTimer::QDeadlineTimer(ForeverConstant forever, Qt::TimerType timerType)
 
-    QDeadlineTimer objects created with parameter \a foreverConstant never expire.
+    QDeadlineTimer objects created with parameter \a forever never expire.
     For such objects, remainingTime() will return -1, deadline() will return the
     maximum value, and isForever() will return true.
 
@@ -340,54 +346,6 @@ void QDeadlineTimer::setPreciseRemainingTime(qint64 secs, qint64 nsecs, Qt::Time
     \endcode
 
     \sa setDeadline(), remainingTime(), hasExpired(), isForever()
-*/
-
-/*!
-    \fn std::chrono::nanoseconds remainingTimeAsDuration() const
-
-    Returns a \c{std::chrono::duration} object of type \c{Duration} containing
-    the remaining time in this QDeadlineTimer, if it still has time left. If
-    the deadline has passed, this returns \c{Duration::zero()}, whereas if the
-    object is set to never expire, it returns \c{Duration::max()} (instead of
-    -1).
-
-    It is not possible to obtain the overdue time for expired timers with this
-    function. To do that, see deadline().
-
-    \note The overload of this function without template parameter always
-    returns milliseconds.
-
-    \sa setRemainingTime(), deadline<Clock, Duration>()
-*/
-
-/*!
-    \overload
-    \fn std::chrono::time_point<Clock, Duration> QDeadlineTimer::deadline() const
-
-    Returns the absolute time point for the deadline stored in QDeadlineTimer
-    object as a \c{std::chrono::time_point} object. The template parameter
-    \c{Clock} is mandatory and indicates which of the C++ timekeeping clocks to
-    use as a reference. The value will be in the past if this QDeadlineTimer
-    has expired.
-
-    If this QDeadlineTimer never expires, this function returns
-    \c{std::chrono::time_point<Clock, Duration>::max()}.
-
-    This function can be used to calculate the amount of time a timer is
-    overdue, by subtracting the current time point of the reference clock, as
-    in the following example:
-
-    \code
-        auto realTimeLeft = std::chrono::nanoseconds::max();
-        auto tp = deadline.deadline<std::chrono::steady_clock>();
-        if (tp != std::chrono::steady_clock::max())
-            realTimeLeft = tp - std::chrono::steady_clock::now();
-    \endcode
-
-    \note Timers that were created as expired have an indetermine time point in
-    the past as their deadline, so the above calculation may not work.
-
-    \sa remainingTime(), deadlineNSecs(), setDeadline()
 */
 
 /*!
@@ -790,6 +748,30 @@ QDeadlineTimer QDeadlineTimer::addNSecs(QDeadlineTimer dt, qint64 nsecs) Q_DECL_
 
     To subtract times of precision greater than 1 millisecond, use addNSecs().
 */
+
+/*!
+  \fn void QDeadlineTimer::swap(QDeadlineTimer &other)
+
+  Swaps this deadline timer with the \a other deadline timer.
+ */
+
+/*!
+  \fn QDeadlineTimer & QDeadlineTimer::operator=(std::chrono::time_point<Clock, Duration> deadline_)
+
+  Assigns \a deadline_ to this deadline timer.
+ */
+
+/*!
+  \fn QDeadlineTimer & QDeadlineTimer::operator=(std::chrono::duration<Rep, Period> remaining)
+
+  Sets this deadline timer to the \a remaining time.
+ */
+
+/*!
+  \fn std::chrono::nanoseconds QDeadlineTimer::remainingTimeAsDuration() const
+
+  Returns the time remaining before the deadline.
+ */
 
 // the rest of the functions are in qelapsedtimer_xxx.cpp
 

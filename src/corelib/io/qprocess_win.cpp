@@ -38,6 +38,7 @@
 **
 ****************************************************************************/
 
+//#define QPROCESS_DEBUG
 #include "qprocess.h"
 #include "qprocess_p.h"
 #include "qwindowspipereader_p.h"
@@ -59,11 +60,31 @@
 #define PIPE_REJECT_REMOTE_CLIENTS 0x08
 #endif
 
-#ifndef QT_NO_PROCESS
-
 QT_BEGIN_NAMESPACE
 
-//#define QPROCESS_DEBUG
+QProcessEnvironment QProcessEnvironment::systemEnvironment()
+{
+    QProcessEnvironment env;
+    // Calls to setenv() affect the low-level environment as well.
+    // This is not the case the other way round.
+    if (wchar_t *envStrings = GetEnvironmentStringsW()) {
+        for (const wchar_t *entry = envStrings; *entry; ) {
+            const int entryLen = int(wcslen(entry));
+            // + 1 to permit magic cmd variable names starting with =
+            if (const wchar_t *equal = wcschr(entry + 1, L'=')) {
+                int nameLen = equal - entry;
+                QString name = QString::fromWCharArray(entry, nameLen);
+                QString value = QString::fromWCharArray(equal + 1, entryLen - nameLen - 1);
+                env.d->hash.insert(QProcessEnvironmentPrivate::Key(name), value);
+            }
+            entry += entryLen + 1;
+        }
+        FreeEnvironmentStringsW(envStrings);
+    }
+    return env;
+}
+
+#if QT_CONFIG(process)
 
 static void qt_create_pipe(Q_PIPE *pipe, bool isInputPipe)
 {
@@ -367,28 +388,6 @@ static QString qt_create_commandline(const QString &program, const QStringList &
         args += QLatin1Char(' ') + tmp;
     }
     return args;
-}
-
-QProcessEnvironment QProcessEnvironment::systemEnvironment()
-{
-    QProcessEnvironment env;
-    // Calls to setenv() affect the low-level environment as well.
-    // This is not the case the other way round.
-    if (wchar_t *envStrings = GetEnvironmentStringsW()) {
-        for (const wchar_t *entry = envStrings; *entry; ) {
-            const int entryLen = int(wcslen(entry));
-            // + 1 to permit magic cmd variable names starting with =
-            if (const wchar_t *equal = wcschr(entry + 1, L'=')) {
-                int nameLen = equal - entry;
-                QString name = QString::fromWCharArray(entry, nameLen);
-                QString value = QString::fromWCharArray(equal + 1, entryLen - nameLen - 1);
-                env.d->hash.insert(QProcessEnvironmentPrivate::Key(name), value);
-            }
-            entry += entryLen + 1;
-        }
-        FreeEnvironmentStringsW(envStrings);
-    }
-    return env;
 }
 
 static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Hash &environment)
@@ -841,7 +840,8 @@ static bool startDetachedUacPrompt(const QString &programIn, const QStringList &
     SHELLEXECUTEINFOW shellExecuteExInfo;
     memset(&shellExecuteExInfo, 0, sizeof(SHELLEXECUTEINFOW));
     shellExecuteExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
-    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI;
+    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI | SEE_MASK_CLASSNAME;
+    shellExecuteExInfo.lpClass = L"exefile";
     shellExecuteExInfo.lpVerb = L"runas";
     const QString program = QDir::toNativeSeparators(programIn);
     shellExecuteExInfo.lpFile = reinterpret_cast<LPCWSTR>(program.utf16());
@@ -891,6 +891,6 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
     return success;
 }
 
-QT_END_NAMESPACE
+#endif // QT_CONFIG(process)
 
-#endif // QT_NO_PROCESS
+QT_END_NAMESPACE

@@ -72,12 +72,12 @@ static inline QString testSuiteWarning()
     str << "\nCannot find the shared-mime-info test suite\nstarting from: "
         << QDir::toNativeSeparators(QDir::currentPath()) << "\n"
            "cd " << QDir::toNativeSeparators(QStringLiteral("tests/auto/corelib/mimetypes/qmimedatabase")) << "\n"
-           "wget http://cgit.freedesktop.org/xdg/shared-mime-info/snapshot/Release-1-0.zip\n"
-           "unzip Release-1-0.zip\n";
+           "wget http://cgit.freedesktop.org/xdg/shared-mime-info/snapshot/Release-1-8.zip\n"
+           "unzip Release-1-8.zip\n";
 #ifdef Q_OS_WIN
-    str << "mkdir testfiles\nxcopy /s Release-1-0\\tests testfiles\n";
+    str << "mkdir testfiles\nxcopy /s Release-1-8 s-m-i\n";
 #else
-    str << "ln -s Release-1-0/tests testfiles\n";
+    str << "ln -s Release-1-8 s-m-i\n";
 #endif
     return result;
 }
@@ -154,7 +154,7 @@ void tst_QMimeDatabase::initTestCase()
     QVERIFY2(copyResourceFile(xmlFileName, xmlTargetFileName, &errorMessage), qPrintable(errorMessage));
 #endif
 
-    m_testSuite = QFINDTESTDATA("testfiles");
+    m_testSuite = QFINDTESTDATA("s-m-i/tests");
     if (m_testSuite.isEmpty())
         qWarning("%s", qPrintable(testSuiteWarning()));
 
@@ -307,6 +307,7 @@ void tst_QMimeDatabase::mimeTypesForFileName_data()
     QTest::newRow("txtfoobar, 0 hit") << "foo.foobar" << QStringList();
     QTest::newRow("m, 2 hits") << "foo.m" << (QStringList() << "text/x-matlab" << "text/x-objcsrc");
     QTest::newRow("sub, 3 hits") << "foo.sub" << (QStringList() << "text/x-microdvd" << "text/x-mpsub" << "text/x-subviewer");
+    QTest::newRow("non_ascii") << QString::fromUtf8("AİİA.pdf") << (QStringList() << "application/pdf");
 }
 
 void tst_QMimeDatabase::mimeTypesForFileName()
@@ -437,7 +438,7 @@ void tst_QMimeDatabase::icons()
     QMimeType directory = db.mimeTypeForFile(QString::fromLatin1("/"));
     QCOMPARE(directory.name(), QString::fromLatin1("inode/directory"));
     QCOMPARE(directory.iconName(), QString::fromLatin1("inode-directory"));
-    QCOMPARE(directory.genericIconName(), QString::fromLatin1("inode-x-generic"));
+    QCOMPARE(directory.genericIconName(), QString::fromLatin1("folder"));
 
     QMimeType pub = db.mimeTypeForFile(QString::fromLatin1("foo.epub"), QMimeDatabase::MatchExtension);
     QCOMPARE(pub.name(), QString::fromLatin1("application/epub+zip"));
@@ -509,7 +510,7 @@ void tst_QMimeDatabase::mimeTypeForFileWithContent()
         mime = db.mimeTypeForFile(txtTempFileName);
         QCOMPARE(mime.name(), QString::fromLatin1("text/plain"));
         mime = db.mimeTypeForFile(txtTempFileName, QMimeDatabase::MatchContent);
-        QCOMPARE(mime.name(), QString::fromLatin1("application/smil"));
+        QCOMPARE(mime.name(), QString::fromLatin1("application/smil+xml"));
     }
 
     // Test what happens with an incorrect path
@@ -606,7 +607,7 @@ void tst_QMimeDatabase::allMimeTypes()
     QVERIFY(!lst.isEmpty());
 
     // Hardcoding this is the only way to check both providers find the same number of mimetypes.
-    QCOMPARE(lst.count(), 661);
+    QCOMPARE(lst.count(), 749);
 
     foreach (const QMimeType &mime, lst) {
         const QString name = mime.name();
@@ -801,7 +802,7 @@ void tst_QMimeDatabase::findByData()
         // Expected to fail
         QVERIFY2(resultMimeTypeName != mimeTypeName, qPrintable(resultMimeTypeName));
     } else {
-        QCOMPARE(resultMimeTypeName, mimeTypeName);
+        QCOMPARE(resultMimeTypeName.toLower(), mimeTypeName.toLower());
     }
 
     QFileInfo info(filePath);
@@ -832,7 +833,7 @@ void tst_QMimeDatabase::findByFile()
         // Expected to fail
         QVERIFY2(resultMimeTypeName != mimeTypeName, qPrintable(resultMimeTypeName));
     } else {
-        QCOMPARE(resultMimeTypeName, mimeTypeName);
+        QCOMPARE(resultMimeTypeName.toLower(), mimeTypeName.toLower());
     }
 
     // Test QFileInfo overload
@@ -857,7 +858,12 @@ void tst_QMimeDatabase::fromThreads()
     QVERIFY(tp.waitForDone(60000));
 }
 
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
+
+enum {
+    UpdateMimeDatabaseTimeout = 4 * 60 * 1000 // 4min
+};
+
 static bool runUpdateMimeDatabase(const QString &path) // TODO make it a QMimeDatabase method?
 {
     const QString umdCommand = QString::fromLatin1("update-mime-database");
@@ -878,7 +884,7 @@ static bool runUpdateMimeDatabase(const QString &path) // TODO make it a QMimeDa
                  qPrintable(umd), qPrintable(proc.errorString()));
         return false;
     }
-    const bool success = proc.waitForFinished();
+    const bool success = proc.waitForFinished(UpdateMimeDatabaseTimeout);
     qDebug().noquote() << "runUpdateMimeDatabase: done,"
         << success << timer.elapsed() << "ms";
     return true;
@@ -895,7 +901,7 @@ static bool waitAndRunUpdateMimeDatabase(const QString &path)
     }
     return runUpdateMimeDatabase(path);
 }
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 
 static void checkHasMimeType(const QString &mimeType)
 {
@@ -930,7 +936,7 @@ void tst_QMimeDatabase::installNewGlobalMimeType()
     QSKIP("This test requires XDG_DATA_DIRS");
 #endif
 
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
     qmime_secondsBetweenChecks = 0;
@@ -983,12 +989,12 @@ void tst_QMimeDatabase::installNewGlobalMimeType()
     QCOMPARE(db.mimeTypeForFile(QLatin1String("foo.ymu"), QMimeDatabase::MatchExtension).name(),
              QString::fromLatin1("application/octet-stream"));
     QVERIFY(!db.mimeTypeForName(QLatin1String("text/x-suse-ymp")).isValid());
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 void tst_QMimeDatabase::installNewLocalMimeType()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
     qmime_secondsBetweenChecks = 0;
@@ -1051,7 +1057,7 @@ void tst_QMimeDatabase::installNewLocalMimeType()
     QCOMPARE(db.mimeTypeForFile(QLatin1String("foo.ymu"), QMimeDatabase::MatchExtension).name(),
              QString::fromLatin1("application/octet-stream"));
     QVERIFY(!db.mimeTypeForName(QLatin1String("text/x-suse-ymp")).isValid());
-#endif
+#endif // QT_CONFIG(process)
 }
 
 QTEST_GUILESS_MAIN(tst_QMimeDatabase)

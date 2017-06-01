@@ -107,14 +107,17 @@
 #    define Q_PROCESSOR_ARM __TARGET_ARCH_ARM
 #  elif defined(_M_ARM) && _M_ARM > 1
 #    define Q_PROCESSOR_ARM _M_ARM
-#  elif defined(__ARM64_ARCH_8__) || defined(__aarch64__)
+#  elif defined(__ARM64_ARCH_8__) \
+      || defined(__aarch64__) \
+      || defined(__CORE_CORTEXAV8__) // GHS-specific for INTEGRITY
 #    define Q_PROCESSOR_ARM 8
 #  elif defined(__ARM_ARCH_7__) \
       || defined(__ARM_ARCH_7A__) \
       || defined(__ARM_ARCH_7R__) \
       || defined(__ARM_ARCH_7M__) \
       || defined(__ARM_ARCH_7S__) \
-      || defined(_ARM_ARCH_7)
+      || defined(_ARM_ARCH_7) \
+      || defined(__CORE_CORTEXA__) // GHS-specific for INTEGRITY
 #    define Q_PROCESSOR_ARM 7
 #  elif defined(__ARM_ARCH_6__) \
       || defined(__ARM_ARCH_6J__) \
@@ -231,9 +234,6 @@
 #  if defined(_MIPS_ARCH_MIPS2) || (defined(__mips) && __mips - 0 >= 2)
 #    define Q_PROCESSOR_MIPS_II
 #  endif
-#  if defined(_MIPS_ARCH_MIPS32) || defined(__mips32)
-#    define Q_PROCESSOR_MIPS_32
-#  endif
 #  if defined(_MIPS_ARCH_MIPS3) || (defined(__mips) && __mips - 0 >= 3)
 #    define Q_PROCESSOR_MIPS_III
 #  endif
@@ -242,6 +242,9 @@
 #  endif
 #  if defined(_MIPS_ARCH_MIPS5) || (defined(__mips) && __mips - 0 >= 5)
 #    define Q_PROCESSOR_MIPS_V
+#  endif
+#  if defined(_MIPS_ARCH_MIPS32) || defined(__mips32) || (defined(__mips) && __mips - 0 >= 32)
+#    define Q_PROCESSOR_MIPS_32
 #  endif
 #  if defined(_MIPS_ARCH_MIPS64) || defined(__mips64)
 #    define Q_PROCESSOR_MIPS_64

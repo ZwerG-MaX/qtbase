@@ -56,7 +56,7 @@ QT_BEGIN_NAMESPACE
 */
 
 QThreadData::QThreadData(int initialRefCount)
-    : _ref(initialRefCount), loopLevel(0), scopeLevel(0), thread(0), threadId(0),
+    : _ref(initialRefCount), loopLevel(0), scopeLevel(0),
       eventDispatcher(0),
       quitNow(false), canWait(true), isAdopted(false), requiresCoreApplication(true)
 {
@@ -149,6 +149,14 @@ QThreadPrivate::QThreadPrivate(QThreadData *d)
       exited(false), returnCode(-1),
       stackSize(0), priority(QThread::InheritPriority), data(d)
 {
+
+// INTEGRITY doesn't support self-extending stack. The default stack size for
+// a pthread on INTEGRITY is too small so we have to increase the default size
+// to 128K.
+#ifdef Q_OS_INTEGRITY
+    stackSize = 128 * 1024;
+#endif
+
 #if defined (Q_OS_WIN)
     handle = 0;
 #  ifndef Q_OS_WINRT

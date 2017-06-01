@@ -141,23 +141,15 @@ QFuture<QImage> collage = QtConcurrent::filteredReduced(images, &QImage::isGrays
 
 
 //! [9]
-bool QString::contains(const QRegExp &regexp) const;
+bool QString::contains(const QRegularExpression &regexp) const;
 //! [9]
-
-
-//! [10]
-std::bind(&QString::contains, QRegExp("^\\S+$")); // matches strings without whitespace
-//! [10]
-
-
-//! [11]
-bool contains(const QString &string)
-//! [11]
 
 
 //! [12]
 QStringList strings = ...;
-std::bind(static_cast<bool(QString::*)(const QRegExp&)>( &QString::contains ), QRegExp("..." ));
+QFuture<QString> future = QtConcurrent::filtered(list, [](const QString &str) {
+    return str.contains(QRegularExpression("^\\S+$")); // matches strings without whitespace
+});
 //! [12]
 
 //! [13]

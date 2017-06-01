@@ -44,6 +44,7 @@
 #include <QtGui/QWindow>
 #include <qpa/qplatformnativeinterface.h>
 #include <private/qwidget_p.h>
+#include <private/qwindow_p.h>
 
 /*!
     \class QMacCocoaViewContainer
@@ -56,27 +57,21 @@
     \inmodule QtWidgets
 
     While Qt offers a lot of classes for writing your application, Apple's
-    Cocoa framework offers lots of functionality that is not currently in Qt or
-    may never end up in Qt. Using QMacCocoaViewContainer, it is possible to put an
-    arbitrary NSView-derived class from Cocoa and put it in a Qt hierarchy.
-    Depending on how comfortable you are with using objective-C, you can use
-    QMacCocoaViewContainer directly, or subclass it to wrap further functionality
-    of the underlying NSView.
+    Cocoa frameworks offer functionality that is not currently available (or
+    may never end up) in Qt. Using QMacCocoaViewContainer, it is possible to take an
+    arbitrary NSView-derived class from Cocoa and put it in a Qt widgets hierarchy.
+    Depending on the level of integration you need, you can use QMacCocoaViewContainer
+    directly or subclass it to wrap more functionality of the underlying NSView.
 
-    QMacCocoaViewContainer works regardless if Qt is built against Carbon or
-    Cocoa. However, QCocoaContainerView requires \macos 10.5 or better to be
-    used with Carbon.
+    It should be also noted that, at the Cocoa level, there is a difference
+    between top-level windows and views (widgets that are inside a window).
+    For this reason, make sure that the NSView that you are wrapping doesn't
+    end up as a top-level window. The best way to ensure this is to make sure
+    QMacCocoaViewContainer's parent widget is not null.
 
-    It should be also noted that at the low level on \macos, there is a
-    difference between windows (top-levels) and view (widgets that are inside a
-    window). For this reason, make sure that the NSView that you are wrapping
-    doesn't end up as a top-level. The best way to ensure this is to make sure
-    you always have a parent and not set the parent to 0.
-
-    If you are using QMacCocoaViewContainer as a sub-class and are mixing and
-    matching objective-C with C++ (a.k.a. objective-C++). It is probably
-    simpler to have your file end with \tt{.mm} than \tt{.cpp}. Most Apple tools will
-    correctly identify the source as objective-C++.
+    If you are using QMacCocoaViewContainer as a subclass and are accessing Cocoa API,
+    it is probably simpler to have your file end with \tt{.mm} instead of \tt{.cpp}.
+    Most Apple tools will correctly identify the source as Objective-C++.
 
     QMacCocoaViewContainer requires knowledge of how Cocoa works, especially in
     regard to its reference counting (retain/release) nature. It is noted in
@@ -85,7 +80,8 @@
     pool. If this is done outside of a running event loop, it is up to the
     developer to provide the autorelease pool.
 
-    The following is a snippet of subclassing QMacCocoaViewContainer to wrap a NSSearchField.
+    The following is a snippet showing how to subclass QMacCocoaViewContainer
+    to wrap an NSSearchField.
     \snippet macmainwindow.mm 0
 
 */
@@ -122,7 +118,9 @@ QMacCocoaViewContainerPrivate::~QMacCocoaViewContainerPrivate()
 QMacCocoaViewContainer::QMacCocoaViewContainer(NSView *view, QWidget *parent)
    : QWidget(*new QMacCocoaViewContainerPrivate, parent, 0)
 {
+    // Ensures that we have a QWindow, even if we're not a top level widget
     setAttribute(Qt::WA_NativeWindow);
+
     setCocoaView(view);
 }
 
@@ -154,23 +152,19 @@ void QMacCocoaViewContainer::setCocoaView(NSView *view)
     [view retain];
     d->nsview = view;
 
+    // Get rid of QWindow completely, and re-create a new vanilla one, which
+    // we will then re-configure to be a foreign window.
+    destroy();
+    create();
+
+    // Can't use QWindow::fromWinId() here due to QWidget controlling its
+    // QWindow, and can't use QWidget::createWindowContainer() due to the
+    // QMacCocoaViewContainer class being public API instead of a factory
+    // function.
     QWindow *window = windowHandle();
-
-    // Note that we only set the flag on the QWindow, and not the QWidget.
-    // These two are not in sync, so from a QWidget standpoint the widget
-    // is not a Window, and hence will be shown when the parent widget is
-    // shown, like all QWidget children.
-    window->setFlags(Qt::ForeignWindow);
-    window->setProperty("_q_foreignWinId", view ? WId(view) : QVariant());
-
-    // Destroying the platform window implies hiding the window, and we
-    // also lose the geometry information that the platform window kept,
-    // and fall back to the stale QWindow geometry, so we update the two
-    // based on the widget visibility and geometry, which is up to date.
     window->destroy();
-    window->setVisible(isVisible());
-    window->setGeometry(geometry());
-    window->create();
+    qt_window_private(window)->create(false, WId(view));
+    Q_ASSERT(window->handle());
 
     [oldView release];
 }

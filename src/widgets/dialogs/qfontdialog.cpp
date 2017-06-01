@@ -38,10 +38,10 @@
 ****************************************************************************/
 
 #include "qwindowdefs.h"
-
-#ifndef QT_NO_FONTDIALOG
-
 #include "qfontdialog.h"
+
+#if QT_CONFIG(fontdialog)
+
 #include "qfontdialog_p.h"
 
 #include <qapplication.h>
@@ -867,8 +867,7 @@ QFont QFontDialog::selectedFont() const
 
     \value NoButtons Don't display \uicontrol{OK} and \uicontrol{Cancel} buttons. (Useful for "live dialogs".)
     \value DontUseNativeDialog Use Qt's standard font dialog on the Mac instead of Apple's
-                               native font panel. (Currently, the native dialog is never used,
-                               but this is likely to change in future Qt releases.)
+                               native font panel.
     \value ScalableFonts Show scalable fonts
     \value NonScalableFonts Show non scalable fonts
     \value MonospacedFonts Show monospaced fonts
@@ -1051,4 +1050,4 @@ QT_END_NAMESPACE
 #include "qfontdialog.moc"
 #include "moc_qfontdialog.cpp"
 
-#endif // QT_NO_FONTDIALOG
+#endif // QT_CONFIG(fontdialog)

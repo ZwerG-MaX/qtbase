@@ -106,7 +106,7 @@ static QByteArray msgBeginFailed(const char *function, const DOCINFO &d)
        str << ", document \"" << QString::fromWCharArray(d.lpszDocName) << '"';
     if (d.lpszOutput && d.lpszOutput[0])
         str << ", file \"" << QString::fromWCharArray(d.lpszOutput) << '"';
-    return result.toLocal8Bit();
+    return std::move(result).toLocal8Bit();
 }
 
 bool QWin32PrintEngine::begin(QPaintDevice *pdev)
@@ -1224,11 +1224,20 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
         QPlatformPrinterSupport *ps = QPlatformPrinterSupportPlugin::get();
         if (!ps)
             return;
+
+        QVariant pageSize = QVariant::fromValue(d->m_pageLayout.pageSize());
+        const bool isFullPage = (d->m_pageLayout.mode() == QPageLayout::FullPageMode);
+        QVariant orientation = QVariant::fromValue(d->m_pageLayout.orientation());
+        QVariant margins = QVariant::fromValue(
+            QPair<QMarginsF, QPageLayout::Unit>(d->m_pageLayout.margins(), d->m_pageLayout.units()));
         QPrintDevice printDevice = ps->createPrintDevice(id.isEmpty() ? ps->defaultPrintDeviceId() : id);
         if (printDevice.isValid()) {
             d->m_printDevice = printDevice;
-            // TODO Do we need to check if the page size is valid on new printer?
             d->initialize();
+            setProperty(PPK_QPageSize, pageSize);
+            setProperty(PPK_FullPage, QVariant(isFullPage));
+            setProperty(PPK_Orientation, orientation);
+            setProperty(PPK_QPageMargins, margins);
         }
         break;
     }
@@ -1650,9 +1659,33 @@ void QWin32PrintEnginePrivate::updatePageLayout()
     m_pageLayout.setOrientation(devMode->dmOrientation == DMORIENT_LANDSCAPE ? QPageLayout::Landscape : QPageLayout::Portrait);
     if (devMode->dmPaperSize >= DMPAPER_LAST) {
         // Is a custom size
-        QPageSize pageSize = QPageSize(QSizeF(devMode->dmPaperWidth / 10.0f, devMode->dmPaperLength / 10.0f),
-                                       QPageSize::Millimeter);
-        setPageSize(pageSize);
+        // Check if it is using the Postscript Custom Size first
+        bool hasCustom = false;
+        int feature = PSIDENT_GDICENTRIC;
+        if (ExtEscape(hdc, POSTSCRIPT_IDENTIFY,
+                      sizeof(DWORD), reinterpret_cast<LPCSTR>(&feature), 0, 0) >= 0) {
+            PSFEATURE_CUSTPAPER custPaper;
+            feature = FEATURESETTING_CUSTPAPER;
+            if (ExtEscape(hdc, GET_PS_FEATURESETTING, sizeof(INT), reinterpret_cast<LPCSTR>(&feature),
+                          sizeof(custPaper), reinterpret_cast<LPSTR>(&custPaper)) > 0) {
+                // If orientation is 1 and width/height is 0 then it's not really custom
+                if (!(custPaper.lOrientation == 1 && custPaper.lWidth == 0 && custPaper.lHeight == 0)) {
+                    if (custPaper.lOrientation == 0 || custPaper.lOrientation == 2)
+                        m_pageLayout.setOrientation(QPageLayout::Portrait);
+                    else
+                        m_pageLayout.setOrientation(QPageLayout::Landscape);
+                    QPageSize pageSize = QPageSize(QSizeF(custPaper.lWidth, custPaper.lHeight),
+                                                   QPageSize::Point);
+                    setPageSize(pageSize);
+                    hasCustom = true;
+                }
+            }
+        }
+        if (!hasCustom) {
+            QPageSize pageSize = QPageSize(QSizeF(devMode->dmPaperWidth / 10.0f, devMode->dmPaperLength / 10.0f),
+                                           QPageSize::Millimeter);
+            setPageSize(pageSize);
+        }
     } else {
         // Is a supported size
         setPageSize(QPageSize(QPageSize::id(devMode->dmPaperSize)));

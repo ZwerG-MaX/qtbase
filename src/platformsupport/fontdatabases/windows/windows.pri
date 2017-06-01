@@ -25,4 +25,5 @@ qtConfig(directwrite) {
     DEFINES *= QT_NO_DIRECTWRITE
 }
 
-LIBS += -lole32 -lgdi32 -luser32
+LIBS += -lole32 -lgdi32 -luser32 -ladvapi32
+mingw: LIBS += -luuid

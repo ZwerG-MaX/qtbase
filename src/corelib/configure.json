@@ -56,6 +56,9 @@
                 },
                 { "libs": "-licuin -licuuc -licudt", "condition": "config.win32 && features.shared" },
                 { "libs": "-licui18n -licuuc -licudata", "condition": "!config.win32" }
+            ],
+            "use": [
+                { "lib": "libdl", "condition": "features.dlopen" }
             ]
         },
         "journald": {
@@ -74,18 +77,18 @@
             ]
         },
         "libdl": {
-            "label": "dlopen() in libdl",
-            "export": "",
+            "label": "dlopen()",
             "test": "unix/dlopen",
             "sources": [
+                "",
                 "-ldl"
             ]
         },
-        "pcre": {
-            "label": "PCRE",
-            "test": "unix/pcre",
+        "pcre2": {
+            "label": "PCRE2",
+            "test": "unix/pcre2",
             "sources": [
-                "-lpcre16"
+                "-lpcre2-16"
             ]
         },
         "pps": {
@@ -130,11 +133,6 @@
             "label": "O_CLOEXEC",
             "type": "compile",
             "test": "unix/cloexec"
-        },
-        "dlopen": {
-            "label": "dlopen() in libc",
-            "type": "compile",
-            "test": "unix/dlopen"
         },
         "eventfd": {
             "label": "eventfd",
@@ -211,13 +209,8 @@
         },
         "dlopen": {
             "label": "dlopen()",
-            "condition": "tests.dlopen || libs.libdl",
-            "output": [ { "type": "define", "negative": true, "name": "QT_NO_DYNAMIC_LIBRARY" } ]
-        },
-        "libdl": {
-            "label": "dlopen() in libdl",
-            "condition": "!tests.dlopen && libs.libdl",
-            "output": [ { "type": "privateConfig", "negative": true } ]
+            "condition": "config.unix && libs.libdl",
+            "output": [ "privateFeature" ]
         },
         "doubleconversion": {
             "label": "DoubleConversion",
@@ -289,7 +282,7 @@
             "label": "journald",
             "autoDetect": false,
             "condition": "libs.journald",
-            "output": [ "privateConfig" ]
+            "output": [ "privateFeature" ]
         },
         "std-atomic64": {
             "label": "64 bit atomic operations",
@@ -305,16 +298,17 @@
             "label": "Mimetype handling",
             "purpose": "Provides MIME type handling.",
             "section": "Utilities",
+            "condition": "features.textcodec",
             "output": [ "publicFeature", "feature" ]
         },
-        "system-pcre": {
-            "label": "Using system PCRE",
+        "system-pcre2": {
+            "label": "Using system PCRE2",
             "disable": "input.pcre == 'qt'",
             "enable": "input.pcre == 'system'",
-            "condition": "libs.pcre",
+            "condition": "libs.pcre2",
             "output": [
                 "privateFeature",
-                { "type": "privateConfig", "negative": true, "name": "pcre" }
+                { "type": "privateConfig", "negative": true, "name": "pcre2" }
             ]
         },
         "poll_ppoll": {
@@ -355,22 +349,16 @@
             "condition": "features.statemachine",
             "output": [ "publicFeature" ]
         },
-        "sharedmemory": {
-            "label": "Enable QSharedMemory",
-            "condition": "config.android || config.win32 || tests.ipc_sysv || tests.ipc_posix",
-            "output": [ { "type": "define", "negative": true, "name": "QT_NO_SHAREDMEMORY" } ]
-        },
         "slog2": {
             "label": "slog2",
             "condition": "libs.slog2",
-            "emitIf": "config.qnx",
-            "output": [ "privateConfig" ]
+            "output": [ "privateFeature" ]
         },
         "syslog": {
             "label": "syslog",
             "autoDetect": false,
             "condition": "tests.syslog",
-            "output": [ "privateConfig" ]
+            "output": [ "privateFeature" ]
         },
         "threadsafe-cloexec": {
             "label": "Threadsafe pipe creation",
@@ -396,7 +384,9 @@
             "label": "QSharedMemory",
             "purpose": "Provides access to a shared memory segment.",
             "section": "Kernel",
-            "condition": "!config.vxworks",
+            "condition": [
+                "config.android || config.win32 || (!config.vxworks && (tests.ipc_sysv || tests.ipc_posix))"
+            ],
             "output": [ "publicFeature", "feature" ]
         },
         "systemsemaphore": {
@@ -446,8 +436,15 @@
             "label": "QProcess",
             "purpose": "Supports external process invocation.",
             "section": "File I/O",
-            "condition": "!config.winrt && !config.uikit && !config.integrity && !config.vxworks",
+            "condition": "features.processenvironment && !config.winrt && !config.uikit && !config.integrity && !config.vxworks",
             "output": [ "publicFeature", "feature" ]
+        },
+        "processenvironment": {
+            "label": "QProcessEnvironment",
+            "purpose": "Provides a higher-level abstraction of environment variables.",
+            "section": "File I/O",
+            "condition": "!config.winrt && !config.integrity",
+            "output": [ "publicFeature" ]
         },
         "temporaryfile": {
             "label": "QTemporaryFile",
@@ -459,6 +456,7 @@
             "label": "QLibrary",
             "purpose": "Provides a wrapper for dynamically loaded libraries.",
             "section": "File I/O",
+            "condition": "config.win32 || config.hpux || (!config.nacl && features.dlopen)",
             "output": [ "publicFeature", "feature" ]
         },
         "settings": {
@@ -633,7 +631,7 @@ Please apply the patch corresponding to your Standard Library vendor, found in
                     "args": "qqnx_pps",
                     "condition": "config.qnx"
                 },
-                "system-pcre"
+                "system-pcre2"
             ]
         }
     ]

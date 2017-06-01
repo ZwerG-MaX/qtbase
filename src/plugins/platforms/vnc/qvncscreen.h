@@ -59,21 +59,23 @@ public:
     QVncScreen(const QStringList &args);
     ~QVncScreen();
 
-    bool initialize();
+    bool initialize() override;
 
-    QPixmap grabWindow(WId wid, int x, int y, int width, int height) const Q_DECL_OVERRIDE;
+    QPixmap grabWindow(WId wid, int x, int y, int width, int height) const override;
 
-    QRegion doRedraw() Q_DECL_OVERRIDE;
-    QImage *image() const { return mScreenImage; }
+    QRegion doRedraw() override;
+    QImage *image() { return &mScreenImage; }
 
     void enableClientCursor(QVncClient *client);
     void disableClientCursor(QVncClient *client);
-    QPlatformCursor *cursor() const Q_DECL_OVERRIDE;
+    QPlatformCursor *cursor() const override;
+
+    Flags flags() const override;
 
     void clearDirty() { dirtyRegion = QRegion(); }
 
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
-    bool swapBytes() const
+    bool swapBytes() const;
 #endif
 
     QStringList mArgs;
@@ -84,7 +86,9 @@ public:
     QRegion dirtyRegion;
     int refreshRate = 30;
     QVncServer *vncServer = 0;
+#if QT_CONFIG(cursor)
     QVncClientCursor *clientCursor = 0;
+#endif
 };
 
 QT_END_NAMESPACE

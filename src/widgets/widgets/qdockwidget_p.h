@@ -63,7 +63,6 @@ QT_BEGIN_NAMESPACE
 
 class QGridLayout;
 class QWidgetResizeHandler;
-class QRubberBand;
 class QDockWidgetTitleButton;
 class QSpacerItem;
 class QDockWidgetItem;
@@ -118,6 +117,7 @@ public:
     void startDrag(bool group = true);
     void endDrag(bool abort = false);
     void moveEvent(QMoveEvent *event);
+    void recalculatePressPos(QResizeEvent *event);
 
     void unplug(const QRect &rect);
     void plug(const QRect &rect);

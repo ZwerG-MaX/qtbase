@@ -58,7 +58,7 @@
 
 #ifdef Q_OS_WIN
 # include <private/qsystemlibrary_p.h>
-#else
+#elif QT_CONFIG(library)
 # include <QtCore/qlibrary.h>
 #endif
 #include <QtCore/qmutex.h>
@@ -125,7 +125,7 @@ void qsslSocketUnresolvedSymbolWarning(const char *functionName)
     qCWarning(lcSsl, "QSslSocket: cannot call unresolved function %s", functionName);
 }
 
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
 void qsslSocketCannotResolveSymbolWarning(const char *functionName)
 {
     qCWarning(lcSsl, "QSslSocket: cannot resolve %s", functionName);
@@ -154,7 +154,7 @@ DEFINEFUNC(int, BN_num_bits, const BIGNUM *a, a, return 0, return)
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 DEFINEFUNC2(int, BN_is_word, BIGNUM *a, a, BN_ULONG w, w, return 0, return)
 #endif
-DEFINEFUNC2(BN_ULONG, BN_mod_word, const BIGNUM *a, a, BN_ULONG w, w, return -1, return)
+DEFINEFUNC2(BN_ULONG, BN_mod_word, const BIGNUM *a, a, BN_ULONG w, w, return static_cast<BN_ULONG>(-1), return)
 #ifndef OPENSSL_NO_EC
 DEFINEFUNC(const EC_GROUP*, EC_KEY_get0_group, const EC_KEY* k, k, return 0, return)
 DEFINEFUNC(int, EC_GROUP_get_degree, const EC_GROUP* g, g, return 0, return)
@@ -468,12 +468,11 @@ DEFINEFUNC(void, PKCS12_free, PKCS12 *pkcs12, pkcs12, return, DUMMYARG)
 
 #if !defined QT_LINKED_OPENSSL
 
-#ifdef QT_NO_LIBRARY
+#if !QT_CONFIG(library)
 bool q_resolveOpenSslSymbols()
 {
-    qCWarning(lcSsl, "QSslSocket: unable to resolve symbols. "
-                     "QT_NO_LIBRARY is defined which means runtime resolving of "
-                     "libraries won't work.");
+    qCWarning(lcSsl, "QSslSocket: unable to resolve symbols. Qt is configured without the "
+                     "'library' feature, which means runtime resolving of libraries won't work.");
     qCWarning(lcSsl, "Either compile Qt statically or with support for runtime resolving "
                      "of libraries.");
     return false;
@@ -1034,7 +1033,7 @@ bool q_resolveOpenSslSymbols()
     delete libs.second;
     return true;
 }
-#endif // QT_NO_LIBRARY
+#endif // QT_CONFIG(library)
 
 #else // !defined QT_LINKED_OPENSSL
 

@@ -67,6 +67,7 @@ class tst_QOpenGL : public QObject
 Q_OBJECT
 
 private slots:
+    void initTestCase();
     void sharedResourceCleanup_data();
     void sharedResourceCleanup();
     void multiGroupSharedResourceCleanup_data();
@@ -86,6 +87,7 @@ private slots:
     void fboMRT_differentFormats();
     void openGLPaintDevice_data();
     void openGLPaintDevice();
+    void openGLPaintDeviceWithChangingContext();
     void aboutToBeDestroyed();
     void sizeLessWindow();
     void QTBUG15621_triangulatingStrokerDivZero();
@@ -202,6 +204,12 @@ static QSurface *createSurface(int surfaceClass)
         return offscreenSurface;
     }
     return 0;
+}
+
+void tst_QOpenGL::initTestCase()
+{
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
+        QSKIP("OpenGL is not supported on this platform.");
 }
 
 static void common_data()
@@ -381,6 +389,7 @@ static bool fuzzyComparePixels(const QRgb testPixel, const QRgb refPixel, const 
 
 static void fuzzyCompareImages(const QImage &testImage, const QImage &referenceImage, const char* file, int line)
 {
+    QCOMPARE(testImage.devicePixelRatio(), referenceImage.devicePixelRatio());
     QCOMPARE(testImage.width(), referenceImage.width());
     QCOMPARE(testImage.height(), referenceImage.height());
 
@@ -948,6 +957,14 @@ void tst_QOpenGL::openGLPaintDevice_data()
     QTest::newRow("Using QOffscreenSurface - RGB16") << int(QSurface::Offscreen) << QImage::Format_RGB16;
 }
 
+static void drawColoredRects(QPainter *p, const QSize &size)
+{
+    p->fillRect(0, 0, size.width() / 2, size.height() / 2, Qt::red);
+    p->fillRect(size.width() / 2, 0, size.width() / 2, size.height() / 2, Qt::green);
+    p->fillRect(size.width() / 2, size.height() / 2, size.width() / 2, size.height() / 2, Qt::blue);
+    p->fillRect(0, size.height() / 2, size.width() / 2, size.height() / 2, Qt::white);
+}
+
 void tst_QOpenGL::openGLPaintDevice()
 {
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(__x86_64__)
@@ -970,10 +987,7 @@ void tst_QOpenGL::openGLPaintDevice()
 
     QImage image(size, imageFormat);
     QPainter p(&image);
-    p.fillRect(0, 0, image.width() / 2, image.height() / 2, Qt::red);
-    p.fillRect(image.width() / 2, 0, image.width() / 2, image.height() / 2, Qt::green);
-    p.fillRect(image.width() / 2, image.height() / 2, image.width() / 2, image.height() / 2, Qt::blue);
-    p.fillRect(0, image.height() / 2, image.width() / 2, image.height() / 2, Qt::white);
+    drawColoredRects(&p, image.size());
     p.end();
 
     QOpenGLFramebufferObject fbo(size);
@@ -981,10 +995,7 @@ void tst_QOpenGL::openGLPaintDevice()
 
     QOpenGLPaintDevice device(size);
     QVERIFY(p.begin(&device));
-    p.fillRect(0, 0, image.width() / 2, image.height() / 2, Qt::red);
-    p.fillRect(image.width() / 2, 0, image.width() / 2, image.height() / 2, Qt::green);
-    p.fillRect(image.width() / 2, image.height() / 2, image.width() / 2, image.height() / 2, Qt::blue);
-    p.fillRect(0, image.height() / 2, image.width() / 2, image.height() / 2, Qt::white);
+    drawColoredRects(&p, image.size());
     p.end();
 
     QImage actual = fbo.toImage().convertToFormat(imageFormat);
@@ -1008,6 +1019,59 @@ void tst_QOpenGL::openGLPaintDevice()
     actual = fbo.toImage().convertToFormat(imageFormat);
     QCOMPARE(image.size(), actual.size());
     QCOMPARE(image, actual);
+}
+
+void tst_QOpenGL::openGLPaintDeviceWithChangingContext()
+{
+    QScopedPointer<QSurface> surface(createSurface(QSurface::Window));
+    const QSize size(512, 512);
+
+    // QOpenGLPaintDevice has a thread-local paint engine. Therefore render
+    // twice, with a different context and device. Under the hood it will
+    // still use the same paint engine!
+
+    QOpenGLContext ctx;
+    QVERIFY(ctx.create());
+    QVERIFY(ctx.makeCurrent(surface.data()));
+
+    QOpenGLFramebufferObject fbo(size);
+    QVERIFY(fbo.bind());
+
+    QOpenGLPaintDevice device(size);
+
+    QPainter p;
+    QVERIFY(p.begin(&device));
+    drawColoredRects(&p, size);
+    p.end();
+
+    QImage img1 = fbo.toImage();
+
+    QOpenGLContext ctx2;
+    // When supported, test the special case, where the second context is
+    // totally incompatible due to being a core profile one.
+    QSurfaceFormat coreFormat;
+    coreFormat.setVersion(3, 2);
+    coreFormat.setProfile(QSurfaceFormat::CoreProfile);
+    ctx2.setFormat(coreFormat);
+    if (!ctx2.create() || !ctx2.makeCurrent(surface.data())) {
+        ctx2.setFormat(QSurfaceFormat());
+        QVERIFY(ctx2.create());
+    }
+
+    QVERIFY(ctx2.makeCurrent(surface.data()));
+
+    QOpenGLFramebufferObject fbo2(size);
+    QVERIFY(fbo2.bind());
+
+    QOpenGLPaintDevice device2(size);
+
+    QVERIFY(p.begin(&device2));
+    drawColoredRects(&p, size);
+    p.end();
+
+    QImage img2 = fbo2.toImage();
+
+    QFUZZY_COMPARE_IMAGES(img1, img2);
 }
 
 void tst_QOpenGL::aboutToBeDestroyed()

@@ -66,41 +66,55 @@ void QFbWindow::setGeometry(const QRect &rect)
     // store previous geometry for screen update
     mOldGeometry = geometry();
 
-    platformScreen()->invalidateRectCache();
     QWindowSystemInterface::handleGeometryChange(window(), rect);
 
     QPlatformWindow::setGeometry(rect);
+
+    if (mOldGeometry != rect)
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
 }
 
 void QFbWindow::setVisible(bool visible)
 {
+    QRect newGeom;
+    QFbScreen *fbScreen = platformScreen();
     if (visible) {
-        if (mWindowState & Qt::WindowFullScreen)
-            setGeometry(platformScreen()->geometry());
+        bool convOk = false;
+        static bool envDisableForceFullScreen = qEnvironmentVariableIntValue("QT_QPA_FB_FORCE_FULLSCREEN", &convOk) == 0 && convOk;
+        const bool platformDisableForceFullScreen = fbScreen->flags().testFlag(QFbScreen::DontForceFirstWindowToFullScreen);
+        const bool forceFullScreen = !envDisableForceFullScreen && !platformDisableForceFullScreen && fbScreen->windowCount() == 0;
+        if (forceFullScreen || (mWindowState & Qt::WindowFullScreen))
+            newGeom = platformScreen()->geometry();
         else if (mWindowState & Qt::WindowMaximized)
-            setGeometry(platformScreen()->availableGeometry());
+            newGeom = platformScreen()->availableGeometry();
     }
     QPlatformWindow::setVisible(visible);
 
     if (visible)
-        platformScreen()->addWindow(this);
+        fbScreen->addWindow(this);
     else
-        platformScreen()->removeWindow(this);
-}
+        fbScreen->removeWindow(this);
 
+    if (!newGeom.isEmpty())
+        setGeometry(newGeom); // may or may not generate an expose
+
+    if (newGeom.isEmpty() || newGeom == mOldGeometry) {
+        // QWindow::isExposed() maps to QWindow::visible() by default so simply
+        // generating an expose event regardless of this being a show or hide is
+        // just what is needed here.
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
+    }
+}
 
 void QFbWindow::setWindowState(Qt::WindowState state)
 {
     QPlatformWindow::setWindowState(state);
     mWindowState = state;
-    platformScreen()->invalidateRectCache();
 }
-
 
 void QFbWindow::setWindowFlags(Qt::WindowFlags flags)
 {
     mWindowFlags = flags;
-    platformScreen()->invalidateRectCache();
 }
 
 Qt::WindowFlags QFbWindow::windowFlags() const
@@ -111,29 +125,26 @@ Qt::WindowFlags QFbWindow::windowFlags() const
 void QFbWindow::raise()
 {
     platformScreen()->raise(this);
+    QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
 }
 
 void QFbWindow::lower()
 {
     platformScreen()->lower(this);
+    QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
 }
 
 void QFbWindow::repaint(const QRegion &region)
 {
-    QRect currentGeometry = geometry();
-
-    QRect dirtyClient = region.boundingRect();
-    QRect dirtyRegion(currentGeometry.left() + dirtyClient.left(),
-                      currentGeometry.top() + dirtyClient.top(),
-                      dirtyClient.width(),
-                      dirtyClient.height());
-    QRect mOldGeometryLocal = mOldGeometry;
+    const QRect currentGeometry = geometry();
+    const QRect dirtyClient = region.boundingRect();
+    const QRect dirtyRegion = dirtyClient.translated(currentGeometry.topLeft());
+    const QRect oldGeometryLocal = mOldGeometry;
     mOldGeometry = currentGeometry;
     // If this is a move, redraw the previous location
-    if (mOldGeometryLocal != currentGeometry)
-        platformScreen()->setDirty(mOldGeometryLocal);
+    if (oldGeometryLocal != currentGeometry)
+        platformScreen()->setDirty(oldGeometryLocal);
     platformScreen()->setDirty(dirtyRegion);
 }
 
 QT_END_NAMESPACE
-

@@ -39,6 +39,7 @@
 
 #include "qwindowsvistastyle_p.h"
 #include "qwindowsvistastyle_p_p.h"
+#include <qoperatingsystemversion.h>
 #include <qscreen.h>
 #include <qwindow.h>
 #include <private/qstyleanimation_p.h>
@@ -46,7 +47,7 @@
 #include <private/qapplication_p.h>
 #include <qpa/qplatformnativeinterface.h>
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA) || defined(QT_PLUGIN)
+#if QT_CONFIG(style_windowsvista) || defined(QT_PLUGIN)
 
 QT_BEGIN_NAMESPACE
 
@@ -599,6 +600,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 XPThemeData theme(widget, painter,
                                   QWindowsXPStylePrivate::EditTheme,
                                   EP_EDITBORDER_NOSCROLL, stateId, option->rect);
+                theme.noContent = true;
                 painter->save();
                 QRegion clipRegion = option->rect;
                 clipRegion -= option->rect.adjusted(2, 2, -2, -2);
@@ -773,6 +775,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
         }
     case PE_Widget:
         {
+#if QT_CONFIG(dialogbuttonbox)
             const QDialogButtonBox *buttonBox = 0;
 
             if (qobject_cast<const QMessageBox *> (widget))
@@ -799,6 +802,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 theme.partId = TDLG_SECONDARYPANEL;
                 d->drawBackground(theme);
             }
+#endif
         }
         break;
     default:
@@ -1752,7 +1756,7 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
                     theme.stateId = stateId;
                     d->drawBackground(theme);
 
-                    if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8) {
+                    if (QOperatingSystemVersion::current() < QOperatingSystemVersion::Windows8) {
                         const QRect gripperBounds = QWindowsXPStylePrivate::scrollBarGripperBounds(flags, widget, &theme);
                         // Draw gripper if there is enough space
                         if (!gripperBounds.isEmpty() && flags & State_Enabled) {
@@ -1871,8 +1875,7 @@ QSize QWindowsVistaStyle::sizeFromContents(ContentsType type, const QStyleOption
     case CT_MenuBarItem:
         if (!sz.isEmpty())
             sz += QSize(windowsItemHMargin * 5 + 1, 5);
-            return sz;
-        break;
+        return sz;
 #endif
     case CT_ItemViewItem:
         sz = QWindowsXPStyle::sizeFromContents(type, option, size, widget);
@@ -2314,16 +2317,20 @@ void QWindowsVistaStyle::polish(QWidget *widget)
         }
     } else if (qobject_cast<QMessageBox *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground);
+#if QT_CONFIG(dialogbuttonbox)
         QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_msgbox_buttonbox"));
         if (buttonBox)
             buttonBox->setContentsMargins(0, 9, 0, 0);
+#endif
     }
 #ifndef QT_NO_INPUTDIALOG
     else if (qobject_cast<QInputDialog *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground);
+#if QT_CONFIG(dialogbuttonbox)
         QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
         if (buttonBox)
             buttonBox->setContentsMargins(0, 9, 0, 0);
+#endif
     }
 #endif // QT_NO_INPUTDIALOG
     else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
@@ -2354,16 +2361,20 @@ void QWindowsVistaStyle::unpolish(QWidget *widget)
         widget->setAttribute(Qt::WA_Hover, false);
     else if (qobject_cast<QMessageBox *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground, false);
+#if QT_CONFIG(dialogbuttonbox)
         QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_msgbox_buttonbox"));
         if (buttonBox)
             buttonBox->setContentsMargins(0, 0, 0, 0);
+#endif
     }
 #ifndef QT_NO_INPUTDIALOG
     else if (qobject_cast<QInputDialog *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground, false);
+#if QT_CONFIG(dialogbuttonbox)
         QDialogButtonBox *buttonBox = widget->findChild<QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
         if (buttonBox)
             buttonBox->setContentsMargins(0, 0, 0, 0);
+#endif
     }
 #endif // QT_NO_INPUTDIALOG
     else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {

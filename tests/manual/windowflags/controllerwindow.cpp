@@ -70,7 +70,7 @@ ControllerWidget::ControllerWidget(QWidget *parent)
     hintsControl->setHints(previewWindow->windowFlags());
     connect(hintsControl, SIGNAL(changed(Qt::WindowFlags)), this, SLOT(updatePreview()));
 
-    statesControl = new WindowStatesControl(WindowStatesControl::WantVisibleCheckBox|WindowStatesControl::WantActiveCheckBox);
+    statesControl = new WindowStatesControl;
     statesControl->setStates(previewWindow->windowState());
     statesControl->setVisibleValue(true);
     connect(statesControl, SIGNAL(changed()), this, SLOT(updatePreview()));
@@ -106,13 +106,13 @@ void ControllerWidget::updatePreview()
 {
     const Qt::WindowFlags flags = typeControl->type() | hintsControl->hints();
 
-    previewWindow->hide();
-    previewDialog->hide();
-
-    if (previewWidgetButton->isChecked())
+    if (previewWidgetButton->isChecked()) {
         previewWidget = previewWindow;
-    else
+        previewDialog->hide();
+    } else {
         previewWidget = previewDialog;
+        previewWindow->hide();
+    }
 
     if (modalWindowCheckBox->isChecked()) {
         parentWindow->show();
@@ -191,12 +191,12 @@ static bool isTopLevel(const QObject *o)
     return false;
 }
 
-static Qt::WindowState windowState(const QObject *o)
+static Qt::WindowStates windowState(const QObject *o)
 {
     if (o->isWidgetType()) {
         Qt::WindowStates states = static_cast<const QWidget *>(o)->windowState();
         states &= ~Qt::WindowActive;
-        return static_cast<Qt::WindowState>(int(states));
+        return states;
     }
 #if QT_VERSION >= 0x050000
     if (o->isWindowType())

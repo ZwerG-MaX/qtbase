@@ -266,6 +266,16 @@ bool QDockAreaLayoutInfo::isEmpty() const
     return next(-1) == -1;
 }
 
+bool QDockAreaLayoutInfo::onlyHasPlaceholders() const
+{
+    for (const QDockAreaLayoutItem &item : item_list) {
+        if (!item.placeHolderItem)
+            return false;
+    }
+
+    return true;
+}
+
 QSize QDockAreaLayoutInfo::minimumSize() const
 {
     if (isEmpty())
@@ -2082,15 +2092,15 @@ void QDockAreaLayoutInfo::reparentWidgets(QWidget *parent)
         const QDockAreaLayoutItem &item = item_list.at(i);
         if (item.flags & QDockAreaLayoutItem::GapItem)
             continue;
-        if (item.skip())
-            continue;
         if (item.subinfo)
             item.subinfo->reparentWidgets(parent);
         if (item.widgetItem) {
             QWidget *w = item.widgetItem->widget();
+            if (qobject_cast<QDockWidgetGroupWindow *>(w))
+                continue;
             if (w->parent() != parent) {
                 bool hidden = w->isHidden();
-                w->setParent(parent);
+                w->setParent(parent, w->windowFlags());
                 if (!hidden)
                     w->show();
             }
@@ -2595,10 +2605,16 @@ bool QDockAreaLayout::insertGap(const QList<int> &path, QLayoutItem *dockWidgetI
 
 QLayoutItem *QDockAreaLayout::plug(const QList<int> &path)
 {
+#if QT_CONFIG(tabbar)
     Q_ASSERT(!path.isEmpty());
     const int index = path.first();
     Q_ASSERT(index >= 0 && index < QInternal::DockCount);
-    return docks[index].plug(path.mid(1));
+    QLayoutItem *item = docks[index].plug(path.mid(1));
+    docks[index].reparentWidgets(mainWindow);
+    return item;
+#else
+    return nullptr;
+#endif
 }
 
 QLayoutItem *QDockAreaLayout::unplug(const QList<int> &path)
@@ -3165,6 +3181,7 @@ void QDockAreaLayout::resizeDocks(const QList<QDockWidget *> &docks,
 
         while (path.size() > 1) {
             QDockAreaLayoutInfo *info = this->info(path);
+#if QT_CONFIG(tabbar)
             if (!info->tabbed && info->o == o) {
                 info->item_list[path.constLast()].size = size;
                 int totalSize = 0;
@@ -3177,6 +3194,7 @@ void QDockAreaLayout::resizeDocks(const QList<QDockWidget *> &docks,
                 }
                 size = totalSize;
             }
+#endif // QT_CONFIG(tabbar)
             path.removeLast();
         }
 

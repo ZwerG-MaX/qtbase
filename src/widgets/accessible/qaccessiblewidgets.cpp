@@ -54,7 +54,9 @@
 #include <QToolBox>
 #include <QMdiArea>
 #include <QMdiSubWindow>
+#if QT_CONFIG(dialogbuttonbox)
 #include <QDialogButtonBox>
+#endif
 #include <limits.h>
 #include <QRubberBand>
 #include <QTextBrowser>
@@ -62,7 +64,6 @@
 #include <QAbstractItemView>
 #include <QDockWidget>
 #include <QMainWindow>
-#include <QAbstractButton>
 #include <private/qdockwidget_p.h>
 #include <QFocusFrame>
 
@@ -85,7 +86,9 @@ QList<QWidget*> childWidgets(const QWidget *widget)
         QString objectName = w->objectName();
         if (!w->isWindow()
               && !qobject_cast<QFocusFrame*>(w)
+#if QT_CONFIG(menu)
               && !qobject_cast<QMenu*>(w)
+#endif
               && objectName != QLatin1String("qt_rubberband")
               && objectName != QLatin1String("qt_qmainwindow_extended_splitter")) {
             widgets.append(w);
@@ -478,7 +481,7 @@ QMdiSubWindow *QAccessibleMdiSubWindow::mdiSubWindow() const
 }
 #endif // QT_NO_MDIAREA
 
-#ifndef QT_NO_DIALOGBUTTONBOX
+#if QT_CONFIG(dialogbuttonbox)
 // ======================= QAccessibleDialogButtonBox ======================
 QAccessibleDialogButtonBox::QAccessibleDialogButtonBox(QWidget *widget)
     : QAccessibleWidget(widget, QAccessible::Grouping)
@@ -486,7 +489,7 @@ QAccessibleDialogButtonBox::QAccessibleDialogButtonBox(QWidget *widget)
     Q_ASSERT(qobject_cast<QDialogButtonBox*>(widget));
 }
 
-#endif // QT_NO_DIALOGBUTTONBOX
+#endif // QT_CONFIG(dialogbuttonbox)
 
 #if !defined(QT_NO_TEXTBROWSER) && !defined(QT_NO_CURSOR)
 QAccessibleTextBrowser::QAccessibleTextBrowser(QWidget *widget)

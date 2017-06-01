@@ -36,7 +36,7 @@ class tst_QChar : public QObject
 {
     Q_OBJECT
 private slots:
-    void operator_eqeq_int();
+    void operator_eqeq_null();
     void operators_data();
     void operators();
     void toUpper();
@@ -72,27 +72,51 @@ private slots:
     void unicodeVersion();
 };
 
-void tst_QChar::operator_eqeq_int()
+void tst_QChar::operator_eqeq_null()
 {
     {
         const QChar ch = QLatin1Char(' ');
-        QVERIFY(ch != 0);
-        QVERIFY(!(ch == 0));
+#define CHECK(NUL) \
+        do { \
+            QVERIFY(!(ch  == NUL)); \
+            QVERIFY(  ch  != NUL ); \
+            QVERIFY(!(ch  <  NUL)); \
+            QVERIFY(  ch  >  NUL ); \
+            QVERIFY(!(ch  <= NUL)); \
+            QVERIFY(  ch  >= NUL ); \
+            QVERIFY(!(NUL == ch )); \
+            QVERIFY(  NUL != ch  ); \
+            QVERIFY(  NUL <  ch  ); \
+            QVERIFY(!(NUL >  ch )); \
+            QVERIFY(  NUL <= ch  ); \
+            QVERIFY(!(NUL >= ch )); \
+        } while (0)
 
-        QVERIFY(ch == 0x20);
-        QVERIFY(!(ch != 0x20));
-        QVERIFY(0x20 == ch);
-        QVERIFY(!(0x20 != ch));
+        CHECK(0);
+        CHECK('\0');
+#undef CHECK
     }
     {
         const QChar ch = QLatin1Char('\0');
-        QVERIFY(ch == 0);
-        QVERIFY(!(ch != 0));
+#define CHECK(NUL) \
+        do { \
+            QVERIFY(  ch  == NUL ); \
+            QVERIFY(!(ch  != NUL)); \
+            QVERIFY(!(ch  <  NUL)); \
+            QVERIFY(!(ch  >  NUL)); \
+            QVERIFY(  ch  <= NUL ); \
+            QVERIFY(  ch  >= NUL ); \
+            QVERIFY(  NUL == ch  ); \
+            QVERIFY(!(NUL != ch )); \
+            QVERIFY(!(NUL <  ch )); \
+            QVERIFY(!(NUL >  ch )); \
+            QVERIFY(  NUL <= ch  ); \
+            QVERIFY(  NUL >= ch  ); \
+        } while (0)
 
-        QVERIFY(ch != 0x20);
-        QVERIFY(!(ch == 0x20));
-        QVERIFY(0x20 != ch);
-        QVERIFY(!(0x20 == ch));
+        CHECK(0);
+        CHECK('\0');
+#undef CHECK
     }
 }
 
@@ -103,7 +127,7 @@ void tst_QChar::operators_data()
 
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j)
-            QTest::newRow(qPrintable(QString::asprintf("'\\%d' (op) '\\%d'", i, j)))
+            QTest::addRow("'\\%d' (op) '\\%d'", i, j)
                     << QChar(ushort(i)) << QChar(ushort(j));
     }
 }

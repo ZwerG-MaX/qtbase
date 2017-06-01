@@ -7,11 +7,11 @@ CONFIG += static internal_module
 DEFINES += QT_NO_CAST_FROM_ASCII
 PRECOMPILED_HEADER = ../../corelib/global/qt_pch.h
 
-darwin:!if(watchos:CONFIG(simulator, simulator|device)) {
+darwin {
     include($$PWD/mac/coretext.pri)
 } else {
     qtConfig(freetype) {
-        include($$PWD/basic/basic.pri)
+        include($$PWD/freetype/freetype.pri)
     }
 
     unix {

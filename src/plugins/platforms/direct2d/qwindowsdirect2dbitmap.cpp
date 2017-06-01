@@ -55,8 +55,9 @@ class QWindowsDirect2DBitmapPrivate
 {
 public:
     QWindowsDirect2DBitmapPrivate(ID2D1DeviceContext *dc = 0, ID2D1Bitmap1 *bm = 0)
-        : bitmap(bm)
-        , deviceContext(new QWindowsDirect2DDeviceContext(dc))
+        : deviceContext(new QWindowsDirect2DDeviceContext(dc))
+        , bitmap(bm)
+
     {
         deviceContext->get()->SetTarget(bm);
     }
@@ -83,13 +84,13 @@ public:
             UINT32(width), UINT32(height)
         };
 
-        HRESULT hr = deviceContext->get()->CreateBitmap(size, data, pitch,
+        HRESULT hr = deviceContext->get()->CreateBitmap(size, data, UINT32(pitch),
                                                         bitmapProperties(),
                                                         bitmap.ReleaseAndGetAddressOf());
         if (SUCCEEDED(hr))
             deviceContext->get()->SetTarget(bitmap.Get());
         else
-            qWarning("%s: Could not create bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not create bitmap: %#lx", __FUNCTION__, hr);
 
         return SUCCEEDED(hr);
     }
@@ -107,28 +108,28 @@ public:
         D2D1_BITMAP_PROPERTIES1 properties = bitmapProperties();
         properties.bitmapOptions = D2D1_BITMAP_OPTIONS_CANNOT_DRAW | D2D1_BITMAP_OPTIONS_CPU_READ;
 
-        hr = deviceContext->get()->CreateBitmap(size, NULL, NULL,
+        hr = deviceContext->get()->CreateBitmap(size, NULL, 0,
                                                 properties, &mappingCopy);
         if (FAILED(hr)) {
-            qWarning("%s: Could not create bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not create bitmap: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         hr = mappingCopy->CopyFromBitmap(NULL, bitmap.Get(), NULL);
         if (FAILED(hr)) {
-            qWarning("%s: Could not copy from bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not copy from bitmap: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         D2D1_MAPPED_RECT mappedRect;
         hr = mappingCopy->Map(D2D1_MAP_OPTIONS_READ, &mappedRect);
         if (FAILED(hr)) {
-            qWarning("%s: Could not map: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not map: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         return QImage(static_cast<const uchar *>(mappedRect.bits),
-                      size.width, size.height, mappedRect.pitch,
+                      int(size.width), int(size.height), int(mappedRect.pitch),
                       QImage::Format_ARGB32_Premultiplied).copy(rect);
     }
 
@@ -197,7 +198,7 @@ QSize QWindowsDirect2DBitmap::size() const
     Q_D(const QWindowsDirect2DBitmap);
 
     D2D1_SIZE_U size = d->bitmap->GetPixelSize();
-    return QSize(size.width, size.height);
+    return QSize(int(size.width), int(size.height));
 }
 
 QT_END_NAMESPACE

@@ -263,7 +263,7 @@ void PaintCommands::staticInit()
                       "path_setFillRule pathName Winding");
     DECL_PAINTCOMMAND("setBrush", command_setBrush,
                       "^setBrush\\s+(#?[\\w.:\\/]*)\\s*(\\w*)?$",
-                      "setBrush <pixmapFileName>\nsetBrush noBrush\nsetBrush <color> <brush style enum>",
+                      "setBrush <imageFileName>\nsetBrush noBrush\nsetBrush <color> <brush style enum>",
                       "setBrush white SolidPattern");
     DECL_PAINTCOMMAND("setBrushOrigin", command_setBrushOrigin,
                       "^setBrushOrigin\\s*(-?\\w*)\\s+(-?\\w*)$",
@@ -1752,13 +1752,13 @@ void PaintCommands::command_setBrush(QRegExp re)
 {
     QStringList caps = re.capturedTexts();
 
-    QPixmap pm = image_load<QPixmap>(caps.at(1));
-    if (!pm.isNull()) { // Assume pixmap
+    QImage img = image_load<QImage>(caps.at(1));
+    if (!img.isNull()) { // Assume image brush
         if (m_verboseMode)
-            printf(" -(lance) setBrush(pixmap=%s, width=%d, height=%d)\n",
-                   qPrintable(caps.at(1)), pm.width(), pm.height());
+            printf(" -(lance) setBrush(image=%s, width=%d, height=%d)\n",
+                   qPrintable(caps.at(1)), img.width(), img.height());
 
-        m_painter->setBrush(QBrush(pm));
+        m_painter->setBrush(QBrush(img));
     } else if (caps.at(1).toLower() == "nobrush") {
         m_painter->setBrush(Qt::NoBrush);
         if (m_verboseMode)
@@ -2378,6 +2378,8 @@ void PaintCommands::command_surface_begin(QRegExp re)
 #ifndef QT_NO_OPENGL
         m_default_glcontext = QOpenGLContext::currentContext();
         m_surface_glcontext = new QOpenGLContext();
+        // Pick up the format from the current context; this is especially
+        // important in order to pick the right version/profile to test.
         m_surface_glcontext->setFormat(m_default_glcontext->format());
         m_surface_glcontext->create();
         m_surface_glcontext->makeCurrent(m_default_glcontext->surface());

@@ -24,6 +24,7 @@ SOURCES += \
     $$PWD/src/base/ftbbox.c \
     $$PWD/src/base/ftdebug.c \
     $$PWD/src/base/ftglyph.c \
+    $$PWD/src/base/ftfntfmt.c \
     $$PWD/src/base/ftinit.c \
     $$PWD/src/base/ftlcdfil.c \
     $$PWD/src/base/ftmm.c \
@@ -69,6 +70,7 @@ DEFINES += FT_CONFIG_OPTION_SYSTEM_ZLIB
 include(../zlib_dependency.pri)
 
 DEFINES += FT_CONFIG_OPTION_USE_PNG
+include($$OUT_PWD/../../gui/qtgui-config.pri)
 QMAKE_USE_PRIVATE += libpng
 
 DEFINES += TT_CONFIG_OPTION_SUBPIXEL_HINTING

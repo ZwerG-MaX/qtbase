@@ -38,7 +38,10 @@
 ****************************************************************************/
 
 #ifndef QT_NO_WIZARD
-#ifndef QT_NO_STYLE_WINDOWSVISTA
+
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
+
+#if QT_CONFIG(style_windowsvista)
 
 #include "qwizard_win_p.h"
 #include <private/qapplication_p.h>
@@ -46,6 +49,7 @@
 #include "qwizard.h"
 #include "qpaintengine.h"
 #include "qapplication.h"
+#include <QtCore/QOperatingSystemVersion>
 #include <QtCore/QVariant>
 #include <QtCore/QDebug>
 #include <QtGui/QMouseEvent>
@@ -211,8 +215,7 @@ void QVistaHelper::disconnectBackButton()
 QColor QVistaHelper::basicWindowFrameColor()
 {
     DWORD rgb;
-    HWND handle = QApplicationPrivate::getHWNDForWidget(QApplication::desktop());
-    const HANDLE hTheme = OpenThemeData(handle, L"WINDOW");
+    const HANDLE hTheme = OpenThemeData(GetDesktopWindow(), L"WINDOW");
     GetThemeColor(hTheme, WP_CAPTION, CS_ACTIVE,
                   wizard->isActiveWindow() ? TMT_FILLCOLORHINT : TMT_BORDERCOLORHINT, &rgb);
     BYTE r = GetRValue(rgb);
@@ -254,8 +257,7 @@ static LOGFONT getCaptionLogFont(HANDLE hTheme)
 
 static bool getCaptionQFont(int dpi, QFont *result)
 {
-    const HANDLE hTheme =
-        OpenThemeData(QApplicationPrivate::getHWNDForWidget(QApplication::desktop()), L"WINDOW");
+    const HANDLE hTheme = OpenThemeData(GetDesktopWindow(), L"WINDOW");
     if (!hTheme)
         return false;
     // Call into QWindowsNativeInterface to convert the LOGFONT into a QFont.
@@ -586,8 +588,7 @@ bool QVistaHelper::drawTitleText(QPainter *painter, const QString &text, const Q
     if (vistaState() == VistaAero) {
         const QRect rectDp = QRect(rect.topLeft() * QVistaHelper::m_devicePixelRatio,
                                    rect.size() * QVistaHelper::m_devicePixelRatio);
-        HWND handle = QApplicationPrivate::getHWNDForWidget(QApplication::desktop());
-        const HANDLE hTheme = OpenThemeData(handle, L"WINDOW");
+        const HANDLE hTheme = OpenThemeData(GetDesktopWindow(), L"WINDOW");
         if (!hTheme) return false;
         // Set up a memory DC and bitmap that we'll draw into
         HDC dcMem;
@@ -715,13 +716,13 @@ int QVistaHelper::topOffset()
     if (vistaState() != VistaAero)
         return titleBarSize() + 3;
     static const int aeroOffset =
-        QSysInfo::WindowsVersion == QSysInfo::WV_WINDOWS7 ?
+        QOperatingSystemVersion::current() < QOperatingSystemVersion::Windows8 ?
         QStyleHelper::dpiScaled(4) : QStyleHelper::dpiScaled(13);
     return aeroOffset + titleBarSize();
 }
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_STYLE_WINDOWSVISTA
+#endif // style_windowsvista
 
 #endif // QT_NO_WIZARD

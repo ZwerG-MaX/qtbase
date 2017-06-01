@@ -57,7 +57,10 @@ QT_END_NAMESPACE
 #  include "private/qcore_mac_p.h"
 #endif
 
-#include "qconfig.cpp"
+#ifndef QT_BUILD_QMAKE_BOOTSTRAP
+# include "qconfig.cpp"
+#endif
+
 #include "archdetect.cpp"
 
 QT_BEGIN_NAMESPACE
@@ -88,6 +91,11 @@ class QLibraryInfoPrivate
 public:
     static QSettings *findConfiguration();
 #ifdef QT_BUILD_QMAKE
+    static void reload()
+    {
+        if (qt_library_settings.exists())
+            qt_library_settings->load();
+    }
     static bool haveGroup(QLibraryInfo::PathGroup group)
     {
         QLibrarySettings *ls = qt_library_settings();
@@ -415,6 +423,7 @@ static const struct {
     { "Tests", "tests" },
 #ifdef QT_BUILD_QMAKE
     { "Sysroot", "" },
+    { "SysrootifyPrefix", "" },
     { "HostBinaries", "bin" },
     { "HostLibraries", "lib" },
     { "HostData", "." },
@@ -423,6 +432,13 @@ static const struct {
     { "HostPrefix", "" },
 #endif
 };
+
+#ifdef QT_BUILD_QMAKE
+void QLibraryInfo::reload()
+{
+    QLibraryInfoPrivate::reload();
+}
+#endif
 
 /*!
   Returns the location specified by \a loc.
@@ -434,13 +450,17 @@ QLibraryInfo::location(LibraryLocation loc)
     QString ret = rawLocation(loc, FinalPaths);
 
     // Automatically prepend the sysroot to target paths
-    if ((loc < SysrootPath || loc > LastHostPath) && QT_CONFIGURE_SYSROOTIFY_PREFIX) {
+    if (loc < SysrootPath || loc > LastHostPath) {
         QString sysroot = rawLocation(SysrootPath, FinalPaths);
-        if (!sysroot.isEmpty() && ret.length() > 2 && ret.at(1) == QLatin1Char(':')
-            && (ret.at(2) == QLatin1Char('/') || ret.at(2) == QLatin1Char('\\')))
-            ret.replace(0, 2, sysroot); // Strip out the drive on Windows targets
-        else
-            ret.prepend(sysroot);
+        if (!sysroot.isEmpty()
+                && QVariant::fromValue(rawLocation(SysrootifyPrefixPath, FinalPaths)).toBool()) {
+            if (ret.length() > 2 && ret.at(1) == QLatin1Char(':')
+                   && (ret.at(2) == QLatin1Char('/') || ret.at(2) == QLatin1Char('\\'))) {
+                ret.replace(0, 2, sysroot); // Strip out the drive on Windows targets
+            } else {
+                ret.prepend(sysroot);
+            }
+        }
     }
 
     return ret;
@@ -503,21 +523,31 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
                 if (loc == HostPrefixPath)
                     ret = config->value(QLatin1String(qtConfEntries[PrefixPath].key),
                                         QLatin1String(qtConfEntries[PrefixPath].value)).toString();
-                else if (loc == TargetSpecPath || loc == HostSpecPath)
+                else if (loc == TargetSpecPath || loc == HostSpecPath || loc == SysrootifyPrefixPath)
                     fromConf = false;
                 // The last case here is SysrootPath, which can be legitimately empty.
                 // All other keys have non-empty fallbacks to start with.
             }
 #endif
 
-            // expand environment variables in the form $(ENVVAR)
-            int rep;
-            QRegExp reg_var(QLatin1String("\\$\\(.*\\)"));
-            reg_var.setMinimal(true);
-            while((rep = reg_var.indexIn(ret)) != -1) {
-                ret.replace(rep, reg_var.matchedLength(),
-                            QString::fromLocal8Bit(qgetenv(ret.midRef(rep + 2,
-                                reg_var.matchedLength() - 3).toLatin1().constData()).constData()));
+            int startIndex = 0;
+            forever {
+                startIndex = ret.indexOf(QLatin1Char('$'), startIndex);
+                if (startIndex < 0)
+                    break;
+                if (ret.length() < startIndex + 3)
+                    break;
+                if (ret.at(startIndex + 1) != QLatin1Char('(')) {
+                    startIndex++;
+                    continue;
+                }
+                int endIndex = ret.indexOf(QLatin1Char(')'), startIndex + 2);
+                if (endIndex < 0)
+                    break;
+                QStringRef envVarName = ret.midRef(startIndex + 2, endIndex - startIndex - 2);
+                QString value = QString::fromLocal8Bit(qgetenv(envVarName.toLocal8Bit().constData()));
+                ret.replace(startIndex, endIndex - startIndex + 1, value);
+                startIndex += value.length();
             }
 
             config->endGroup();
@@ -527,14 +557,15 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
     }
 #endif // QT_NO_SETTINGS
 
+#ifndef QT_BUILD_QMAKE_BOOTSTRAP
     if (!fromConf) {
         const char * volatile path = 0;
         if (loc == PrefixPath) {
             path =
-#ifdef QT_BUILD_QMAKE
+# ifdef QT_BUILD_QMAKE
                 (group != DevicePaths) ?
                     QT_CONFIGURE_EXT_PREFIX_PATH :
-#endif
+# endif
                     QT_CONFIGURE_PREFIX_PATH;
         } else if (unsigned(loc) <= sizeof(qt_configure_str_offsets)/sizeof(qt_configure_str_offsets[0])) {
             path = qt_configure_strs + qt_configure_str_offsets[loc - 1];
@@ -542,19 +573,20 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         } else if (loc == SettingsPath) {
             path = QT_CONFIGURE_SETTINGS_PATH;
 #endif
-#ifdef QT_BUILD_QMAKE
+# ifdef QT_BUILD_QMAKE
         } else if (loc == HostPrefixPath) {
             path = QT_CONFIGURE_HOST_PREFIX_PATH;
-#endif
+# endif
         }
 
         if (path)
             ret = QString::fromLocal8Bit(path);
     }
+#endif
 
 #ifdef QT_BUILD_QMAKE
-    // The specs need to be returned verbatim.
-    if (loc == TargetSpecPath || loc == HostSpecPath)
+    // These values aren't actually paths and thus need to be returned verbatim.
+    if (loc == TargetSpecPath || loc == HostSpecPath || loc == SysrootifyPrefixPath)
         return ret;
 #endif
 
@@ -631,6 +663,8 @@ QStringList QLibraryInfo::platformPluginArguments(const QString &platformName)
                 + QLatin1String("Arguments");
         return settings->value(key).toStringList();
     }
+#else
+    Q_UNUSED(platformName);
 #endif // !QT_BUILD_QMAKE && !QT_NO_SETTINGS
     return QStringList();
 }

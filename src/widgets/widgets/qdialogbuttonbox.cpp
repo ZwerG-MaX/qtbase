@@ -410,14 +410,9 @@ QPushButton *QDialogButtonBoxPrivate::createButton(QDialogButtonBox::StandardBut
         qWarning("QDialogButtonBox::createButton: Invalid ButtonRole, button not added");
     else
         addButton(button, static_cast<QDialogButtonBox::ButtonRole>(role), doLayout);
-
-#if 0 // Used to be included in Qt4 for Q_WS_MAC
-    // Since mnemonics is off by default on Mac, we add a Cmd-D
-    // shortcut here to e.g. make the "Don't Save" button work nativly:
-    if (sbutton == QDialogButtonBox::Discard)
-        button->setShortcut(QKeySequence(QLatin1String("Ctrl+D")));
+#if QT_CONFIG(shortcut)
+    button->setShortcut(QGuiApplicationPrivate::platformTheme()->standardButtonShortcut(sbutton));
 #endif
-
     return button;
 }
 
@@ -716,8 +711,7 @@ void QDialogButtonBox::removeButton(QAbstractButton *button)
         return;
 
     // Remove it from the standard button hash first and then from the roles
-    if (QPushButton *pushButton = qobject_cast<QPushButton *>(button))
-        d->standardButtonHash.remove(pushButton);
+    d->standardButtonHash.remove(reinterpret_cast<QPushButton *>(button));
     for (int i = 0; i < NRoles; ++i) {
         QList<QAbstractButton *> &list = d->buttonLists[i];
         for (int j = 0; j < list.count(); ++j) {
@@ -883,7 +877,7 @@ void QDialogButtonBoxPrivate::_q_handleButtonDestroyed()
     Q_Q(QDialogButtonBox);
     if (QObject *object = q->sender()) {
         QBoolBlocker skippy(internalRemove);
-        q->removeButton(static_cast<QAbstractButton *>(object));
+        q->removeButton(reinterpret_cast<QAbstractButton *>(object));
     }
 }
 

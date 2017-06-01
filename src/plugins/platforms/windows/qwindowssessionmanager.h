@@ -59,15 +59,15 @@ class QWindowsSessionManager : public QPlatformSessionManager
 public:
     explicit QWindowsSessionManager(const QString &id, const QString &key);
 
-    bool allowsInteraction() Q_DECL_OVERRIDE;
-    bool allowsErrorInteraction() Q_DECL_OVERRIDE;
+    bool allowsInteraction() override;
+    bool allowsErrorInteraction() override;
 
     void blocksInteraction() { m_blockUserInput = true; }
     bool isInteractionBlocked() const { return m_blockUserInput; }
 
-    void release() Q_DECL_OVERRIDE;
+    void release() override;
 
-    void cancel() Q_DECL_OVERRIDE;
+    void cancel() override;
     void clearCancellation() { m_canceled = false; }
     bool wasCanceled() const { return m_canceled; }
 
@@ -75,9 +75,9 @@ public:
     bool isActive() const { return m_isActive;}
 
 private:
-    bool m_isActive;
-    bool m_blockUserInput;
-    bool m_canceled;
+    bool m_isActive = false;
+    bool m_blockUserInput = false;
+    bool m_canceled = false;
 
     Q_DISABLE_COPY(QWindowsSessionManager)
 };

@@ -89,12 +89,16 @@ static QImage rotated90(const QImage &src);
 static QImage rotated180(const QImage &src);
 static QImage rotated270(const QImage &src);
 
-QBasicAtomicInt qimage_serial_number = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int next_qimage_serial_number()
+{
+    static QBasicAtomicInt serial = Q_BASIC_ATOMIC_INITIALIZER(0);
+    return 1 + serial.fetchAndAddRelaxed(1);
+}
 
 QImageData::QImageData()
     : ref(0), width(0), height(0), depth(0), nbytes(0), devicePixelRatio(1.0), data(0),
       format(QImage::Format_ARGB32), bytes_per_line(0),
-      ser_no(qimage_serial_number.fetchAndAddRelaxed(1)),
+      ser_no(next_qimage_serial_number()),
       detach_no(0),
       dpmx(qt_defaultDpiX() * 100 / qreal(2.54)),
       dpmy(qt_defaultDpiY() * 100 / qreal(2.54)),
@@ -1067,7 +1071,7 @@ QImage::operator QVariant() const
 
     Nothing is done if there is just a single reference.
 
-    \sa copy(), isDetached(), {Implicit Data Sharing}
+    \sa copy(), {QImage::isDetached()}{isDetached()}, {Implicit Data Sharing}
 */
 void QImage::detach()
 {
@@ -2118,6 +2122,44 @@ QImage QImage::convertToFormat(Format format, const QVector<QRgb> &colorTable, Q
 
     converter(image.d, d, flags);
     return image;
+}
+
+/*!
+    \since 5.9
+
+    Changes the \a format of the image without changing the data. Only
+    works between formats of the same depth.
+
+    Returns \c true if successful.
+
+    This function can be used to change images with alpha-channels to
+    their corresponding opaque formats if the data is known to be opaque-only,
+    or to change the format of a given image buffer before overwriting
+    it with new data.
+
+    \warning The function does not check if the image data is valid in the
+    new format and will still return \c true if the depths are compatible.
+    Operations on an image with invalid data are undefined.
+
+    \warning If the image is not detached, this will cause the data to be
+    copied.
+
+    \sa isDetached(), hasAlphaChannel(), convertToFormat()
+*/
+
+bool QImage::reinterpretAsFormat(Format format)
+{
+    if (!d)
+        return false;
+    if (d->format == format)
+        return true;
+    if (qt_depthForFormat(format) != qt_depthForFormat(d->format))
+        return false;
+    if (!isDetached()) // Detach only if shared, not for read-only data.
+        detach();
+
+    d->format = format;
+    return true;
 }
 
 /*!
@@ -4458,7 +4500,8 @@ QImage QImage::smoothScaled(int w, int h) const {
     return src;
 }
 
-static QImage rotated90(const QImage &image) {
+static QImage rotated90(const QImage &image)
+{
     QImage out(image.height(), image.width(), image.format());
     out.setDotsPerMeterX(image.dotsPerMeterY());
     out.setDotsPerMeterY(image.dotsPerMeterX());
@@ -4466,49 +4509,10 @@ static QImage rotated90(const QImage &image) {
         out.setColorTable(image.colorTable());
     int w = image.width();
     int h = image.height();
-    switch (image.format()) {
-    case QImage::Format_RGB32:
-    case QImage::Format_ARGB32:
-    case QImage::Format_ARGB32_Premultiplied:
-    case QImage::Format_RGBX8888:
-    case QImage::Format_RGBA8888:
-    case QImage::Format_RGBA8888_Premultiplied:
-    case QImage::Format_BGR30:
-    case QImage::Format_A2BGR30_Premultiplied:
-    case QImage::Format_RGB30:
-    case QImage::Format_A2RGB30_Premultiplied:
-        qt_memrotate270(reinterpret_cast<const quint32*>(image.bits()),
-                        w, h, image.bytesPerLine(),
-                        reinterpret_cast<quint32*>(out.bits()),
-                        out.bytesPerLine());
-        break;
-    case QImage::Format_RGB666:
-    case QImage::Format_ARGB6666_Premultiplied:
-    case QImage::Format_ARGB8565_Premultiplied:
-    case QImage::Format_ARGB8555_Premultiplied:
-    case QImage::Format_RGB888:
-        qt_memrotate270(reinterpret_cast<const quint24*>(image.bits()),
-                        w, h, image.bytesPerLine(),
-                        reinterpret_cast<quint24*>(out.bits()),
-                        out.bytesPerLine());
-        break;
-    case QImage::Format_RGB555:
-    case QImage::Format_RGB16:
-    case QImage::Format_ARGB4444_Premultiplied:
-        qt_memrotate270(reinterpret_cast<const quint16*>(image.bits()),
-                        w, h, image.bytesPerLine(),
-                        reinterpret_cast<quint16*>(out.bits()),
-                        out.bytesPerLine());
-        break;
-    case QImage::Format_Alpha8:
-    case QImage::Format_Grayscale8:
-    case QImage::Format_Indexed8:
-        qt_memrotate270(reinterpret_cast<const quint8*>(image.bits()),
-                        w, h, image.bytesPerLine(),
-                        reinterpret_cast<quint8*>(out.bits()),
-                        out.bytesPerLine());
-        break;
-    default:
+    const MemRotateFunc memrotate = qMemRotateFunctions[qPixelLayouts[image.format()].bpp][2];
+    if (memrotate) {
+        memrotate(image.constBits(), w, h, image.bytesPerLine(), out.bits(), out.bytesPerLine());
+    } else {
         for (int y=0; y<h; ++y) {
             if (image.colorCount())
                 for (int x=0; x<w; ++x)
@@ -4517,18 +4521,29 @@ static QImage rotated90(const QImage &image) {
                 for (int x=0; x<w; ++x)
                     out.setPixel(h-y-1, x, image.pixel(x, y));
         }
-        break;
     }
     return out;
 }
 
+static QImage rotated180(const QImage &image)
+{
+    const MemRotateFunc memrotate = qMemRotateFunctions[qPixelLayouts[image.format()].bpp][1];
+    if (!memrotate)
+        return image.mirrored(true, true);
 
-static QImage rotated180(const QImage &image) {
-    return image.mirrored(true, true);
+    QImage out(image.width(), image.height(), image.format());
+    out.setDotsPerMeterX(image.dotsPerMeterY());
+    out.setDotsPerMeterY(image.dotsPerMeterX());
+    if (image.colorCount() > 0)
+        out.setColorTable(image.colorTable());
+    int w = image.width();
+    int h = image.height();
+    memrotate(image.constBits(), w, h, image.bytesPerLine(), out.bits(), out.bytesPerLine());
+    return out;
 }
 
-
-static QImage rotated270(const QImage &image) {
+static QImage rotated270(const QImage &image)
+{
     QImage out(image.height(), image.width(), image.format());
     out.setDotsPerMeterX(image.dotsPerMeterY());
     out.setDotsPerMeterY(image.dotsPerMeterX());
@@ -4536,49 +4551,10 @@ static QImage rotated270(const QImage &image) {
         out.setColorTable(image.colorTable());
     int w = image.width();
     int h = image.height();
-    switch (image.format()) {
-    case QImage::Format_RGB32:
-    case QImage::Format_ARGB32:
-    case QImage::Format_ARGB32_Premultiplied:
-    case QImage::Format_RGBX8888:
-    case QImage::Format_RGBA8888:
-    case QImage::Format_RGBA8888_Premultiplied:
-    case QImage::Format_BGR30:
-    case QImage::Format_A2BGR30_Premultiplied:
-    case QImage::Format_RGB30:
-    case QImage::Format_A2RGB30_Premultiplied:
-        qt_memrotate90(reinterpret_cast<const quint32*>(image.bits()),
-                       w, h, image.bytesPerLine(),
-                       reinterpret_cast<quint32*>(out.bits()),
-                       out.bytesPerLine());
-        break;
-    case QImage::Format_RGB666:
-    case QImage::Format_ARGB6666_Premultiplied:
-    case QImage::Format_ARGB8565_Premultiplied:
-    case QImage::Format_ARGB8555_Premultiplied:
-    case QImage::Format_RGB888:
-        qt_memrotate90(reinterpret_cast<const quint24*>(image.bits()),
-                       w, h, image.bytesPerLine(),
-                       reinterpret_cast<quint24*>(out.bits()),
-                       out.bytesPerLine());
-        break;
-    case QImage::Format_RGB555:
-    case QImage::Format_RGB16:
-    case QImage::Format_ARGB4444_Premultiplied:
-       qt_memrotate90(reinterpret_cast<const quint16*>(image.bits()),
-                       w, h, image.bytesPerLine(),
-                       reinterpret_cast<quint16*>(out.bits()),
-                       out.bytesPerLine());
-        break;
-    case QImage::Format_Alpha8:
-    case QImage::Format_Grayscale8:
-    case QImage::Format_Indexed8:
-        qt_memrotate90(reinterpret_cast<const quint8*>(image.bits()),
-                       w, h, image.bytesPerLine(),
-                       reinterpret_cast<quint8*>(out.bits()),
-                       out.bytesPerLine());
-        break;
-    default:
+    const MemRotateFunc memrotate = qMemRotateFunctions[qPixelLayouts[image.format()].bpp][0];
+    if (memrotate) {
+        memrotate(image.constBits(), w, h, image.bytesPerLine(), out.bits(), out.bytesPerLine());
+    } else {
         for (int y=0; y<h; ++y) {
             if (image.colorCount())
                 for (int x=0; x<w; ++x)
@@ -4587,7 +4563,6 @@ static QImage rotated270(const QImage &image) {
                 for (int x=0; x<w; ++x)
                     out.setPixel(y, w-x-1, image.pixel(x, y));
         }
-        break;
     }
     return out;
 }
@@ -4696,7 +4671,7 @@ QImage QImage::transformed(const QTransform &matrix, Qt::TransformationMode mode
     }
 
     // initizialize the data
-    if (d->format == QImage::Format_Indexed8) {
+    if (target_format == QImage::Format_Indexed8) {
         if (dImage.d->colortable.size() < 256) {
             // colors are left in the color table, so pick that one as transparent
             dImage.d->colortable.append(0x0);

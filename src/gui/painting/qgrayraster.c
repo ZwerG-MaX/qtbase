@@ -162,14 +162,12 @@
 #include <private/qrasterdefs_p.h>
 #include <private/qgrayraster_p.h>
 
+#include <qcompilerdetection.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 
-  /* This macro is used to indicate that a function parameter is unused. */
-  /* Its purpose is simply to reduce compiler warnings.  Note also that  */
-  /* simply defining it as `(void)x' doesn't avoid warnings with certain */
-  /* ANSI compilers (e.g. LCC).                                          */
-#define QT_FT_UNUSED( x )  (x) = (x)
+#define QT_FT_UNUSED( x )  (void) x
 
   /* Disable the tracing mechanism for simplicity -- developers can      */
   /* activate it easily by redefining these two macros.                  */
@@ -1147,12 +1145,12 @@
 
           switch ( spans->len )
           {
-          case 7: *q++ = (unsigned char)coverage;
-          case 6: *q++ = (unsigned char)coverage;
-          case 5: *q++ = (unsigned char)coverage;
-          case 4: *q++ = (unsigned char)coverage;
-          case 3: *q++ = (unsigned char)coverage;
-          case 2: *q++ = (unsigned char)coverage;
+          case 7: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
+          case 6: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
+          case 5: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
+          case 4: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
+          case 3: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
+          case 2: *q++ = (unsigned char)coverage; Q_FALLTHROUGH();
           case 1: *q   = (unsigned char)coverage;
           default:
             ;

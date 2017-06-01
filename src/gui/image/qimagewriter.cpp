@@ -283,8 +283,13 @@ bool QImageWriterPrivate::canWriteHelper()
         errorString = QImageWriter::tr("Device is not set");
         return false;
     }
-    if (!device->isOpen())
-        device->open(QIODevice::WriteOnly);
+    if (!device->isOpen()) {
+        if (!device->open(QIODevice::WriteOnly)) {
+            imageWriterError = QImageWriter::DeviceError;
+            errorString = QImageWriter::tr("Cannot open device for writing: %1").arg(device->errorString());
+            return false;
+        }
+    }
     if (!device->isWritable()) {
         imageWriterError = QImageWriter::DeviceError;
         errorString = QImageWriter::tr("Device not writable");
@@ -705,6 +710,11 @@ bool QImageWriter::canWrite() const
     if (QFile *file = qobject_cast<QFile *>(d->device)) {
         const bool remove = !file->isOpen() && !file->exists();
         const bool result = d->canWriteHelper();
+
+        // This looks strange (why remove if it doesn't exist?) but the issue
+        // here is that canWriteHelper will create the file in the process of
+        // checking if the write can succeed. If it subsequently fails, we
+        // should remove that empty file.
         if (!result && remove)
             file->remove();
         return result;

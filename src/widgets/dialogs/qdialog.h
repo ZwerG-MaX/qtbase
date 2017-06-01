@@ -43,6 +43,8 @@
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtWidgets/qwidget.h>
 
+QT_REQUIRE_CONFIG(dialog);
+
 QT_BEGIN_NAMESPACE
 
 
@@ -65,7 +67,7 @@ public:
 
     int result() const;
 
-    void setVisible(bool visible);
+    void setVisible(bool visible) override;
 
     void setOrientation(Qt::Orientation orientation);
     Qt::Orientation orientation() const;
@@ -73,8 +75,8 @@ public:
     void setExtension(QWidget* extension);
     QWidget* extension() const;
 
-    QSize sizeHint() const;
-    QSize minimumSizeHint() const;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
 
     void setSizeGripEnabled(bool);
     bool isSizeGripEnabled() const;
@@ -99,14 +101,14 @@ public Q_SLOTS:
 protected:
     QDialog(QDialogPrivate &, QWidget *parent, Qt::WindowFlags f = Qt::WindowFlags());
 
-    void keyPressEvent(QKeyEvent *);
-    void closeEvent(QCloseEvent *);
-    void showEvent(QShowEvent *);
-    void resizeEvent(QResizeEvent *);
+    void keyPressEvent(QKeyEvent *) override;
+    void closeEvent(QCloseEvent *) override;
+    void showEvent(QShowEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
 #ifndef QT_NO_CONTEXTMENU
-    void contextMenuEvent(QContextMenuEvent *);
+    void contextMenuEvent(QContextMenuEvent *) override;
 #endif
-    bool eventFilter(QObject *, QEvent *);
+    bool eventFilter(QObject *, QEvent *) override;
     void adjustPosition(QWidget*);
 private:
     Q_DECLARE_PRIVATE(QDialog)

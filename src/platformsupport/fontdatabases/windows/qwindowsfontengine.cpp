@@ -239,21 +239,9 @@ QWindowsFontEngine::QWindowsFontEngine(const QString &name,
     : QFontEngine(Win),
     m_fontEngineData(fontEngineData),
     _name(name),
-    hfont(0),
     m_logfont(lf),
     ttf(0),
-    hasOutline(0),
-    cmap(0),
-    cmapSize(0),
-    lbearing(SHRT_MIN),
-    rbearing(SHRT_MIN),
-    x_height(-1),
-    synthesized_flags(-1),
-    lineWidth(-1),
-    widthCache(0),
-    widthCacheSize(0),
-    designAdvances(0),
-    designAdvancesSize(0)
+    hasOutline(0)
 {
     qCDebug(lcQpaFonts) << __FUNCTION__ << name << lf.lfHeight;
     hfont = CreateFontIndirect(&m_logfont);
@@ -908,7 +896,7 @@ int QWindowsFontEngine::synthesized() const
                 synthesized_flags = SynthesizedItalic;
             if (fontDef.stretch != 100 && ttf)
                 synthesized_flags |= SynthesizedStretch;
-            if (tm.tmWeight >= 500 && !(macStyle & 1))
+            if (tm.tmWeight >= 500 && tm.tmWeight < 750 && !(macStyle & 1))
                 synthesized_flags |= SynthesizedBold;
             //qDebug() << "font is" << _name <<
             //    "it=" << (macStyle & 2) << fontDef.style << "flags=" << synthesized_flags;
@@ -1293,6 +1281,7 @@ QFontEngine *QWindowsMultiFontEngine::loadEngine(int at)
                     fedw->fontDef.style = fontEngine->fontDef.style;
                 fedw->fontDef.family = fam;
                 fedw->fontDef.hintingPreference = fontEngine->fontDef.hintingPreference;
+                fedw->fontDef.stretch = fontEngine->fontDef.stretch;
                 return fedw;
             } else {
                 qErrnoWarning("%s: CreateFontFace failed", __FUNCTION__);
@@ -1310,6 +1299,7 @@ QFontEngine *QWindowsMultiFontEngine::loadEngine(int at)
         fe->fontDef.style = fontEngine->fontDef.style;
     fe->fontDef.family = fam;
     fe->fontDef.hintingPreference = fontEngine->fontDef.hintingPreference;
+    fe->fontDef.stretch = fontEngine->fontDef.stretch;
     return fe;
 }
 

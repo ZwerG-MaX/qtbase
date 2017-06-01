@@ -885,6 +885,8 @@ public:
 
         qreal pressure() const;
         qreal rotation() const;
+        QSizeF ellipseDiameters() const;
+
         QVector2D velocity() const;
         InfoFlags flags() const;
         QVector<QPointF> rawScreenPositions() const;
@@ -905,11 +907,12 @@ public:
         void setLastScenePos(const QPointF &lastScenePos);
         void setLastScreenPos(const QPointF &lastScreenPos);
         void setLastNormalizedPos(const QPointF &lastNormalizedPos);
-        void setRect(const QRectF &rect);
-        void setSceneRect(const QRectF &sceneRect);
-        void setScreenRect(const QRectF &screenRect);
+        void setRect(const QRectF &rect); // deprecated
+        void setSceneRect(const QRectF &sceneRect); // deprecated
+        void setScreenRect(const QRectF &screenRect); // deprecated
         void setPressure(qreal pressure);
         void setRotation(qreal angle);
+        void setEllipseDiameters(const QSizeF &dia);
         void setVelocity(const QVector2D &v);
         void setFlags(InfoFlags flags);
         void setRawScreenPositions(const QVector<QPointF> &positions);

@@ -126,9 +126,9 @@ private:
     bool m_isSeparator : 1;
     bool m_isCheckable : 1;
     bool m_isChecked : 1;
-    int m_dbusID : 16;
     bool m_hasExclusiveGroup : 1;
-    int m_reserved : 6;
+    short /*unused*/ : 6;
+    short m_dbusID : 16;
     QKeySequence m_shortcut;
 };
 
@@ -161,13 +161,7 @@ public:
     void setMenuType(MenuType type) Q_DECL_OVERRIDE { Q_UNUSED(type); }
     void setContainingMenuItem(QDBusPlatformMenuItem *item);
 
-    void showPopup(const QWindow *parentWindow, const QRect &targetRect, const QPlatformMenuItem *item) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(parentWindow);
-        Q_UNUSED(targetRect);
-        Q_UNUSED(item);
-        setVisible(true);
-    }
+    void showPopup(const QWindow *parentWindow, const QRect &targetRect, const QPlatformMenuItem *item) Q_DECL_OVERRIDE;
 
     void dismiss() Q_DECL_OVERRIDE { } // Closes this and all its related menu popups
 
@@ -187,6 +181,7 @@ public:
 signals:
     void updated(uint revision, int dbusId);
     void propertiesUpdated(QDBusMenuItemList updatedProps, QDBusMenuItemKeysList removedProps);
+    void popupRequested(int id, uint timestamp);
 
 private:
     quintptr m_tag;
@@ -194,7 +189,6 @@ private:
     QIcon m_icon;
     bool m_isEnabled;
     bool m_isVisible;
-    bool m_isSeparator;
     uint m_revision;
     QHash<quintptr, QDBusPlatformMenuItem *> m_itemsByTag;
     QList<QDBusPlatformMenuItem *> m_items;

@@ -80,6 +80,10 @@ QT_BEGIN_NAMESPACE
     \value MouseDoubleClickInterval (int) Mouse double click interval in ms,
                                     overriding QPlatformIntegration::styleHint.
 
+    \value MouseDoubleClickDistance (int) The maximum distance in logical pixels which the mouse can travel
+                        between clicks in order for the click sequence to be handled as a double click.
+                        The default value is 5 logical pixels.
+
     \value MousePressAndHoldInterval (int) Mouse press and hold interval in ms,
                                     overriding QPlatformIntegration::styleHint.
 
@@ -88,6 +92,9 @@ QT_BEGIN_NAMESPACE
 
     \value StartDragTime (int) Start drag time in ms,
                                overriding QPlatformIntegration::styleHint.
+
+    \value WheelScrollLines (int) The number of lines to scroll a widget, when the mouse wheel is rotated.
+                        The default value is 3.  \sa QApplication::wheelScrollLines()
 
     \value KeyboardAutoRepeatRate (int) Keyboard auto repeat rate,
                                   overriding QPlatformIntegration::styleHint.
@@ -148,6 +155,11 @@ QT_BEGIN_NAMESPACE
                                      becomes visible.
 
     \value ContextMenuOnMouseRelease (bool) Whether the context menu should be shown on mouse release.
+
+    \value TouchDoubleTapDistance (int) The maximum distance in logical pixels which a touchpoint can travel
+                        between taps in order for the tap sequence to be handled as a double tap.
+                        The default value is double the MouseDoubleClickDistance, or 10 logical pixels
+                        if that is not specified.
 
     \sa themeHint(), QStyle::pixelMetric()
 */
@@ -533,6 +545,14 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
         }
     case WheelScrollLines:
         return QVariant(3);
+    case TouchDoubleTapDistance:
+        {
+            bool ok = false;
+            int dist = qEnvironmentVariableIntValue("QT_DBL_TAP_DIST", &ok);
+            if (!ok)
+                dist = defaultThemeHint(MouseDoubleClickDistance).toInt(&ok) * 2;
+            return QVariant(ok ? dist : 10);
+        }
     }
     return QVariant();
 }
@@ -656,6 +676,19 @@ QList<QKeySequence> QPlatformTheme::keyBindings(QKeySequence::StandardKey key) c
 QString QPlatformTheme::standardButtonText(int button) const
 {
     return QPlatformTheme::defaultStandardButtonText(button);
+}
+
+/*!
+   Returns the mnemonic that should be used for a standard \a button.
+
+  \since 5.9
+  \sa QPlatformDialogHelper::StandardButton
+ */
+
+QKeySequence QPlatformTheme::standardButtonShortcut(int button) const
+{
+    Q_UNUSED(button)
+    return QKeySequence();
 }
 
 QString QPlatformTheme::defaultStandardButtonText(int button)

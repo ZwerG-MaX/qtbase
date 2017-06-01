@@ -145,7 +145,7 @@ struct QGenericArrayOps
 
         T *const begin = this->begin();
         do {
-            new (begin + this->size) T();
+            new (begin + this->size) T;
         } while (uint(++this->size) != newSize);
     }
 
@@ -411,18 +411,18 @@ struct QArrayOpsSelector
 
 template <class T>
 struct QArrayOpsSelector<T,
-    typename QEnableIf<
-        !QTypeInfo<T>::isComplex && !QTypeInfo<T>::isStatic
-    >::Type>
+    typename std::enable_if<
+        !QTypeInfoQuery<T>::isComplex && QTypeInfoQuery<T>::isRelocatable
+    >::type>
 {
     typedef QPodArrayOps<T> Type;
 };
 
 template <class T>
 struct QArrayOpsSelector<T,
-    typename QEnableIf<
-        QTypeInfo<T>::isComplex && !QTypeInfo<T>::isStatic
-    >::Type>
+    typename std::enable_if<
+        QTypeInfoQuery<T>::isComplex && QTypeInfoQuery<T>::isRelocatable
+    >::type>
 {
     typedef QMovableArrayOps<T> Type;
 };

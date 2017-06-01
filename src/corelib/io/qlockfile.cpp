@@ -44,6 +44,7 @@
 #include <QtCore/qthread.h>
 #include <QtCore/qdeadlinetimer.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qfileinfo.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -84,6 +85,9 @@ QT_BEGIN_NAMESPACE
     For the use case of protecting a resource over a long time, you should therefore call
     setStaleLockTime(0), and when tryLock() returns LockFailedError, inform the user
     that the document is locked, possibly using getLockInfo() for more details.
+
+    \note On Windows, this class has problems detecting a stale lock if the
+    machine's hostname contains characters outside the US-ASCII character set.
 */
 
 /*!
@@ -223,6 +227,8 @@ bool QLockFile::tryLock(int timeout)
             return false;
         case LockFailedError:
             if (!d->isLocked && d->isApparentlyStale()) {
+                if (Q_UNLIKELY(QFileInfo(d->fileName).lastModified() > QDateTime::currentDateTime()))
+                    qInfo("QLockFile: Lock file '%ls' has a modification time in the future", qUtf16Printable(d->fileName));
                 // Stale lock from another thread/process
                 // Ensure two processes don't remove it at the same time
                 QLockFile rmlock(d->fileName + QLatin1String(".rmlock"));

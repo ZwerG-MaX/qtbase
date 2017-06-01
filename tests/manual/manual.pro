@@ -1,4 +1,5 @@
 TEMPLATE=subdirs
+QT_FOR_CONFIG += network-private gui-private
 
 SUBDIRS = bearerex \
 filetest \
@@ -51,9 +52,10 @@ xembed-widgets \
 shortcuts \
 dialogs \
 windowtransparency \
-unc
+unc \
+qtabbar
 
-!qtConfig(openssl):!qtConfig(openssl-linked): SUBDIRS -= qssloptions
+!qtConfig(openssl): SUBDIRS -= qssloptions
 
 qtConfig(opengl) {
     SUBDIRS += qopengltextureblitter

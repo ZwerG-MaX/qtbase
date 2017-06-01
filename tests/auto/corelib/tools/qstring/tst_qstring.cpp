@@ -1066,6 +1066,7 @@ void tst_QString::acc_01()
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_GCC("-Wformat-security")
+QT_WARNING_DISABLE_CLANG("-Wformat-security")
 
 void tst_QString::isNull()
 {
@@ -1255,6 +1256,11 @@ void tst_QString::fill()
     QCOMPARE(f, QLatin1String("FFF"));
 }
 
+static inline const void *ptrValue(quintptr v)
+{
+    return reinterpret_cast<const void *>(v);
+}
+
 void tst_QString::sprintf()
 {
     QString a;
@@ -1266,21 +1272,21 @@ void tst_QString::sprintf()
     QCOMPARE(a.sprintf("X%9iY", 50000 ), QLatin1String("X    50000Y"));
     QCOMPARE(a.sprintf("X%-9sY","hello"), QLatin1String("Xhello    Y"));
     QCOMPARE(a.sprintf("X%-9iY", 50000 ), QLatin1String("X50000    Y"));
-    QCOMPARE(a.sprintf("%lf", 1.23), QString("1.230000"));
-    QCOMPARE(a.sprintf("%lf", 1.23456789), QString("1.234568"));
-    QCOMPARE(a.sprintf("%p", (void *)0xbfffd350), QString("0xbfffd350"));
-    QCOMPARE(a.sprintf("%p", (void *)0), QString("0x0"));
+    QCOMPARE(a.sprintf("%lf", 1.23), QLatin1String("1.230000"));
+    QCOMPARE(a.sprintf("%lf", 1.23456789), QLatin1String("1.234568"));
+    QCOMPARE(a.sprintf("%p", ptrValue(0xbfffd350)), QLatin1String("0xbfffd350"));
+    QCOMPARE(a.sprintf("%p", ptrValue(0)), QLatin1String("0x0"));
 
     int i = 6;
     long l = -2;
     float f = 4.023f;
     QString S1;
     S1.sprintf("%d %ld %f",i,l,f);
-    QCOMPARE(S1,QString("6 -2 4.023000"));
+    QCOMPARE(S1, QLatin1String("6 -2 4.023000"));
 
     double d = -514.25683;
     S1.sprintf("%f",d);
-    QCOMPARE(S1, QString("-514.256830"));
+    QCOMPARE(S1, QLatin1String("-514.256830"));
 }
 
 void tst_QString::sprintfS()
@@ -3812,7 +3818,7 @@ void tst_QString::startsWith()
     QVERIFY( !a.startsWith(QLatin1Char('x')) );
     QVERIFY( !a.startsWith(QChar()) );
 
-    a = QString::null;
+    a = QString();
     QVERIFY( !a.startsWith("") );
     QVERIFY( a.startsWith(QString::null) );
     QVERIFY( !a.startsWith("ABC") );
@@ -3922,7 +3928,7 @@ void tst_QString::endsWith()
     QVERIFY( a.endsWith(QLatin1String(0)) );
     QVERIFY( !a.endsWith(QLatin1String("ABC")) );
 
-    a = QString::null;
+    a = QString();
     QVERIFY( !a.endsWith("") );
     QVERIFY( a.endsWith(QString::null) );
     QVERIFY( !a.endsWith("ABC") );
@@ -4267,11 +4273,7 @@ void tst_QString::local8Bit_data()
     QTest::addColumn<QString>("local8Bit");
     QTest::addColumn<QByteArray>("result");
 
-/*
-    QString::local8Bit() called on a null QString returns an _empty_
-    QByteArray.
-*/
-    QTest::newRow("nullString") << QString() << QByteArray("");
+    QTest::newRow("nullString") << QString() << QByteArray();
     QTest::newRow("emptyString") << QString("") << QByteArray("");
     QTest::newRow("string") << QString("test") << QByteArray("test");
 
@@ -5848,7 +5850,7 @@ void tst_QString::fromUtf16_char16()
 
 void tst_QString::unicodeStrings()
 {
-#ifdef Q_COMPILER_UNICODE_STRINGS
+#ifdef Q_STDLIB_UNICODE_STRINGS
     QString s1, s2;
     static const std::u16string u16str1(u"Hello Unicode World");
     static const std::u32string u32str1(U"Hello Unicode World");
@@ -5863,7 +5865,7 @@ void tst_QString::unicodeStrings()
     s1 = QString::fromStdU32String(std::u32string(U"\u221212\U000020AC\U00010000"));
     QCOMPARE(s1, QString::fromUtf8("\342\210\222" "12" "\342\202\254" "\360\220\200\200"));
 #else
-    QSKIP("Compiler does not support C++11 unicode strings");
+    QSKIP("Standard Library does not support C++11 unicode strings");
 #endif
 }
 
@@ -6064,6 +6066,14 @@ void tst_QString::compare_data()
     lower += QChar(QChar::highSurrogate(0x10428));
     lower += QChar(QChar::lowSurrogate(0x10428));
     QTest::newRow("data8") << upper << lower << -1 << 0;
+
+    QTest::newRow("vectorized-boundaries-7") << QString("1234567") << QString("abcdefg") << -1 << -1;
+    QTest::newRow("vectorized-boundaries-8") << QString("12345678") << QString("abcdefgh") << -1 << -1;
+    QTest::newRow("vectorized-boundaries-9") << QString("123456789") << QString("abcdefghi") << -1 << -1;
+
+    QTest::newRow("vectorized-boundaries-15") << QString("123456789012345") << QString("abcdefghiklmnop") << -1 << -1;
+    QTest::newRow("vectorized-boundaries-16") << QString("1234567890123456") << QString("abcdefghiklmnopq") << -1 << -1;
+    QTest::newRow("vectorized-boundaries-17") << QString("12345678901234567") << QString("abcdefghiklmnopqr") << -1 << -1;
 
     // embedded nulls
     // These don't work as of now. It's OK that these don't work since \0 is not a valid unicode
@@ -6332,7 +6342,7 @@ void tst_QString::repeatedSignature() const
 {
     /* repated() should be a const member. */
     const QString string;
-    string.repeated(3);
+    (void) string.repeated(3);
 }
 
 void tst_QString::repeated() const

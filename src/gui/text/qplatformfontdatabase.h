@@ -84,10 +84,17 @@ private:
 
     friend Q_GUI_EXPORT bool operator==(const QSupportedWritingSystems &, const QSupportedWritingSystems &);
     friend Q_GUI_EXPORT bool operator!=(const QSupportedWritingSystems &, const QSupportedWritingSystems &);
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_GUI_EXPORT QDebug operator<<(QDebug, const QSupportedWritingSystems &);
+#endif
 };
 
 Q_GUI_EXPORT bool operator==(const QSupportedWritingSystems &, const QSupportedWritingSystems &);
 Q_GUI_EXPORT bool operator!=(const QSupportedWritingSystems &, const QSupportedWritingSystems &);
+
+#ifndef QT_NO_DEBUG_STREAM
+Q_GUI_EXPORT QDebug operator<<(QDebug, const QSupportedWritingSystems &);
+#endif
 
 class QFontRequestPrivate;
 class QFontEngineMulti;
@@ -97,6 +104,7 @@ class Q_GUI_EXPORT QPlatformFontDatabase
 public:
     virtual ~QPlatformFontDatabase();
     virtual void populateFontDatabase();
+    virtual bool populateFamilyAliases() { return false; }
     virtual void populateFamily(const QString &familyName);
     virtual void invalidate();
 
@@ -116,7 +124,6 @@ public:
     virtual QString resolveFontFamilyAlias(const QString &family) const;
     virtual bool fontsAlwaysScalable() const;
     virtual QList<int> standardSizes() const;
-    QFontEngine::SubpixelAntialiasingType subpixelAntialiasingTypeHint() const;
 
     // helper
     static QSupportedWritingSystems writingSystemsFromTrueTypeBits(quint32 unicodeRange[4], quint32 codePageRange[2]);

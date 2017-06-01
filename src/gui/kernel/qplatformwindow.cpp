@@ -60,7 +60,7 @@ QPlatformWindow::QPlatformWindow(QWindow *window)
     , d_ptr(new QPlatformWindowPrivate)
 {
     Q_D(QPlatformWindow);
-    d->rect = window->geometry();
+    d->rect = QHighDpi::toNativePixels(window->geometry(), window);
 }
 
 /*!
@@ -192,15 +192,30 @@ bool QPlatformWindow::isActive() const
 }
 
 /*!
-    Returns \c true if the window is a descendant of an embedded non-Qt window.
-    Example of an embedded non-Qt window is the parent window of an in-process QAxServer.
+    Returns \c true if the window is an ancestor of the given \a child.
 
-    If \a parentWindow is nonzero, only check if the window is embedded in the
-    specified \a parentWindow.
+    Platform overrides should iterate the native window hierarchy of the child,
+    to ensure that ancestary is reflected even with native windows in the window
+    hierarchy.
 */
-bool QPlatformWindow::isEmbedded(const QPlatformWindow *parentWindow) const
+bool QPlatformWindow::isAncestorOf(const QPlatformWindow *child) const
 {
-    Q_UNUSED(parentWindow);
+    for (const QPlatformWindow *parent = child->parent(); parent; parent = child->parent()) {
+        if (parent == this)
+            return true;
+    }
+
+    return false;
+}
+
+/*!
+    Returns \c true if the window is a child of a non-Qt window.
+
+    A embedded window has no parent platform window as reflected
+    though parent(), but will have a native parent window.
+*/
+bool QPlatformWindow::isEmbedded() const
+{
     return false;
 }
 
@@ -262,13 +277,13 @@ WId QPlatformWindow::winId() const
     return WId(1);
 }
 
+//jl: It would be useful to have a property on the platform window which indicated if the sub-class
+// supported the setParent. If not, then geometry would be in screen coordinates.
 /*!
     This function is called to enable native child window in QPA. It is common not to support this
     feature in Window systems, but can be faked. When this function is called all geometry of this
     platform window will be relative to the parent.
 */
-//jl: It would be useful to have a property on the platform window which indicated if the sub-class
-// supported the setParent. If not, then geometry would be in screen coordinates.
 void QPlatformWindow::setParent(const QPlatformWindow *parent)
 {
     Q_UNUSED(parent);
@@ -493,7 +508,7 @@ QPlatformScreen *QPlatformWindow::screenForGeometry(const QRect &newGeometry) co
     // QRect::center can return a value outside the rectangle if it's empty.
     // Apply mapToGlobal() in case it is a foreign/embedded window.
     QPoint center = newGeometry.isEmpty() ? newGeometry.topLeft() : newGeometry.center();
-    if (window()->type() == Qt::ForeignWindow)
+    if (isForeignWindow())
         center = mapToGlobal(center - newGeometry.topLeft());
 
     if (!parent() && currentScreen && !currentScreen->geometry().contains(center)) {
@@ -546,7 +561,8 @@ bool QPlatformWindow::isAlertState() const
 // Return the effective screen for the initial geometry of a window. In a
 // multimonitor-setup, try to find the right screen by checking the transient
 // parent or the mouse cursor for parentless windows (cf QTBUG-34204,
-// QDialog::adjustPosition()).
+// QDialog::adjustPosition()), unless a non-primary screen has been set,
+// in which case we try to respect that.
 static inline const QScreen *effectiveScreen(const QWindow *window)
 {
     if (!window)
@@ -554,6 +570,8 @@ static inline const QScreen *effectiveScreen(const QWindow *window)
     const QScreen *screen = window->screen();
     if (!screen)
         return QGuiApplication::primaryScreen();
+    if (screen != QGuiApplication::primaryScreen())
+        return screen;
 #ifndef QT_NO_CURSOR
     const QList<QScreen *> siblings = screen->virtualSiblings();
     if (siblings.size() > 1) {

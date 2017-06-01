@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2017 Intel Corporation.
 ** Copyright (C) 2016 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -58,7 +59,8 @@
 #ifdef QT_BUILD_INTERNAL
 
 QT_BEGIN_NAMESPACE
-extern Q_AUTOTEST_EXPORT QString qt_normalizePathSegments(const QString &, bool);
+extern Q_AUTOTEST_EXPORT QString
+    qt_normalizePathSegments(const QString &path, bool allowUncPaths, bool *ok = nullptr);
 QT_END_NAMESPACE
 
 #endif
@@ -98,13 +100,11 @@ private slots:
 
     void entryListWithSymLinks();
 
-    void mkdir_data();
-    void mkdir();
+    void mkdirRmdir_data();
+    void mkdirRmdir();
+    void mkdirOnSymlink();
 
     void makedirReturnCode();
-
-    void rmdir_data();
-    void rmdir();
 
     void removeRecursively_data();
     void removeRecursively();
@@ -209,6 +209,9 @@ private slots:
 
     void cdBelowRoot_data();
     void cdBelowRoot();
+
+    void emptyDir();
+    void nonEmptyDir();
 
 private:
 #ifdef BUILTIN_TESTDATA
@@ -338,26 +341,29 @@ void tst_QDir::setPath()
     QCOMPARE(shared.entryList(), entries2);
 }
 
-void tst_QDir::mkdir_data()
+void tst_QDir::mkdirRmdir_data()
 {
     QTest::addColumn<QString>("path");
     QTest::addColumn<bool>("recurse");
 
     QStringList dirs;
-    dirs << QDir::currentPath() + "/testdir/one/two/three"
-         << QDir::currentPath() + "/testdir/two"
-         << QDir::currentPath() + "/testdir/two/three";
-    QTest::newRow("data0") << dirs.at(0) << true;
-    QTest::newRow("data1") << dirs.at(1) << false;
-    QTest::newRow("data2") << dirs.at(2) << false;
+    dirs << "testdir/one"
+         << "testdir/two/three/four"
+         << "testdir/../testdir/three";
+    QTest::newRow("plain") << QDir::currentPath() + "/" + dirs.at(0) << false;
+    QTest::newRow("recursive") << QDir::currentPath() + "/" + dirs.at(1) << true;
+    QTest::newRow("with-..") << QDir::currentPath() + "/" + dirs.at(2) << false;
+
+    QTest::newRow("relative-plain") << dirs.at(0) << false;
+    QTest::newRow("relative-recursive") << dirs.at(1) << true;
+    QTest::newRow("relative-with-..") << dirs.at(2) << false;
 
     // Ensure that none of these directories already exist
-    QDir dir;
     for (int i = 0; i < dirs.count(); ++i)
-        dir.rmpath(dirs.at(i));
+        QVERIFY(!QFile::exists(dirs.at(i)));
 }
 
-void tst_QDir::mkdir()
+void tst_QDir::mkdirRmdir()
 {
     QFETCH(QString, path);
     QFETCH(bool, recurse);
@@ -372,6 +378,65 @@ void tst_QDir::mkdir()
     //make sure it really exists (ie that mkdir returns the right value)
     QFileInfo fi(path);
     QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
+
+    if (recurse)
+        QVERIFY(dir.rmpath(path));
+    else
+        QVERIFY(dir.rmdir(path));
+
+    //make sure it really doesn't exist (ie that rmdir returns the right value)
+    fi.refresh();
+    QVERIFY(!fi.exists());
+}
+
+void tst_QDir::mkdirOnSymlink()
+{
+#ifndef Q_OS_UNIX
+    QSKIP("Test only valid on an OS that supports symlinks");
+#else
+    // Create the structure:
+    //    .
+    //    ├── symlink -> two/three
+    //    └── two
+    //        └── three
+    // so when we mkdir("symlink/../four/five"), we end up with:
+    //    .
+    //    ├── symlink -> two/three
+    //    └── two
+    //        ├── four
+    //        │   └── five
+    //        └── three
+
+    QDir dir;
+    struct Clean {
+        QDir &dir;
+        Clean(QDir &dir) : dir(dir) {}
+        ~Clean() { doClean(); }
+        void doClean() {
+            dir.rmpath("two/three");
+            dir.rmpath("two/four/five");
+            // in case the test fails, don't leave junk behind
+            dir.rmpath("four/five");
+            QFile::remove("symlink");
+        }
+    };
+    Clean clean(dir);
+    clean.doClean();
+
+    // create our structure:
+    dir.mkpath("two/three");
+    ::symlink("two/three", "symlink");
+
+    // try it:
+    QString path = "symlink/../four/five";
+    QVERIFY(dir.mkpath(path));
+    QFileInfo fi(path);
+    QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
+
+    path = "two/four/five";
+    fi.setFile(path);
+    QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
+#endif
 }
 
 void tst_QDir::makedirReturnCode()
@@ -399,32 +464,6 @@ void tst_QDir::makedirReturnCode()
     QVERIFY(!QDir::current().mkdir(dirName)); // calling mkdir on an existing file will fail.
     QVERIFY(!QDir::current().mkpath(dirName)); // calling mkpath on an existing file will fail.
     f.remove();
-}
-
-void tst_QDir::rmdir_data()
-{
-    QTest::addColumn<QString>("path");
-    QTest::addColumn<bool>("recurse");
-
-    QTest::newRow("data0") << QDir::currentPath() + "/testdir/one/two/three" << true;
-    QTest::newRow("data1") << QDir::currentPath() + "/testdir/two/three" << false;
-    QTest::newRow("data2") << QDir::currentPath() + "/testdir/two" << false;
-}
-
-void tst_QDir::rmdir()
-{
-    QFETCH(QString, path);
-    QFETCH(bool, recurse);
-
-    QDir dir;
-    if (recurse)
-        QVERIFY(dir.rmpath(path));
-    else
-        QVERIFY(dir.rmdir(path));
-
-    //make sure it really doesn't exist (ie that rmdir returns the right value)
-    QFileInfo fi(path);
-    QVERIFY(!fi.exists());
 }
 
 void tst_QDir::removeRecursively_data()
@@ -851,7 +890,7 @@ void tst_QDir::entryList()
 
 void tst_QDir::entryListTimedSort()
 {
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
     const QString touchBinary = "/bin/touch";
     if (!QFile::exists(touchBinary))
         QSKIP("/bin/touch not found");
@@ -885,7 +924,7 @@ void tst_QDir::entryListTimedSort()
     QCOMPARE(actual.last(), aFileInfo.fileName());
 #else
     QSKIP("This test requires QProcess support.");
-#endif // QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 void tst_QDir::entryListSimple_data()
@@ -1149,6 +1188,8 @@ tst_QDir::cleanPath_data()
     QTest::newRow("data0") << "/Users/sam/troll/qt4.0//.." << "/Users/sam/troll";
     QTest::newRow("data1") << "/Users/sam////troll/qt4.0//.." << "/Users/sam/troll";
     QTest::newRow("data2") << "/" << "/";
+    QTest::newRow("data2-up") << "/path/.." << "/";
+    QTest::newRow("data2-above-root") << "/.." << "/..";
     QTest::newRow("data3") << QDir::cleanPath("../.") << "..";
     QTest::newRow("data4") << QDir::cleanPath("../..") << "../..";
 #if defined(Q_OS_WIN)
@@ -1178,13 +1219,19 @@ tst_QDir::cleanPath_data()
 
     QTest::newRow("data14") << "c://foo" << "c:/foo";
     // Drive letters and unc path in one string
-#ifndef Q_OS_WINRT
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WINRT)
+    const QString root = QDir::rootPath(); // has trailing slash
+    QTest::newRow("root-up") << (root + "path/..") << root;
+    QTest::newRow("above-root") << (root + "..") << (root + "..");
+#elif defined(Q_OS_WIN)
     QTest::newRow("data15") << "//c:/foo" << "//c:/foo";
+    QTest::newRow("drive-up") << "A:/path/.." << "A:/";
+    QTest::newRow("drive-above-root") << "A:/.." << "A:/..";
+    QTest::newRow("unc-server-up") << "//server/path/.." << "//server";
+    QTest::newRow("unc-server-above-root") << "//server/.." << "//server/..";
 #else
     QTest::newRow("data15") << "//c:/foo" << "/c:/foo";
-#endif
-#endif // !Q_OS_WINRT
+#endif // non-windows
 
     QTest::newRow("QTBUG-23892_0") << "foo/.." << ".";
     QTest::newRow("QTBUG-23892_1") << "foo/../" << ".";
@@ -2238,6 +2285,10 @@ void tst_QDir::cdBelowRoot_data()
     const QString systemRoot = QString::fromLocal8Bit(qgetenv("SystemRoot"));
     QTest::newRow("windows-drive")
         << systemDrive << systemRoot.mid(3) << QDir::cleanPath(systemRoot);
+    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    const QString testDirectory = QStringLiteral("testshare");
+    QTest::newRow("windows-share")
+        << uncRoot << testDirectory << QDir::cleanPath(uncRoot + QLatin1Char('/') + testDirectory);
 #endif // Windows
 }
 
@@ -2266,6 +2317,26 @@ void tst_QDir::cdBelowRoot()
     QCOMPARE(dir.path(), targetPath);
     QVERIFY(dir.cd(".."));
     QCOMPARE(dir.path(), rootPath);
+}
+
+void tst_QDir::emptyDir()
+{
+    const QString tempDir = QDir::currentPath() + "/tmpdir/";
+    QVERIFY(QDir().mkdir(tempDir));
+    QVERIFY(QDir(tempDir).mkdir("emptyDirectory"));
+
+    QDir testDir(tempDir + "emptyDirectory");
+    QVERIFY(testDir.isEmpty());
+    QVERIFY(!testDir.isEmpty(QDir::AllEntries));
+    QVERIFY(!testDir.isEmpty(QDir::AllEntries | QDir::NoDot));
+    QVERIFY(!testDir.isEmpty(QDir::AllEntries | QDir::NoDotDot));
+    QVERIFY(QDir(tempDir).removeRecursively());
+}
+
+void tst_QDir::nonEmptyDir()
+{
+    const QDir dir(m_dataPath);
+    QVERIFY(!dir.isEmpty());
 }
 
 QTEST_MAIN(tst_QDir)

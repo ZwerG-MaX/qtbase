@@ -285,6 +285,7 @@ bool QWidgetWindow::event(QEvent *event)
         return true;
 
     case QEvent::WindowStateChange:
+        QWindow::event(event); // Update QWindow::Visibility and emit signals.
         handleWindowStateChangedEvent(static_cast<QWindowStateChangeEvent *>(event));
         return true;
 
@@ -957,8 +958,8 @@ void QWidgetWindow::handleWindowStateChangedEvent(QWindowStateChangeEvent *event
 
     // Sent event if the state changed (that is, it is not triggered by
     // QWidget::setWindowState(), which also sends an event to the widget).
-    if (widgetState != int(m_widget->data->window_state)) {
-        m_widget->data->window_state = widgetState;
+    if (widgetState != Qt::WindowStates::Int(m_widget->data->window_state)) {
+        m_widget->data->window_state = uint(widgetState);
         QWindowStateChangeEvent widgetEvent(eventState);
         QGuiApplication::sendSpontaneousEvent(m_widget, &widgetEvent);
     }
@@ -973,22 +974,26 @@ bool QWidgetWindow::nativeEvent(const QByteArray &eventType, void *message, long
 void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
 {
     static QPointer<QWidget> qt_tablet_target = 0;
-    if (event->type() == QEvent::TabletPress) {
-        QWidget *widget = m_widget->childAt(event->pos());
-        if (!widget)
-            widget = m_widget;
 
-        qt_tablet_target = widget;
+    QWidget *widget = qt_tablet_target;
+
+    if (!widget) {
+        widget = m_widget->childAt(event->pos());
+        if (event->type() == QEvent::TabletPress) {
+            if (!widget)
+                widget = m_widget;
+            qt_tablet_target = widget;
+        }
     }
 
-    if (qt_tablet_target) {
+    if (widget) {
         QPointF delta = event->globalPosF() - event->globalPos();
-        QPointF mapped = qt_tablet_target->mapFromGlobal(event->globalPos()) + delta;
+        QPointF mapped = widget->mapFromGlobal(event->globalPos()) + delta;
         QTabletEvent ev(event->type(), mapped, event->globalPosF(), event->device(), event->pointerType(),
                         event->pressure(), event->xTilt(), event->yTilt(), event->tangentialPressure(),
                         event->rotation(), event->z(), event->modifiers(), event->uniqueId(), event->button(), event->buttons());
         ev.setTimestamp(event->timestamp());
-        QGuiApplication::sendSpontaneousEvent(qt_tablet_target, &ev);
+        QGuiApplication::sendSpontaneousEvent(widget, &ev);
         event->setAccepted(ev.isAccepted());
     }
 

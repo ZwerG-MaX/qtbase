@@ -38,7 +38,7 @@
 ****************************************************************************/
 
 #include "qfilesystemengine_p.h"
-
+#include "qoperatingsystemversion.h"
 #include "qplatformdefs.h"
 #include "qsysinfo.h"
 #include "private/qabstractfileengine_p.h"
@@ -81,11 +81,6 @@ using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Storage;
 using namespace ABI::Windows::ApplicationModel;
-
-#if _MSC_VER < 1900
-#define Q_OS_WINRT_WIN81
-#endif
-
 #endif // Q_OS_WINRT
 
 #ifndef SPI_GETPLATFORMTYPE
@@ -157,15 +152,15 @@ QT_BEGIN_NAMESPACE
 Q_CORE_EXPORT int qt_ntfs_permission_lookup = 0;
 
 #if defined(Q_OS_WINRT)
-static QString qfsPrivateCurrentDir = QLatin1String("");
-// As none of the functions we try to resolve do exist on WinRT
-// we use QT_NO_LIBRARY to shorten everything up a little bit.
-#  ifndef QT_NO_LIBRARY
-#    define QT_NO_LIBRARY 1
-#  endif
+// As none of the functions we try to resolve do exist on WinRT we
+// avoid library loading on WinRT in general to shorten everything
+// up a little bit.
+#  define QT_FEATURE_fslibs -1
+#else
+#  define QT_FEATURE_fslibs QT_FEATURE_library
 #endif // Q_OS_WINRT
 
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
 QT_BEGIN_INCLUDE_NAMESPACE
 typedef DWORD (WINAPI *PtrGetNamedSecurityInfoW)(LPWSTR, SE_OBJECT_TYPE, SECURITY_INFORMATION, PSID*, PSID*, PACL*, PACL*, PSECURITY_DESCRIPTOR*);
 static PtrGetNamedSecurityInfoW ptrGetNamedSecurityInfoW = 0;
@@ -273,7 +268,7 @@ static void resolveLibs()
             ptrGetUserProfileDirectoryW = (PtrGetUserProfileDirectoryW)GetProcAddress(userenvHnd, "GetUserProfileDirectoryW");
     }
 }
-#endif // QT_NO_LIBRARY
+#endif // QT_CONFIG(fslibs)
 
 typedef DWORD (WINAPI *PtrNetShareEnum)(LPWSTR, DWORD, LPBYTE*, DWORD, LPDWORD, LPDWORD, LPDWORD);
 static PtrNetShareEnum ptrNetShareEnum = 0;
@@ -343,7 +338,7 @@ static QString readSymLink(const QFileSystemEntry &link)
         free(rdb);
         CloseHandle(handle);
 
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
         resolveLibs();
         QRegExp matchVolName(QLatin1String("^Volume\\{([a-z]|[0-9]|-)+\\}\\\\"), Qt::CaseInsensitive);
         if (matchVolName.indexIn(result) == 0) {
@@ -353,7 +348,7 @@ static QString readSymLink(const QFileSystemEntry &link)
             if (GetVolumePathNamesForVolumeName(reinterpret_cast<LPCWSTR>(volumeName.utf16()), buffer, MAX_PATH, &len) != 0)
                 result.replace(0,matchVolName.matchedLength(), QString::fromWCharArray(buffer));
         }
-#endif // !Q_OS_WINRT
+#endif // QT_CONFIG(fslibs)
     }
 #else
     Q_UNUSED(link);
@@ -363,7 +358,7 @@ static QString readSymLink(const QFileSystemEntry &link)
 
 static QString readLink(const QFileSystemEntry &link)
 {
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
     QString ret;
 
     bool neededCoInit = false;
@@ -402,7 +397,7 @@ static QString readLink(const QFileSystemEntry &link)
 #else
     Q_UNUSED(link);
     return QString();
-#endif // QT_NO_LIBRARY
+#endif // QT_CONFIG(fslibs)
 }
 
 static bool uncShareExists(const QString &server)
@@ -503,7 +498,6 @@ QString QFileSystemEngine::nativeAbsoluteFilePath(const QString &path)
 {
     // can be //server or //server/share
     QString absPath;
-#if !defined(Q_OS_WINRT_WIN81)
     QVarLengthArray<wchar_t, MAX_PATH> buf(qMax(MAX_PATH, path.size() + 1));
     wchar_t *fileName = 0;
     DWORD retLen = GetFullPathName((wchar_t*)path.utf16(), buf.size(), buf.data(), &fileName);
@@ -523,12 +517,7 @@ QString QFileSystemEngine::nativeAbsoluteFilePath(const QString &path)
     if (absPath.size() < rootPath.size() && rootPath.startsWith(absPath))
         absPath = rootPath;
 #  endif // Q_OS_WINRT
-#else // !Q_OS_WINRT_WIN81
-    if (QDir::isRelativePath(path))
-        absPath = QDir::toNativeSeparators(QDir::cleanPath(QDir::currentPath() + QLatin1Char('/') + path));
-    else
-        absPath = QDir::toNativeSeparators(QDir::cleanPath(path));
-#endif // Q_OS_WINRT_WIN81
+
     // This is really ugly, but GetFullPathName strips off whitespace at the end.
     // If you for instance write ". " in the lineedit of QFileDialog,
     // (which is an invalid filename) this function will strip the space off and viola,
@@ -550,14 +539,7 @@ QFileSystemEntry QFileSystemEngine::absoluteName(const QFileSystemEntry &entry)
         else
             ret = QDir::fromNativeSeparators(nativeAbsoluteFilePath(entry.filePath()));
     } else {
-#ifndef Q_OS_WINRT_WIN81
         ret = QDir::cleanPath(QDir::currentPath() + QLatin1Char('/') + entry.filePath());
-#else
-        // Some WinRT APIs do not support absolute paths (due to sandboxing).
-        // Thus the port uses the executable's directory as its root directory
-        // and treats paths relative to that as absolute paths.
-        ret = QDir::cleanPath(QDir::current().relativeFilePath(entry.filePath()));
-#endif
     }
 
 #ifndef Q_OS_WINRT
@@ -637,7 +619,7 @@ QByteArray QFileSystemEngine::id(const QFileSystemEntry &entry)
                     FILE_SHARE_READ, OPEN_EXISTING, NULL);
 #endif // Q_OS_WINRT
     if (handle) {
-        result = QSysInfo::windowsVersion() >= QSysInfo::WV_WINDOWS8 ?
+        result = QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows8 ?
                  fileIdWin8(handle) : fileId(handle);
         CloseHandle(handle);
     }
@@ -648,7 +630,7 @@ QByteArray QFileSystemEngine::id(const QFileSystemEntry &entry)
 QString QFileSystemEngine::owner(const QFileSystemEntry &entry, QAbstractFileEngine::FileOwner own)
 {
     QString name;
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
     extern int qt_ntfs_permission_lookup;
     if((qt_ntfs_permission_lookup > 0) && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based)) {
         resolveLibs();
@@ -698,7 +680,7 @@ QString QFileSystemEngine::owner(const QFileSystemEntry &entry, QAbstractFileEng
 bool QFileSystemEngine::fillPermissions(const QFileSystemEntry &entry, QFileSystemMetaData &data,
                                         QFileSystemMetaData::MetaDataFlags what)
 {
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
     if((qt_ntfs_permission_lookup > 0) && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based)) {
         resolveLibs();
         if(ptrGetNamedSecurityInfoW && ptrBuildTrusteeWithSidW && ptrGetEffectiveRightsFromAclW) {
@@ -1162,7 +1144,7 @@ QString QFileSystemEngine::rootPath()
 QString QFileSystemEngine::homePath()
 {
     QString ret;
-#if !defined(QT_NO_LIBRARY)
+#if QT_CONFIG(fslibs)
     resolveLibs();
     if (ptrGetUserProfileDirectoryW) {
         HANDLE hnd = ::GetCurrentProcess();
@@ -1218,9 +1200,6 @@ QString QFileSystemEngine::tempPath()
         ret = QDir::fromNativeSeparators(ret);
     }
 #else // !Q_OS_WINRT
-    // According to http://msdn.microsoft.com/en-us/library/windows/apps/windows.storage.applicationdata.temporaryfolder.aspx
-    // the API is not available on winphone which should cause one of the functions
-    // below to fail
     ComPtr<IApplicationDataStatics> applicationDataStatics;
     if (FAILED(GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Storage_ApplicationData).Get(), &applicationDataStatics)))
         return ret;
@@ -1252,20 +1231,14 @@ bool QFileSystemEngine::setCurrentPath(const QFileSystemEntry &entry)
     if(!(meta.exists() && meta.isDirectory()))
         return false;
 
-#if !defined(Q_OS_WINRT_WIN81)
     //TODO: this should really be using nativeFilePath(), but that returns a path in long format \\?\c:\foo
     //which causes many problems later on when it's returned through currentPath()
     return ::SetCurrentDirectory(reinterpret_cast<const wchar_t*>(QDir::toNativeSeparators(entry.filePath()).utf16())) != 0;
-#else
-    qfsPrivateCurrentDir = entry.filePath();
-    return true;
-#endif
 }
 
 QFileSystemEntry QFileSystemEngine::currentPath()
 {
     QString ret;
-#if !defined(Q_OS_WINRT_WIN81)
     DWORD size = 0;
     wchar_t currentName[PATH_MAX];
     size = ::GetCurrentDirectory(PATH_MAX, currentName);
@@ -1281,13 +1254,6 @@ QFileSystemEntry QFileSystemEngine::currentPath()
     }
     if (ret.length() >= 2 && ret[1] == QLatin1Char(':'))
         ret[0] = ret.at(0).toUpper(); // Force uppercase drive letters.
-#else // !Q_OS_WINRT_WIN81
-    //TODO - a race condition exists when using currentPath / setCurrentPath from multiple threads
-    if (qfsPrivateCurrentDir.isEmpty())
-        qfsPrivateCurrentDir = QDir::rootPath();
-
-    ret = qfsPrivateCurrentDir;
-#endif // Q_OS_WINRT_WIN81
     return QFileSystemEntry(ret, QFileSystemEntry::FromNativePath());
 }
 
@@ -1368,15 +1334,11 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
 
 static inline QDateTime fileTimeToQDateTime(const FILETIME *time)
 {
-    QDateTime ret;
-
-    SYSTEMTIME sTime, lTime;
+    SYSTEMTIME sTime;
     FileTimeToSystemTime(time, &sTime);
-    SystemTimeToTzSpecificLocalTime(0, &sTime, &lTime);
-    ret.setDate(QDate(lTime.wYear, lTime.wMonth, lTime.wDay));
-    ret.setTime(QTime(lTime.wHour, lTime.wMinute, lTime.wSecond, lTime.wMilliseconds));
-
-    return ret;
+    return QDateTime(QDate(sTime.wYear, sTime.wMonth, sTime.wDay),
+                     QTime(sTime.wHour, sTime.wMinute, sTime.wSecond, sTime.wMilliseconds),
+                     Qt::UTC);
 }
 
 QDateTime QFileSystemMetaData::creationTime() const

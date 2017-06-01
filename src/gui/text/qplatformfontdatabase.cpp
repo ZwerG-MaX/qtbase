@@ -45,6 +45,7 @@
 #include <qpa/qplatformscreen.h>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QDir>
+#include <QtCore/QMetaEnum>
 
 #include <algorithm>
 #include <iterator>
@@ -200,6 +201,26 @@ QSupportedWritingSystems &QSupportedWritingSystems::operator=(const QSupportedWr
     }
     return *this;
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug debug, const QSupportedWritingSystems &sws)
+{
+    QMetaObject mo = QFontDatabase::staticMetaObject;
+    QMetaEnum me = mo.enumerator(mo.indexOfEnumerator("WritingSystem"));
+
+    QDebugStateSaver saver(debug);
+    debug.nospace() << "QSupportedWritingSystems(";
+    int i = sws.d->vector.indexOf(true);
+    while (i > 0) {
+        debug << me.valueToKey(i);
+        i = sws.d->vector.indexOf(true, i + 1);
+        if (i > 0)
+            debug << ", ";
+    }
+    debug << ")";
+    return debug;
+}
+#endif
 
 /*!
     Destroys the supported writing systems object.
@@ -423,14 +444,14 @@ QFont QPlatformFontDatabase::defaultFont() const
     return QFont(QLatin1String("Helvetica"));
 }
 
+
+QString qt_resolveFontFamilyAlias(const QString &alias);
+
 /*!
     Resolve alias to actual font family names.
 
     \since 5.0
  */
-
-QString qt_resolveFontFamilyAlias(const QString &alias);
-
 QString QPlatformFontDatabase::resolveFontFamilyAlias(const QString &family) const
 {
     return qt_resolveFontFamilyAlias(family);
@@ -463,16 +484,6 @@ bool QPlatformFontDatabase::fontsAlwaysScalable() const
     ret.reserve(num_standards);
     std::copy(standard, standard + num_standards, std::back_inserter(ret));
     return ret;
-}
-
-QFontEngine::SubpixelAntialiasingType QPlatformFontDatabase::subpixelAntialiasingTypeHint() const
-{
-    static int type = -1;
-    if (type == -1) {
-        if (QScreen *screen = QGuiApplication::primaryScreen())
-            type = screen->handle()->subpixelAntialiasingTypeHint();
-    }
-    return static_cast<QFontEngine::SubpixelAntialiasingType>(type);
 }
 
 // ### copied to tools/makeqpf/qpf2.cpp
@@ -628,12 +639,13 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
 }
 
 /*!
-    Helper function that returns the Qt font weight matching a given opentype integer value.
+    Helper function that returns the Qt font weight matching
+    a given opentype integer value. Converts the integer
+    \a weight (0 ~ 1000) to QFont::Weight and returns it.
 
     \since 5.5
 */
 
-// convert 0 ~ 1000 integer to QFont::Weight
 QFont::Weight QPlatformFontDatabase::weightFromInteger(int weight)
 {
     if (weight < 150)

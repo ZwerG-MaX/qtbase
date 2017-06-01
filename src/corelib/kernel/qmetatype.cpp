@@ -207,8 +207,6 @@ struct DefinedTypesFilter {
     \enum QMetaType::Type
 
     These are the built-in types supported by QMetaType:
-    Read doc on QChar
-    Read doc on \l QChar
 
     \value Void \c void
     \value Bool \c bool
@@ -827,47 +825,122 @@ void QMetaType::registerStreamOperators(int idx, SaveOperator saveOp,
 }
 #endif // QT_NO_DATASTREAM
 
+#if defined(Q_COMPILER_CONSTEXPR) || (defined(Q_CC_MSVC) && Q_CC_MSVC >= 1900)
+// We don't officially support constexpr in MSVC 2015, but the limited support it
+// has is enough for the code below.
+
+#  define STRINGIFY_TYPE_NAME(MetaTypeName, TypeId, RealName) \
+    #RealName "\0"
+#  define CALCULATE_TYPE_LEN(MetaTypeName, TypeId, RealName) \
+    short(sizeof(#RealName)),
+#  define MAP_TYPE_ID_TO_IDX(MetaTypeName, TypeId, RealName) \
+    TypeId,
+
+namespace {
+// All type names in one long string.
+constexpr char metaTypeStrings[] = QT_FOR_EACH_STATIC_TYPE(STRINGIFY_TYPE_NAME);
+
+// The sizes of the strings in the metaTypeStrings string (including terminating null)
+constexpr short metaTypeNameSizes[] = {
+    QT_FOR_EACH_STATIC_TYPE(CALCULATE_TYPE_LEN)
+};
+
+// The type IDs, in the order of the metaTypeStrings data
+constexpr short metaTypeIds[] = {
+    QT_FOR_EACH_STATIC_TYPE(MAP_TYPE_ID_TO_IDX)
+};
+
+constexpr int MetaTypeNameCount = sizeof(metaTypeNameSizes) / sizeof(metaTypeNameSizes[0]);
+
+template <typename IntegerSequence> struct MetaTypeOffsets;
+template <int... TypeIds> struct MetaTypeOffsets<QtPrivate::IndexesList<TypeIds...>>
+{
+    // This would have been a lot easier if the meta types that the macro
+    // QT_FOR_EACH_STATIC_TYPE declared were in sorted, ascending order, but
+    // they're not (i.e., the first one declared is QMetaType::Void == 43,
+    // followed by QMetaType::Bool == 1)... As a consequence, we need to use
+    // the C++11 constexpr function calculateOffsetForTypeId below in order to
+    // create the offset array.
+
+    static constexpr int findTypeId(int typeId, int i = 0)
+    {
+        return i >= MetaTypeNameCount ? -1 :
+                metaTypeIds[i] == typeId ? i : findTypeId(typeId, i + 1);
+    }
+
+    static constexpr short calculateOffsetForIdx(int i)
+    {
+        return i < 0 ? -1 :
+               i == 0 ? 0 : metaTypeNameSizes[i - 1] + calculateOffsetForIdx(i - 1);
+    }
+
+    static constexpr short calculateOffsetForTypeId(int typeId)
+    {
+        return calculateOffsetForIdx(findTypeId(typeId));
+#if 0
+        // same as, but this is only valid in C++14:
+        short offset = 0;
+        for (int i = 0; i < MetaTypeNameCount; ++i) {
+            if (metaTypeIds[i] == typeId)
+                return offset;
+            offset += metaTypeNameSizes[i];
+        }
+        return -1;
+#endif
+    }
+
+    short offsets[sizeof...(TypeIds)];
+    constexpr MetaTypeOffsets() : offsets{calculateOffsetForTypeId(TypeIds)...} {}
+
+    const char *operator[](int typeId) const Q_DECL_NOTHROW
+    {
+        short o = offsets[typeId];
+        return o < 0 ? nullptr : metaTypeStrings + o;
+    }
+};
+} // anonymous namespace
+
+constexpr MetaTypeOffsets<QtPrivate::Indexes<QMetaType::HighestInternalId + 1>::Value> metaTypeNames {};
+#  undef STRINGIFY_TYPE_NAME
+#  undef CALCULATE_TYPE_LEN
+#  undef MAP_TYPE_ID_TO_IDX
+#endif
+
 /*!
-    Returns the type name associated with the given \a typeId, or 0 if no
-    matching type was found. The returned pointer must not be deleted.
+    Returns the type name associated with the given \a typeId, or a null
+    pointer if no matching type was found. The returned pointer must not be
+    deleted.
 
     \sa type(), isRegistered(), Type
 */
 const char *QMetaType::typeName(int typeId)
 {
     const uint type = typeId;
-    // In theory it can be filled during compilation time, but for some reason template code
-    // that is able to do it causes GCC 4.6 to generate additional 3K of executable code. Probably
-    // it is not worth of it.
-    static const char *namesCache[QMetaType::HighestInternalId + 1];
-
-    const char *result;
-    if (type <= QMetaType::HighestInternalId && ((result = namesCache[type])))
-        return result;
-
 #define QT_METATYPE_TYPEID_TYPENAME_CONVERTER(MetaTypeName, TypeId, RealName) \
-        case QMetaType::MetaTypeName: result = #RealName; break;
+        case QMetaType::MetaTypeName: return #RealName; break;
 
-    switch (QMetaType::Type(type)) {
-    QT_FOR_EACH_STATIC_TYPE(QT_METATYPE_TYPEID_TYPENAME_CONVERTER)
-
-    default: {
-        if (Q_UNLIKELY(type < QMetaType::User)) {
-            return 0; // It can happen when someone cast int to QVariant::Type, we should not crash...
-        } else {
-            const QVector<QCustomTypeInfo> * const ct = customTypes();
-            QReadLocker locker(customTypesLock());
-            return ct && uint(ct->count()) > type - QMetaType::User && !ct->at(type - QMetaType::User).typeName.isEmpty()
-                    ? ct->at(type - QMetaType::User).typeName.constData()
-                    : 0;
+    if (Q_LIKELY(type <= QMetaType::HighestInternalId)) {
+#if defined(Q_COMPILER_CONSTEXPR) || (defined(Q_CC_MSVC) && Q_CC_MSVC >= 1900)
+        return metaTypeNames[typeId];
+#else
+        switch (QMetaType::Type(type)) {
+        QT_FOR_EACH_STATIC_TYPE(QT_METATYPE_TYPEID_TYPENAME_CONVERTER)
+        case QMetaType::UnknownType:
+        case QMetaType::User:
+            break;
         }
+#endif
+    } else if (Q_UNLIKELY(type < QMetaType::User)) {
+        return nullptr; // It can happen when someone cast int to QVariant::Type, we should not crash...
     }
-    }
-#undef QT_METATYPE_TYPEID_TYPENAME_CONVERTER
 
-    Q_ASSERT(type <= QMetaType::HighestInternalId);
-    namesCache[type] = result;
-    return result;
+    const QVector<QCustomTypeInfo> * const ct = customTypes();
+    QReadLocker locker(customTypesLock());
+    return ct && uint(ct->count()) > type - QMetaType::User && !ct->at(type - QMetaType::User).typeName.isEmpty()
+            ? ct->at(type - QMetaType::User).typeName.constData()
+            : nullptr;
+
+#undef QT_METATYPE_TYPEID_TYPENAME_CONVERTER
 }
 
 /*
@@ -1027,7 +1100,7 @@ int QMetaType::registerNormalizedType(const NS(QByteArray) &normalizedTypeName,
                                   normalizedTypeName.size());
 
     int previousSize = 0;
-    int previousFlags = 0;
+    QMetaType::TypeFlags::Int previousFlags = 0;
     if (idx == UnknownType) {
         QWriteLocker locker(customTypesLock());
         int posInVector = -1;
@@ -1268,7 +1341,6 @@ bool QMetaType::save(QDataStream &stream, int type, const void *data)
     case QMetaType::UnknownType:
     case QMetaType::Void:
     case QMetaType::VoidStar:
-    case QMetaType::Nullptr:
     case QMetaType::QObjectStar:
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
@@ -1277,6 +1349,9 @@ bool QMetaType::save(QDataStream &stream, int type, const void *data)
     case QMetaType::QJsonArray:
     case QMetaType::QJsonDocument:
         return false;
+    case QMetaType::Nullptr:
+        stream << *static_cast<const std::nullptr_t *>(data);
+        return true;
     case QMetaType::Long:
         stream << qlonglong(*static_cast<const long *>(data));
         break;
@@ -1490,7 +1565,6 @@ bool QMetaType::load(QDataStream &stream, int type, void *data)
     case QMetaType::UnknownType:
     case QMetaType::Void:
     case QMetaType::VoidStar:
-    case QMetaType::Nullptr:
     case QMetaType::QObjectStar:
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
@@ -1499,6 +1573,9 @@ bool QMetaType::load(QDataStream &stream, int type, void *data)
     case QMetaType::QJsonArray:
     case QMetaType::QJsonDocument:
         return false;
+    case QMetaType::Nullptr:
+        stream >> *static_cast<std::nullptr_t *>(data);
+        return true;
     case QMetaType::Long: {
         qlonglong l;
         stream >> l;

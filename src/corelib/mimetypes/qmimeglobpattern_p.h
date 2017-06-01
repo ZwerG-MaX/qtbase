@@ -68,7 +68,8 @@ struct QMimeGlobMatchResult
 
     void addMatch(const QString &mimeType, int weight, const QString &pattern);
 
-    QStringList m_matchingMimeTypes;
+    QStringList m_matchingMimeTypes; // only those with highest weight
+    QStringList m_allMatchingMimeTypes;
     int m_weight;
     int m_matchingPatternLength;
     QString m_foundSuffix;
@@ -82,11 +83,9 @@ public:
     static const unsigned MinWeight = 1;
 
     explicit QMimeGlobPattern(const QString &thePattern, const QString &theMimeType, unsigned theWeight = DefaultWeight, Qt::CaseSensitivity s = Qt::CaseInsensitive) :
-        m_pattern(thePattern), m_mimeType(theMimeType), m_weight(theWeight), m_caseSensitivity(s)
+        m_pattern(s == Qt::CaseInsensitive ? thePattern.toLower() : thePattern),
+        m_mimeType(theMimeType), m_weight(theWeight), m_caseSensitivity(s)
     {
-        if (s == Qt::CaseInsensitive) {
-            m_pattern = m_pattern.toLower();
-        }
     }
 
     void swap(QMimeGlobPattern &other) Q_DECL_NOTHROW
@@ -153,7 +152,7 @@ public:
 
     void addGlob(const QMimeGlobPattern &glob);
     void removeMimeType(const QString &mimeType);
-    QStringList matchingGlobs(const QString &fileName, QString *foundSuffix) const;
+    QMimeGlobMatchResult matchingGlobs(const QString &fileName) const;
     void clear();
 
     PatternsMap m_fastPatterns; // example: "doc" -> "application/msword", "text/plain"

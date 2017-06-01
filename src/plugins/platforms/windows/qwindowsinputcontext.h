@@ -57,15 +57,13 @@ class QWindowsInputContext : public QPlatformInputContext
 
     struct CompositionContext
     {
-        CompositionContext();
-
-        HWND hwnd;
-        bool haveCaret;
+        HWND hwnd = 0;
+        bool haveCaret = false;
         QString composition;
-        int position;
-        bool isComposing;
+        int position = 0;
+        bool isComposing = false;
         QPointer<QObject> focusObject;
-        qreal factor;
+        qreal factor = 1;
     };
 public:
     explicit QWindowsInputContext();
@@ -73,13 +71,13 @@ public:
 
     static void setWindowsImeEnabled(QWindowsWindow *platformWindow, bool enabled);
 
-    bool hasCapability(Capability capability) const Q_DECL_OVERRIDE;
-    QLocale locale() const Q_DECL_OVERRIDE { return m_locale; }
+    bool hasCapability(Capability capability) const override;
+    QLocale locale() const override { return m_locale; }
 
-    void reset() Q_DECL_OVERRIDE;
-    void update(Qt::InputMethodQueries) Q_DECL_OVERRIDE;
-    void invokeAction(QInputMethod::Action, int cursorPosition) Q_DECL_OVERRIDE;
-    void setFocusObject(QObject *object) Q_DECL_OVERRIDE;
+    void reset() override;
+    void update(Qt::InputMethodQueries) override;
+    void invokeAction(QInputMethod::Action, int cursorPosition) override;
+    void setFocusObject(QObject *object) override;
 
     bool startComposition(HWND hwnd);
     bool composition(HWND hwnd, LPARAM lParam);
@@ -104,7 +102,7 @@ private:
     const DWORD m_WM_MSIME_MOUSE;
     static HIMC m_defaultContext;
     CompositionContext m_compositionContext;
-    bool m_endCompositionRecursionGuard;
+    bool m_endCompositionRecursionGuard = false;
     LCID m_languageId;
     QLocale m_locale;
 };

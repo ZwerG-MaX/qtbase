@@ -260,6 +260,7 @@ namespace QtSharedPointer {
             internalSafetyCheckRemove(self);
             deleter(self);
         }
+        static void noDeleter(ExternalRefCountData *) { }
 
         static inline ExternalRefCountData *create(T **ptr, DestroyerFn destroy)
         {
@@ -433,11 +434,13 @@ public:
 # else
         typename Private::DestroyerFn destroy = &Private::deleter;
 # endif
+        typename Private::DestroyerFn noDestroy = &Private::noDeleter;
         QSharedPointer result(Qt::Uninitialized);
-        result.d = Private::create(&result.value, destroy);
+        result.d = Private::create(&result.value, noDestroy);
 
         // now initialize the data
         new (result.data()) T(std::forward<Args>(arguments)...);
+        result.d->destroyer = destroy;
         result.d->setQObjectShared(result.value, true);
 # ifdef QT_SHAREDPOINTER_TRACK_POINTERS
         internalSafetyCheckAdd(result.d, result.value);
@@ -974,13 +977,13 @@ qobject_cast(const QWeakPointer<T> &src)
 }
 
 template<typename T>
-QWeakPointer<typename QtPrivate::QEnableIf<QtPrivate::IsPointerToTypeDerivedFromQObject<T*>::Value, T>::Type>
+QWeakPointer<typename std::enable_if<QtPrivate::IsPointerToTypeDerivedFromQObject<T*>::Value, T>::type>
 qWeakPointerFromVariant(const QVariant &variant)
 {
     return QWeakPointer<T>(qobject_cast<T*>(QtSharedPointer::weakPointerFromVariant_internal(variant).data()));
 }
 template<typename T>
-QSharedPointer<typename QtPrivate::QEnableIf<QtPrivate::IsPointerToTypeDerivedFromQObject<T*>::Value, T>::Type>
+QSharedPointer<typename std::enable_if<QtPrivate::IsPointerToTypeDerivedFromQObject<T*>::Value, T>::type>
 qSharedPointerFromVariant(const QVariant &variant)
 {
     return qSharedPointerObjectCast<T>(QtSharedPointer::sharedPointerFromVariant_internal(variant));

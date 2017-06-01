@@ -50,6 +50,13 @@
 #include <QtGui/qvector4d.h>
 #include <QtGui/qmatrix4x4.h>
 
+#if defined(Q_CLANG_QDOC)
+#undef GLint
+typedef int GLint;
+#undef GLfloat
+typedef double GLfloat;
+#endif
+
 QT_BEGIN_NAMESPACE
 
 
@@ -118,6 +125,11 @@ public:
     bool addShaderFromSourceCode(QOpenGLShader::ShaderType type, const QByteArray& source);
     bool addShaderFromSourceCode(QOpenGLShader::ShaderType type, const QString& source);
     bool addShaderFromSourceFile(QOpenGLShader::ShaderType type, const QString& fileName);
+
+    bool addCacheableShaderFromSourceCode(QOpenGLShader::ShaderType type, const char *source);
+    bool addCacheableShaderFromSourceCode(QOpenGLShader::ShaderType type, const QByteArray &source);
+    bool addCacheableShaderFromSourceCode(QOpenGLShader::ShaderType type, const QString &source);
+    bool addCacheableShaderFromSourceFile(QOpenGLShader::ShaderType type, const QString &fileName);
 
     void removeAllShaders();
 

@@ -54,6 +54,7 @@
 #include "qurl.h"
 #include "qauthenticator.h"
 #include "private/qiodevice_p.h"
+#include "private/qringbuffer_p.h"
 #include <qendian.h>
 #include <qnetworkinterface.h>
 
@@ -280,7 +281,7 @@ struct QSocks5Data
 
 struct QSocks5ConnectData : public QSocks5Data
 {
-    QByteArray readBuffer;
+    QRingBuffer readBuffer;
 };
 
 struct QSocks5BindData : public QSocks5Data
@@ -1001,13 +1002,17 @@ QSocks5SocketEngine::~QSocks5SocketEngine()
         delete d->bindData;
 }
 
-static QBasicAtomicInt descriptorCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int nextDescriptor()
+{
+    static QBasicAtomicInt counter;
+    return 1 + counter.fetchAndAddRelaxed(1);
+}
 
 bool QSocks5SocketEngine::initialize(QAbstractSocket::SocketType type, QAbstractSocket::NetworkLayerProtocol protocol)
 {
     Q_D(QSocks5SocketEngine);
 
-    d->socketDescriptor = descriptorCounter.fetchAndAddRelaxed(1);
+    d->socketDescriptor = nextDescriptor();
 
     d->socketType = type;
     d->socketProtocol = protocol;
@@ -1193,7 +1198,7 @@ void QSocks5SocketEnginePrivate::_q_controlSocketReadNotification()
             }
             if (buf.size()) {
                 QSOCKS5_DEBUG << dump(buf);
-                connectData->readBuffer += buf;
+                connectData->readBuffer.append(buf);
                 emitReadNotification();
             }
             break;
@@ -1270,13 +1275,6 @@ void QSocks5SocketEnginePrivate::_q_controlSocketStateChanged(QAbstractSocket::S
 }
 
 #ifndef QT_NO_UDPSOCKET
-void QSocks5SocketEnginePrivate::checkForDatagrams() const
-{
-    // udp should be unbuffered so we need to do some polling at certain points
-    if (udpData->udpSocket->hasPendingDatagrams())
-        const_cast<QSocks5SocketEnginePrivate *>(this)->_q_udpSocketReadNotification();
-}
-
 void QSocks5SocketEnginePrivate::_q_udpSocketReadNotification()
 {
     QSOCKS5_D_DEBUG << "_q_udpSocketReadNotification()";
@@ -1513,7 +1511,7 @@ qint64 QSocks5SocketEngine::read(char *data, qint64 maxlen)
     Q_D(QSocks5SocketEngine);
     QSOCKS5_Q_DEBUG << "read( , maxlen = " << maxlen << ')';
     if (d->mode == QSocks5SocketEnginePrivate::ConnectMode) {
-        if (d->connectData->readBuffer.size() == 0) {
+        if (d->connectData->readBuffer.isEmpty()) {
             if (d->data->controlSocket->state() == QAbstractSocket::UnconnectedState) {
                 //imitate remote closed
                 close();
@@ -1525,9 +1523,7 @@ qint64 QSocks5SocketEngine::read(char *data, qint64 maxlen)
                 return 0;       // nothing to be read
             }
         }
-        qint64 copy = qMin<qint64>(d->connectData->readBuffer.size(), maxlen);
-        memcpy(data, d->connectData->readBuffer.constData(), copy);
-        d->connectData->readBuffer.remove(0, copy);
+        const qint64 copy = d->connectData->readBuffer.read(data, maxlen);
         QSOCKS5_DEBUG << "read" << dump(QByteArray(data, copy));
         return copy;
 #ifndef QT_NO_UDPSOCKET
@@ -1610,16 +1606,12 @@ bool QSocks5SocketEngine::hasPendingDatagrams() const
     Q_D(const QSocks5SocketEngine);
     Q_INIT_CHECK(false);
 
-    d->checkForDatagrams();
-
     return !d->udpData->pendingDatagrams.isEmpty();
 }
 
 qint64 QSocks5SocketEngine::pendingDatagramSize() const
 {
     Q_D(const QSocks5SocketEngine);
-
-    d->checkForDatagrams();
 
     if (!d->udpData->pendingDatagrams.isEmpty())
         return d->udpData->pendingDatagrams.head().data.size();
@@ -1631,8 +1623,6 @@ qint64 QSocks5SocketEngine::readDatagram(char *data, qint64 maxlen, QIpPacketHea
 {
 #ifndef QT_NO_UDPSOCKET
     Q_D(QSocks5SocketEngine);
-
-    d->checkForDatagrams();
 
     if (d->udpData->pendingDatagrams.isEmpty())
         return 0;

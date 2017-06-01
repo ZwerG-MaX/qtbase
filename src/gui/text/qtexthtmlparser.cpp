@@ -329,17 +329,17 @@ bool operator<(const QTextHtmlEntity &entity1, const QTextHtmlEntity &entity2)
 }
 #endif
 
-static bool operator<(const QString &entityStr, const QTextHtmlEntity &entity)
+static bool operator<(const QStringRef &entityStr, const QTextHtmlEntity &entity)
 {
     return entityStr < QLatin1String(entity.name);
 }
 
-static bool operator<(const QTextHtmlEntity &entity, const QString &entityStr)
+static bool operator<(const QTextHtmlEntity &entity, const QStringRef &entityStr)
 {
     return QLatin1String(entity.name) < entityStr;
 }
 
-static QChar resolveEntity(const QString &entity)
+static QChar resolveEntity(const QStringRef &entity)
 {
     const QTextHtmlEntity *start = &entities[0];
     const QTextHtmlEntity *end = &entities[MAX_ENTITY];
@@ -706,8 +706,8 @@ void QTextHtmlParser::parseTag()
     node = resolveParent();
     resolveNode();
 
-    const int nodeIndex = nodes.count() - 1; // this new node is always the last
 #ifndef QT_NO_CSSPARSER
+    const int nodeIndex = nodes.count() - 1; // this new node is always the last
     node->applyCssDeclarations(declarationsForNode(nodeIndex), resourceProvider);
 #endif
     applyAttributes(node->attributes);
@@ -801,8 +801,9 @@ void QTextHtmlParser::parseExclamationTag()
 // parses an entity after "&", and returns it
 QString QTextHtmlParser::parseEntity()
 {
-    int recover = pos;
-    QString entity;
+    const int recover = pos;
+    int entityLen = 0;
+    QStringRef entity;
     while (pos < len) {
         QChar c = txt.at(pos++);
         if (c.isSpace() || pos - recover > 9) {
@@ -810,36 +811,38 @@ QString QTextHtmlParser::parseEntity()
         }
         if (c == QLatin1Char(';'))
             break;
-        entity += c;
+        ++entityLen;
     }
-    {
+    if (entityLen) {
+        entity = QStringRef(&txt, recover, entityLen);
         QChar resolved = resolveEntity(entity);
         if (!resolved.isNull())
             return QString(resolved);
-    }
-    if (entity.length() > 1 && entity.at(0) == QLatin1Char('#')) {
-        entity.remove(0, 1); // removing leading #
 
-        int base = 10;
-        bool ok = false;
+        if (entityLen > 1 && entity.at(0) == QLatin1Char('#')) {
+            entity = entity.mid(1); // removing leading #
 
-        if (entity.at(0).toLower() == QLatin1Char('x')) { // hex entity?
-            entity.remove(0, 1);
-            base = 16;
-        }
+            int base = 10;
+            bool ok = false;
 
-        uint uc = entity.toUInt(&ok, base);
-        if (ok) {
-            if (uc >= 0x80 && uc < 0x80 + (sizeof(windowsLatin1ExtendedCharacters)/sizeof(windowsLatin1ExtendedCharacters[0])))
-                uc = windowsLatin1ExtendedCharacters[uc - 0x80];
-            QString str;
-            if (QChar::requiresSurrogates(uc)) {
-                str += QChar(QChar::highSurrogate(uc));
-                str += QChar(QChar::lowSurrogate(uc));
-            } else {
-                str = QChar(uc);
+            if (entity.at(0).toLower() == QLatin1Char('x')) { // hex entity?
+                entity = entity.mid(1);
+                base = 16;
             }
-            return str;
+
+            uint uc = entity.toUInt(&ok, base);
+            if (ok) {
+                if (uc >= 0x80 && uc < 0x80 + (sizeof(windowsLatin1ExtendedCharacters)/sizeof(windowsLatin1ExtendedCharacters[0])))
+                    uc = windowsLatin1ExtendedCharacters[uc - 0x80];
+                QString str;
+                if (QChar::requiresSurrogates(uc)) {
+                    str += QChar(QChar::highSurrogate(uc));
+                    str += QChar(QChar::lowSurrogate(uc));
+                } else {
+                    str = QChar(uc);
+                }
+                return str;
+            }
         }
     }
 error:
@@ -1522,7 +1525,7 @@ void QTextHtmlParser::applyAttributes(const QStringList &attributes)
                     } else if (value == QLatin1String("I")) {
                         node->listStyle = QTextListFormat::ListUpperRoman;
                     } else {
-                        value = value.toLower();
+                        value = std::move(value).toLower();
                         if (value == QLatin1String("square"))
                             node->listStyle = QTextListFormat::ListSquare;
                         else if (value == QLatin1String("disc"))
@@ -1633,7 +1636,7 @@ void QTextHtmlParser::applyAttributes(const QStringList &attributes)
             node->parseStyleAttribute(value, resourceProvider);
 #endif
         } else if (key == QLatin1String("align")) {
-            value = value.toLower();
+            value = std::move(value).toLower();
             bool alignmentSet = true;
 
             if (value == QLatin1String("left"))
@@ -1661,7 +1664,7 @@ void QTextHtmlParser::applyAttributes(const QStringList &attributes)
                 }
             }
         } else if (key == QLatin1String("valign")) {
-            value = value.toLower();
+            value = std::move(value).toLower();
             if (value == QLatin1String("top"))
                 node->charFormat.setVerticalAlignment(QTextCharFormat::AlignTop);
             else if (value == QLatin1String("middle"))
@@ -1669,7 +1672,7 @@ void QTextHtmlParser::applyAttributes(const QStringList &attributes)
             else if (value == QLatin1String("bottom"))
                 node->charFormat.setVerticalAlignment(QTextCharFormat::AlignBottom);
         } else if (key == QLatin1String("dir")) {
-            value = value.toLower();
+            value = std::move(value).toLower();
             if (value == QLatin1String("ltr"))
                 node->blockFormat.setLayoutDirection(Qt::LeftToRight);
             else if (value == QLatin1String("rtl"))

@@ -48,9 +48,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#if defined(QQNX_SCREENEVENTTHREAD)
 class QQnxScreenEventThread;
-#endif
 class QQnxFileDialogHelper;
 class QQnxNativeInterface;
 class QQnxWindow;
@@ -89,38 +87,38 @@ public:
     explicit QQnxIntegration(const QStringList &paramList);
     ~QQnxIntegration();
 
-    bool hasCapability(QPlatformIntegration::Capability cap) const;
+    bool hasCapability(QPlatformIntegration::Capability cap) const override;
 
-    QPlatformWindow *createPlatformWindow(QWindow *window) const;
-    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const;
+    QPlatformWindow *createPlatformWindow(QWindow *window) const override;
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const override;
 
 #if !defined(QT_NO_OPENGL)
-    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const;
+    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
 #endif
 
 #if defined(QQNX_PPS)
-    QPlatformInputContext *inputContext() const;
+    QPlatformInputContext *inputContext() const override;
 #endif
 
     void moveToScreen(QWindow *window, int screen);
 
     bool supportsNavigatorEvents() const;
 
-    QAbstractEventDispatcher *createEventDispatcher() const;
+    QAbstractEventDispatcher *createEventDispatcher() const override;
 
-    QPlatformFontDatabase *fontDatabase() const { return m_fontDatabase; }
+    QPlatformFontDatabase *fontDatabase() const override { return m_fontDatabase; }
 
-    QPlatformNativeInterface *nativeInterface() const;
+    QPlatformNativeInterface *nativeInterface() const override;
 
 #if !defined(QT_NO_CLIPBOARD)
-    QPlatformClipboard *clipboard() const;
+    QPlatformClipboard *clipboard() const override;
 #endif
 #if !defined(QT_NO_DRAGANDDROP)
-    QPlatformDrag *drag() const;
+    QPlatformDrag *drag() const override;
 #endif
-    QVariant styleHint(StyleHint hint) const;
+    QVariant styleHint(StyleHint hint) const override;
 
-    QPlatformServices *services() const;
+    QPlatformServices *services() const override;
 
     static QWindow *window(screen_window_t qnxWindow);
 
@@ -142,9 +140,7 @@ private:
     static void removeWindow(screen_window_t qnxWindow);
 
     static screen_context_t ms_screenContext;
-#if defined(QQNX_SCREENEVENTTHREAD)
     QQnxScreenEventThread *m_screenEventThread;
-#endif
     QQnxNavigatorEventHandler *m_navigatorEventHandler;
     QQnxAbstractVirtualKeyboard *m_virtualKeyboard;
 #if defined(QQNX_PPS)

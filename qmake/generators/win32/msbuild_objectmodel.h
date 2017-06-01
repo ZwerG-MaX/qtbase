@@ -32,12 +32,9 @@
 #include "project.h"
 #include "xmloutput.h"
 #include "msvc_objectmodel.h"
-#include <qatomic.h>
 #include <qlist.h>
 #include <qstring.h>
-#include <qstringlist.h>
 #include <qmap.h>
-#include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -185,6 +182,7 @@ private:
                                  bool fileAdded, bool hasCustomBuildStep);
     static void outputFileConfig(XmlOutput &xml, XmlOutput &xmlFilter, const QString &fileName, const QString &filterName);
     static QString generateCondition(const VCConfiguration &config);
+    static XmlOutput::xml_output attrTagToolsVersion(const VCConfiguration &config);
 
     friend class XTreeNode;
     friend class XFlatNode;

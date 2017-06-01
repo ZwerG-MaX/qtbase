@@ -42,7 +42,7 @@
 
 #include <QtTest/qtestcase.h>
 #include <QtCore/qcoreapplication.h>
-#include <QtCore/qelapsedtimer.h>
+#include <QtCore/qdeadlinetimer.h>
 #ifdef QT_GUI_LIB
 #  include <QtGui/QWindow>
 #endif
@@ -58,27 +58,29 @@ namespace QTest
     {
         Q_ASSERT(QCoreApplication::instance());
 
-        QElapsedTimer timer;
-        timer.start();
+        QDeadlineTimer timer(ms, Qt::PreciseTimer);
+        int remaining = ms;
         do {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, ms);
+            QCoreApplication::processEvents(QEventLoop::AllEvents, remaining);
             QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
-            QTest::qSleep(10);
-        } while (timer.elapsed() < ms);
+            remaining = timer.remainingTime();
+            if (remaining <= 0)
+                break;
+            QTest::qSleep(qMin(10, remaining));
+            remaining = timer.remainingTime();
+        } while (remaining > 0);
     }
 
 #ifdef QT_GUI_LIB
     inline static bool qWaitForWindowActive(QWindow *window, int timeout = 5000)
     {
-        QElapsedTimer timer;
-        timer.start();
-        while (!window->isActive()) {
-            int remaining = timeout - int(timer.elapsed());
-            if (remaining <= 0)
-                break;
+        QDeadlineTimer timer(timeout, Qt::PreciseTimer);
+        int remaining = timeout;
+        while (!window->isActive() && remaining > 0) {
             QCoreApplication::processEvents(QEventLoop::AllEvents, remaining);
             QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
             QTest::qSleep(10);
+            remaining = timer.remainingTime();
         }
         // Try ensuring the platform window receives the real position.
         // (i.e. that window->pos() reflects reality)
@@ -99,31 +101,29 @@ namespace QTest
 
     inline static bool qWaitForWindowExposed(QWindow *window, int timeout = 5000)
     {
-        QElapsedTimer timer;
-        timer.start();
-        while (!window->isExposed()) {
-            int remaining = timeout - int(timer.elapsed());
-            if (remaining <= 0)
-                break;
+        QDeadlineTimer timer(timeout, Qt::PreciseTimer);
+        int remaining = timeout;
+        while (!window->isExposed() && remaining > 0) {
             QCoreApplication::processEvents(QEventLoop::AllEvents, remaining);
             QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
             QTest::qSleep(10);
+            remaining = timer.remainingTime();
         }
         return window->isExposed();
     }
 #endif
 
 #ifdef QT_WIDGETS_LIB
-    inline static bool qWaitForWindowActive(QWidget *widget, int timeout = 1000)
+    inline static bool qWaitForWindowActive(QWidget *widget, int timeout = 5000)
     {
-        if (QWindow *window = widget->windowHandle())
+        if (QWindow *window = widget->window()->windowHandle())
             return qWaitForWindowActive(window, timeout);
         return false;
     }
 
-    inline static bool qWaitForWindowExposed(QWidget *widget, int timeout = 1000)
+    inline static bool qWaitForWindowExposed(QWidget *widget, int timeout = 5000)
     {
-        if (QWindow *window = widget->windowHandle())
+        if (QWindow *window = widget->window()->windowHandle())
             return qWaitForWindowExposed(window, timeout);
         return false;
     }
@@ -131,7 +131,7 @@ namespace QTest
 
 #if QT_DEPRECATED_SINCE(5, 0)
 #  ifdef QT_WIDGETS_LIB
-    QT_DEPRECATED inline static bool qWaitForWindowShown(QWidget *widget, int timeout = 1000)
+    QT_DEPRECATED inline static bool qWaitForWindowShown(QWidget *widget, int timeout = 5000)
     {
         return qWaitForWindowExposed(widget, timeout);
     }

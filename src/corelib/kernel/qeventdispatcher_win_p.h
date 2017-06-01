@@ -106,6 +106,8 @@ public:
 
     bool event(QEvent *e);
 
+    HWND internalHwnd();
+
 protected:
     QEventDispatcherWin32(QEventDispatcherWin32Private &dd, QObject *parent = 0);
     virtual void sendPostedEvents();
@@ -124,9 +126,10 @@ typedef QHash<int, QSockNot *> QSNDict;
 
 struct QSockFd {
     long event;
+    long mask;
     bool selected;
 
-    explicit inline QSockFd(long ev = 0) : event(ev), selected(false) { }
+    explicit inline QSockFd(long ev = 0, long ma = 0) : event(ev), mask(ma), selected(false) { }
 };
 typedef QHash<int, QSockFd> QSFDict;
 
@@ -185,10 +188,8 @@ public:
     QSNDict sn_write;
     QSNDict sn_except;
     QSFDict active_fd;
-#ifndef Q_OS_WINCE
     bool activateNotifiersPosted;
     void postActivateSocketNotifiers();
-#endif
     void doWsaAsyncSelect(int socket, long event);
 
     QList<QWinEventNotifier *> winEventNotifierList;

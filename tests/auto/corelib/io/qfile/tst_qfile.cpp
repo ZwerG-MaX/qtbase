@@ -41,6 +41,8 @@
 #include <private/qfsfileengine_p.h>
 #include <private/qfilesystemengine_p.h>
 
+#include "emulationdetector.h"
+
 #ifdef Q_OS_WIN
 QT_BEGIN_NAMESPACE
 extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
@@ -50,7 +52,9 @@ QT_END_NAMESPACE
 #if !defined(QT_NO_NETWORK)
 #include <QHostInfo>
 #endif
-#include <QProcess>
+#if QT_CONFIG(process)
+# include <QProcess>
+#endif
 #ifdef Q_OS_WIN
 # include <qt_windows.h>
 #else
@@ -242,6 +246,8 @@ private slots:
 
     void invalidFile_data();
     void invalidFile();
+
+    void reuseQFile();
 
 private:
     enum FileType {
@@ -882,7 +888,7 @@ void tst_QFile::readAllBuffer()
     QFile::remove(fileName);
 }
 
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
 class StdinReaderProcessGuard { // Ensure the stdin reader process is stopped on destruction.
     Q_DISABLE_COPY(StdinReaderProcessGuard)
 
@@ -906,11 +912,11 @@ public:
 private:
     QProcess *m_process;
 };
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 
 void tst_QFile::readAllStdin()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     QByteArray lotsOfData(1024, '@'); // 10 megs
@@ -933,7 +939,7 @@ void tst_QFile::readAllStdin()
 
 void tst_QFile::readLineStdin()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     QByteArray lotsOfData(1024, '@'); // 10 megs
@@ -974,7 +980,7 @@ void tst_QFile::readLineStdin()
 
 void tst_QFile::readLineStdin_lineByLine()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     for (int i = 0; i < 2; ++i) {
@@ -1137,6 +1143,7 @@ void tst_QFile::invalidFile_data()
 #else
 #if !defined(Q_OS_WINRT)
     QTest::newRow( "colon2" ) << invalidDriveLetter() + QString::fromLatin1(":ail:invalid");
+    QTest::newRow( "date" ) << QString( "testLog-03:20.803Z.txt" );
 #endif
     QTest::newRow( "colon3" ) << QString( ":failinvalid" );
     QTest::newRow( "forwardslash" ) << QString( "fail/invalid" );
@@ -1371,9 +1378,7 @@ void tst_QFile::copyFallback()
 
 #ifdef Q_OS_WIN
 #include <objbase.h>
-#ifndef Q_OS_WINPHONE
 #include <shlobj.h>
-#endif
 #endif
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
@@ -1684,7 +1689,7 @@ void tst_QFile::isSequential()
 
 void tst_QFile::encodeName()
 {
-    QCOMPARE(QFile::encodeName(QString::null), QByteArray());
+    QCOMPARE(QFile::encodeName(QString()), QByteArray());
 }
 
 void tst_QFile::truncate()
@@ -2390,7 +2395,11 @@ void tst_QFile::virtualFile()
     // open the file
     QFile f(fname);
     QVERIFY2(f.open(QIODevice::ReadOnly), msgOpenFailed(f).constData());
+    if (EmulationDetector::isRunningArmOnX86())
+        QEXPECT_FAIL("","QEMU does not read /proc/self/maps size correctly", Continue);
     QCOMPARE(f.size(), Q_INT64_C(0));
+    if (EmulationDetector::isRunningArmOnX86())
+        QEXPECT_FAIL("","QEMU does not read /proc/self/maps size correctly", Continue);
     QVERIFY(f.atEnd());
 
     // read data
@@ -2618,9 +2627,10 @@ void tst_QFile::appendAndRead()
 
     // Write blocks and read them back
     for (int j = 0; j < 18; ++j) {
-        writeFile.write(QByteArray(1 << j, '@'));
+        const int size = 1 << j;
+        writeFile.write(QByteArray(size, '@'));
         writeFile.flush();
-        QCOMPARE(readFile.read(1 << j).size(), 1 << j);
+        QCOMPARE(readFile.read(size).size(), size);
     }
 
     readFile.close();
@@ -3432,6 +3442,66 @@ void tst_QFile::autocloseHandle()
         QCOMPARE(int(::fread(&buf, 1, 1, stream_)), 1);
         ::fclose(stream_);
         stream_ = 0;
+    }
+}
+
+void tst_QFile::reuseQFile()
+{
+    // QTemporaryDir is current dir, no need to remove these files
+    const QString filename1("filegt16k");
+    const QString filename2("file16k");
+
+    // create test files for reusing QFile object
+    QFile file;
+    file.setFileName(filename1);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QByteArray ba(17408, 'a');
+    qint64 written = file.write(ba);
+    QCOMPARE(written, 17408);
+    file.close();
+
+    file.setFileName(filename2);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    ba.resize(16384);
+    written = file.write(ba);
+    QCOMPARE(written, 16384);
+    file.close();
+
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.size(), 16384);
+    QCOMPARE(file.pos(), qint64(0));
+    QVERIFY(file.seek(10));
+    QCOMPARE(file.pos(), qint64(10));
+    QVERIFY(file.seek(0));
+    QCOMPARE(file.pos(), qint64(0));
+    QCOMPARE(file.readAll(), ba);
+    file.close();
+
+    file.setFileName(filename1);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+
+    // read first file
+    {
+        // get file size without touching QFile
+        QFileInfo fi(filename1);
+        const qint64 fileSize = fi.size();
+        file.read(fileSize);
+        QVERIFY(file.atEnd());
+        file.close();
+    }
+
+    // try again with the next file with the same QFile object
+    file.setFileName(filename2);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+
+    // read second file
+    {
+        // get file size without touching QFile
+        QFileInfo fi(filename2);
+        const qint64 fileSize = fi.size();
+        file.read(fileSize);
+        QVERIFY(file.atEnd());
+        file.close();
     }
 }
 

@@ -240,7 +240,7 @@
             Only valid if RemovePath is not set.
     \value PreferLocalFile If the URL is a local file according to isLocalFile()
      and contains no query or fragment, a local file path is returned.
-    \value StripTrailingSlash  The trailing slash is removed if one is present.
+    \value StripTrailingSlash  The trailing slash is removed from the path, if one is present.
     \value NormalizePathSegments  Modifies the path to remove redundant directory separators,
              and to resolve "."s and ".."s (as far as possible).
 
@@ -417,7 +417,8 @@
 #include "qurlquery.h"
 
 QT_BEGIN_NAMESPACE
-extern QString qt_normalizePathSegments(const QString &name, bool allowUncPaths); // qdir.cpp
+extern QString qt_normalizePathSegments(const QString &name, bool allowUncPaths,
+                                        bool *ok = nullptr); // qdir.cpp
 
 inline static bool isHex(char c)
 {
@@ -3181,8 +3182,7 @@ QUrl QUrl::resolved(const QUrl &relative) const
     if (!relative.d) return *this;
 
     QUrl t;
-    // Compatibility hack (mostly for qtdeclarative) : treat "file:relative.txt" as relative even though QUrl::isRelative() says false
-    if (!relative.d->scheme.isEmpty() && (!relative.isLocalFile() || QDir::isAbsolutePath(relative.d->path))) {
+    if (!relative.d->scheme.isEmpty()) {
         t = relative;
         t.detach();
     } else {
@@ -3418,8 +3418,7 @@ QUrl QUrl::adjusted(QUrl::FormattingOptions options) const
 QByteArray QUrl::toEncoded(FormattingOptions options) const
 {
     options &= ~(FullyDecoded | FullyEncoded);
-    QString stringForm = toString(options | FullyEncoded);
-    return stringForm.toLatin1();
+    return toString(options | FullyEncoded).toLatin1();
 }
 
 /*!
@@ -3536,8 +3535,7 @@ QString QUrl::fromAce(const QByteArray &domain)
 */
 QByteArray QUrl::toAce(const QString &domain)
 {
-    QString result = qt_ACE_do(domain, ToAceOnly, ForbidLeadingDot /*FIXME: make configurable*/);
-    return result.toLatin1();
+    return qt_ACE_do(domain, ToAceOnly, ForbidLeadingDot /*FIXME: make configurable*/).toLatin1();
 }
 
 /*!
@@ -4169,12 +4167,15 @@ QUrl QUrl::fromUserInput(const QString &userInput, const QString &workingDirecto
         return url;
     }
 
-    QUrl url = QUrl(trimmedString, QUrl::TolerantMode);
+    const QFileInfo fileInfo(QDir(workingDirectory), userInput);
+    if (fileInfo.exists()) {
+        return QUrl::fromLocalFile(fileInfo.absoluteFilePath());
+    }
+
+    QUrl url = QUrl(userInput, QUrl::TolerantMode);
     // Check both QUrl::isRelative (to detect full URLs) and QDir::isAbsolutePath (since on Windows drive letters can be interpreted as schemes)
-    if (url.isRelative() && !QDir::isAbsolutePath(trimmedString)) {
-        QFileInfo fileInfo(QDir(workingDirectory), trimmedString);
-        if ((options & AssumeLocalFile) || fileInfo.exists())
-            return QUrl::fromLocalFile(fileInfo.absoluteFilePath());
+    if ((options & AssumeLocalFile) && url.isRelative() && !QDir::isAbsolutePath(userInput)) {
+        return QUrl::fromLocalFile(fileInfo.absoluteFilePath());
     }
 
     return fromUserInput(trimmedString);

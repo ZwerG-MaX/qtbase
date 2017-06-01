@@ -1283,18 +1283,16 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                 if(is_target || exists(wild)) { //real file or target
                     QFileInfo fi(fileInfo(wild));
                     QString dst_file = filePrefixRoot(root, dst_dir);
-                    if(fi.isDir() && project->isActiveConfig("copy_dir_files")) {
-                        if(!dst_file.endsWith(Option::dir_sep))
-                            dst_file += Option::dir_sep;
-                        dst_file += fi.fileName();
-                    }
+                    if (!dst_file.endsWith(Option::dir_sep))
+                        dst_file += Option::dir_sep;
+                    dst_file += fi.fileName();
                     QString cmd;
                     if (fi.isDir())
-                       cmd = "-$(INSTALL_DIR)";
+                       cmd = "-$(QINSTALL_DIR)";
                     else if (is_target || fi.isExecutable())
-                       cmd = "-$(INSTALL_PROGRAM)";
+                       cmd = "-$(QINSTALL_PROGRAM)";
                     else
-                       cmd = "-$(INSTALL_FILE)";
+                       cmd = "-$(QINSTALL_FILE)";
                     cmd += " " + escapeFilePath(wild) + " " + escapeFilePath(dst_file);
                     inst << cmd;
                     if (!project->isActiveConfig("debug_info") && !project->isActiveConfig("nostrip") &&
@@ -1310,17 +1308,15 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                 if (installConfigValues.contains("no_check_exist") && files.isEmpty()) {
                     QString dst_file = filePrefixRoot(root, dst_dir);
                     QString cmd;
+                    if (!dst_file.endsWith(Option::dir_sep))
+                        dst_file += Option::dir_sep;
+                    dst_file += filestr;
                     if (installConfigValues.contains("directory")) {
-                        cmd = QLatin1String("-$(INSTALL_DIR)");
-                        if (project->isActiveConfig("copy_dir_files")) {
-                            if (!dst_file.endsWith(Option::dir_sep))
-                                dst_file += Option::dir_sep;
-                            dst_file += filestr;
-                        }
+                        cmd = QLatin1String("-$(QINSTALL_DIR)");
                     } else if (installConfigValues.contains("executable")) {
-                        cmd = QLatin1String("-$(INSTALL_PROGRAM)");
+                        cmd = QLatin1String("-$(QINSTALL_PROGRAM)");
                     } else {
-                        cmd = QLatin1String("-$(INSTALL_FILE)");
+                        cmd = QLatin1String("-$(QINSTALL_FILE)");
                     }
                     cmd += " " + escapeFilePath(wild) + " " + escapeFilePath(dst_file);
                     inst << cmd;
@@ -1331,12 +1327,10 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                     uninst.append(rm_dir_contents + " " + escapeFilePath(filePrefixRoot(root, fileFixify(dst_dir + file, FileFixifyAbsolute, false))));
                     QFileInfo fi(fileInfo(dirstr + file));
                     QString dst_file = filePrefixRoot(root, fileFixify(dst_dir, FileFixifyAbsolute, false));
-                    if(fi.isDir() && project->isActiveConfig("copy_dir_files")) {
-                        if(!dst_file.endsWith(Option::dir_sep))
-                            dst_file += Option::dir_sep;
-                        dst_file += fi.fileName();
-                    }
-                    QString cmd = QString(fi.isDir() ? "-$(INSTALL_DIR)" : "-$(INSTALL_FILE)") + " " +
+                    if (!dst_file.endsWith(Option::dir_sep))
+                        dst_file += Option::dir_sep;
+                    dst_file += fi.fileName();
+                    QString cmd = QString(fi.isDir() ? "-$(QINSTALL_DIR)" : "-$(QINSTALL_FILE)") + " " +
                                   escapeFilePath(dirstr + file) + " " + escapeFilePath(dst_file);
                     inst << cmd;
                     if (!project->isActiveConfig("debug_info") && !project->isActiveConfig("nostrip") &&
@@ -1839,7 +1833,7 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
         QString dep_cd_cmd;
         if (!tmp_dep_cmd.isEmpty()) {
             dep_cd_cmd = QLatin1String("cd ")
-                 + escapeFilePath(Option::fixPathToLocalOS(Option::output_dir, false))
+                 + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
                  + QLatin1String(" && ");
         }
         const ProStringList &vars = project->values(ProKey(*it + ".variables"));
@@ -2248,18 +2242,26 @@ MakefileGenerator::writeDefaultVariables(QTextStream &t)
     t << "INSTALL_FILE  = " << var("QMAKE_INSTALL_FILE") << endl;
     t << "INSTALL_PROGRAM = " << var("QMAKE_INSTALL_PROGRAM") << endl;
     t << "INSTALL_DIR   = " << var("QMAKE_INSTALL_DIR") << endl;
+    t << "QINSTALL_FILE = " << var("QMAKE_QMAKE") << " -install qinstall file" << endl;
+    t << "QINSTALL_PROGRAM = " << var("QMAKE_QMAKE") << " -install qinstall program" << endl;
+    t << "QINSTALL_DIR  = " << var("QMAKE_QMAKE") << " -install qinstall directory" << endl;
     t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
     t << "SYMLINK       = " << var("QMAKE_SYMBOLIC_LINK") << endl;
     t << "DEL_DIR       = " << var("QMAKE_DEL_DIR") << endl;
     t << "MOVE          = " << var("QMAKE_MOVE") << endl;
 }
 
-QString MakefileGenerator::buildArgs()
+QString MakefileGenerator::buildArgs(bool withExtra)
 {
     QString ret;
 
     for (const QString &arg : qAsConst(Option::globals->qmake_args))
         ret += " " + shellQuote(arg);
+    if (withExtra && !Option::globals->qmake_extra_args.isEmpty()) {
+        ret += " --";
+        for (const QString &arg : qAsConst(Option::globals->qmake_extra_args))
+            ret += " " + shellQuote(arg);
+    }
     return ret;
 }
 
@@ -2278,7 +2280,7 @@ QString MakefileGenerator::build_args()
     ret += " " + escapeFilePath(fileFixify(project->projectFile()));
 
     // general options and arguments
-    ret += buildArgs();
+    ret += buildArgs(true);
 
     return ret;
 }
@@ -2442,7 +2444,7 @@ MakefileGenerator::writeSubTargetCall(QTextStream &t,
         if (!in_directory.isEmpty())
             t << "\n\t" << mkdir_p_asstring(out_directory);
         pfx = "( " + chkexists.arg(out) +
-              + " $(QMAKE) -o " + out + ' ' + in + buildArgs()
+              + " $(QMAKE) -o " + out + ' ' + in + buildArgs(false)
               + " ) && ";
     }
     writeSubMakeCall(t, out_directory_cdin + pfx, makefilein);
@@ -2513,7 +2515,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
                 t << mkdir_p_asstring(out_directory)
                   << out_directory_cdin;
             }
-            t << "$(QMAKE) -o " << out << ' ' << in << buildArgs();
+            t << "$(QMAKE) -o " << out << ' ' << in << buildArgs(false);
             if (!dont_recurse)
                 writeSubMakeCall(t, out_directory_cdin, makefilein + " qmake_all");
             else
@@ -2710,7 +2712,7 @@ MakefileGenerator::writeMakeQmake(QTextStream &t, bool noDummyQmakeAll)
     if(project->isEmpty("QMAKE_FAILED_REQUIREMENTS") && !project->isEmpty("QMAKE_INTERNAL_PRL_FILE")) {
         QStringList files = escapeFilePaths(fileFixify(Option::mkfile::project_files));
         t << escapeDependencyPath(project->first("QMAKE_INTERNAL_PRL_FILE").toQString()) << ": \n\t"
-          << "@$(QMAKE) -prl " << files.join(' ') << ' ' << buildArgs() << endl;
+          << "@$(QMAKE) -prl " << files.join(' ') << ' ' << buildArgs(true) << endl;
     }
 
         QString qmake = build_args();
@@ -3305,19 +3307,19 @@ MakefileGenerator::writePkgConfigFile()
     }
     t << shellQuote(pkgConfiglibName) << " \n";
 
-    ProStringList libs;
-    if(!project->isEmpty("QMAKE_INTERNAL_PRL_LIBS")) {
-        libs = project->values("QMAKE_INTERNAL_PRL_LIBS");
-    } else {
-        libs << "QMAKE_LIBS"; //obvious one
+    if (project->isActiveConfig("staticlib")) {
+        ProStringList libs;
+        if (!project->isEmpty("QMAKE_INTERNAL_PRL_LIBS"))
+            libs = project->values("QMAKE_INTERNAL_PRL_LIBS");
+        else
+            libs << "QMAKE_LIBS"; //obvious one
+        libs << "QMAKE_LIBS_PRIVATE";
+        libs << "QMAKE_LFLAGS_THREAD"; //not sure about this one, but what about things like -pthread?
+        t << "Libs.private:";
+        for (ProStringList::ConstIterator it = libs.begin(); it != libs.end(); ++it)
+            t << ' ' << fixLibFlags((*it).toKey()).join(' ');
+        t << endl;
     }
-    libs << "QMAKE_LIBS_PRIVATE";
-    libs << "QMAKE_LFLAGS_THREAD"; //not sure about this one, but what about things like -pthread?
-    t << "Libs.private: ";
-    for (ProStringList::ConstIterator it = libs.begin(); it != libs.end(); ++it) {
-        t << fixLibFlags((*it).toKey()).join(' ') << ' ';
-    }
-    t << endl;
 
     // flags
     // ### too many

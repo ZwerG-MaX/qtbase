@@ -80,7 +80,7 @@ public:
     enum MetaEnumTest_Enum1 { MetaEnumTest_Enum1_value = 42, MetaEnumTest_Enum1_bigValue = (Q_INT64_C(1) << 33) + 50 };
     Q_ENUM(MetaEnumTest_Enum1)
 
-    enum MetaEnumTest_Enum3 ENUM_SIZE(qint64) { MetaEnumTest_Enum3_value = -47, MetaEnumTest_Enum3_bigValue = (Q_INT64_C(1) << 56) + 5  };
+    enum MetaEnumTest_Enum3 ENUM_SIZE(qint64) { MetaEnumTest_Enum3_value = -47, MetaEnumTest_Enum3_bigValue = (Q_INT64_C(1) << 56) + 5, MetaEnumTest_Enum3_bigNegValue = -(Q_INT64_C(1) << 56) - 3 };
     Q_ENUM(MetaEnumTest_Enum3)
     enum MetaEnumTest_Enum4 ENUM_SIZE(quint64) { MetaEnumTest_Enum4_value = 47, MetaEnumTest_Enum4_bigValue = (Q_INT64_C(1) << 52) + 45 };
     Q_ENUM(MetaEnumTest_Enum4)
@@ -400,6 +400,17 @@ void tst_QVariant::isNull()
     QVERIFY( !varLL.isNull() );
     QVariant var7(QString::null);
     QVERIFY(var7.isNull());
+    var7 = QVariant::fromValue<QString>(QString::null);
+    QVERIFY(var7.isNull());
+
+    QVariant var8(QMetaType::Nullptr, nullptr);
+    QVERIFY(var8.isNull());
+    var8 = QVariant::fromValue<std::nullptr_t>(nullptr);
+    QVERIFY(var8.isNull());
+    QVariant var9 = QVariant(QJsonValue(QJsonValue::Null));
+    QVERIFY(var9.isNull());
+    var9 = QVariant::fromValue<QJsonValue>(QJsonValue(QJsonValue::Null));
+    QVERIFY(var9.isNull());
 }
 
 void tst_QVariant::swap()
@@ -1501,10 +1512,11 @@ void tst_QVariant::operator_eq_eq_data()
     // ### many other combinations missing
 
     {
-        // QUuid can convert to QString, but not the opposite
         QUuid uuid(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
         QTest::newRow("uuidstring") << QVariant(uuid) << QVariant(uuid.toString()) << true;
         QTest::newRow("stringuuid") << QVariant(uuid.toString()) << QVariant(uuid) << true;
+        QTest::newRow("uuidbytearray") << QVariant(uuid) << QVariant(uuid.toByteArray()) << true;
+        QTest::newRow("bytearrayuuid") << QVariant(uuid.toByteArray()) << QVariant(uuid) << true;
     }
 
     {
@@ -1744,6 +1756,10 @@ void tst_QVariant::compareNumbers_data() const
     QTest::newRow("double5") << qVariantFromValue(0.) << qVariantFromValue(-qInf()) << +1;
     QTest::newRow("double6") << qVariantFromValue(-double(qInf())) << qVariantFromValue(-qInf()) << 0;
     QTest::newRow("double7") << qVariantFromValue(qInf()) << qVariantFromValue(qInf()) << 0;
+    QTest::newRow("double8") << qVariantFromValue(-qInf()) << qVariantFromValue(qInf()) << -1;
+    QTest::newRow("double9") << qVariantFromValue(qQNaN()) << qVariantFromValue(0.) << INT_MAX;
+    QTest::newRow("double10") << qVariantFromValue(0.) << qVariantFromValue(qQNaN()) << INT_MAX;
+    QTest::newRow("double11") << qVariantFromValue(qQNaN()) << qVariantFromValue(qQNaN()) << INT_MAX;
 
     // mixed comparisons
     // fp + fp
@@ -1752,8 +1768,12 @@ void tst_QVariant::compareNumbers_data() const
     QTest::newRow("float+double3") << qVariantFromValue(0.f) << qVariantFromValue(-1.) << +1;
     QTest::newRow("float+double4") << qVariantFromValue(-float(qInf())) << qVariantFromValue(0.) << -1;
     QTest::newRow("float+double5") << qVariantFromValue(0.f) << qVariantFromValue(-qInf()) << +1;
-    QTest::newRow("float+double6") << qVariantFromValue(-float(qInf())) << qVariantFromValue(qInf()) << 0;
+    QTest::newRow("float+double6") << qVariantFromValue(-float(qInf())) << qVariantFromValue(-qInf()) << 0;
     QTest::newRow("float+double7") << qVariantFromValue(float(qInf())) << qVariantFromValue(qInf()) << 0;
+    QTest::newRow("float+double8") << qVariantFromValue(-float(qInf())) << qVariantFromValue(qInf()) << -1;
+    QTest::newRow("float+double9") << qVariantFromValue(qQNaN()) << qVariantFromValue(0.) << INT_MAX;
+    QTest::newRow("float+double10") << qVariantFromValue(0.) << qVariantFromValue(qQNaN()) << INT_MAX;
+    QTest::newRow("float+double11") << qVariantFromValue(qQNaN()) << qVariantFromValue(qQNaN()) << INT_MAX;
 
     // fp + int
     QTest::newRow("float+int1") << qVariantFromValue(0.f) << qVariantFromValue(0) << 0;
@@ -1967,7 +1987,7 @@ void tst_QVariant::compareNumbers() const
         QCOMPARE(v2, v1);
         QVERIFY(v2 >= v1);
         QVERIFY(!(v2 > v1));
-    } else {
+    } else if (expected == +1) {
         QVERIFY(!(v1 < v2));
         QVERIFY(!(v1 <= v2));
         QVERIFY(!(v1 == v2));
@@ -1979,6 +1999,9 @@ void tst_QVariant::compareNumbers() const
         QVERIFY(!(v2 == v1));
         QVERIFY(!(v2 >= v1));
         QVERIFY(!(v2 > v1));
+    } else {
+        // unorderable (NaN)
+        QVERIFY(!(v1 == v2));
     }
 }
 
@@ -4660,7 +4683,7 @@ template<typename Enum> void testVariant(Enum value, bool *ok)
     QVERIFY(var2.convert(QMetaType::Int));
     QCOMPARE(var2.value<int>(), static_cast<int>(value));
 
-    if (static_cast<qint64>(value) <= INT_MAX) {
+    if ((static_cast<qint64>(value) <= INT_MAX) && (static_cast<qint64>(value) >= INT_MIN)) {
         int intValue = static_cast<int>(value);
         QVariant intVar = intValue;
         QVERIFY(intVar.canConvert<Enum>());
@@ -4721,7 +4744,7 @@ template<typename Enum> void testVariantMeta(Enum value, bool *ok, const char *s
 
     QVariant strVar = QString::fromLatin1(string);
     QVERIFY(strVar.canConvert<Enum>());
-    if (value > INT_MAX) {
+    if ((static_cast<qint64>(value) > INT_MAX) || (static_cast<qint64>(value) < INT_MIN)) {
         QEXPECT_FAIL("", "QMetaEnum api uses 'int' as return type  QTBUG-27451", Abort);
         *ok = true;
     }
@@ -4743,6 +4766,7 @@ void tst_QVariant::metaEnums()
     METAENUMS_TEST(MetaEnumTest_Enum1_bigValue);
     METAENUMS_TEST(MetaEnumTest_Enum3_value);
     METAENUMS_TEST(MetaEnumTest_Enum3_bigValue);
+    METAENUMS_TEST(MetaEnumTest_Enum3_bigNegValue);
     METAENUMS_TEST(MetaEnumTest_Enum4_value);
     METAENUMS_TEST(MetaEnumTest_Enum4_bigValue);
     METAENUMS_TEST(MetaEnumTest_Enum5_value);

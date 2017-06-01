@@ -206,6 +206,13 @@ private slots:
     void ditherGradient_data();
     void ditherGradient();
 
+    void reinterpretAsFormat_data();
+    void reinterpretAsFormat();
+
+    void reinterpretAsFormat2();
+
+    void complexTransform8bit();
+
 #ifdef Q_OS_DARWIN
     void toCGImage_data();
     void toCGImage();
@@ -1088,35 +1095,11 @@ void tst_QImage::rotate_data()
     degrees << 0 << 90 << 180 << 270;
 
     foreach (int d, degrees) {
-        const QByteArray dB = QByteArray::number(d);
-        QTest::newRow((dB + " Format_RGB32").constData())
-            << QImage::Format_RGB32 << d;
-        QTest::newRow((dB + " Format_ARGB32").constData())
-            << QImage::Format_ARGB32 << d;
-        QTest::newRow((dB + " Format_ARGB32_Premultiplied").constData())
-            << QImage::Format_ARGB32_Premultiplied << d;
-        QTest::newRow((dB + " Format_RGB16").constData())
-            << QImage::Format_RGB16 << d;
-        QTest::newRow((dB + " Format_ARGB8565_Premultiplied").constData())
-            << QImage::Format_ARGB8565_Premultiplied << d;
-        QTest::newRow((dB + " Format_RGB666").constData())
-            << QImage::Format_RGB666 << d;
-        QTest::newRow((dB + " Format_RGB555").constData())
-            << QImage::Format_RGB555 << d;
-        QTest::newRow((dB + " Format_ARGB8555_Premultiplied").constData())
-            << QImage::Format_ARGB8555_Premultiplied << d;
-        QTest::newRow((dB + " Format_RGB888").constData())
-            << QImage::Format_RGB888 << d;
-        QTest::newRow((dB + " Format_Indexed8").constData())
-            << QImage::Format_Indexed8 << d;
-        QTest::newRow((dB + " Format_RGBX8888").constData())
-            << QImage::Format_RGBX8888 << d;
-        QTest::newRow((dB + " Format_RGBA8888_Premultiplied").constData())
-            << QImage::Format_RGBA8888_Premultiplied << d;
-        QTest::newRow((dB + " Format_Alpha8").constData())
-            << QImage::Format_Alpha8 << d;
-        QTest::newRow((dB + " Format_Grayscale8").constData())
-            << QImage::Format_Grayscale8 << d;
+        const QString dB = QString::number(d);
+        for (int i = QImage::Format_Indexed8; i < QImage::NImageFormats; i++) {
+            QImage::Format format = static_cast<QImage::Format>(i);
+            QTest::newRow(qPrintable(dB + " " + formatToString(format))) << format << d;
+        }
     }
 }
 
@@ -3325,6 +3308,76 @@ void tst_QImage::ditherGradient()
         }
     }
     QVERIFY(observedGradientSteps >= minimumExpectedGradient);
+}
+
+void tst_QImage::reinterpretAsFormat_data()
+{
+    QTest::addColumn<QImage::Format>("in_format");
+    QTest::addColumn<QImage::Format>("out_format");
+    QTest::addColumn<QColor>("in_color");
+    QTest::addColumn<QColor>("out_color");
+
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+    QTest::newRow("rgb32 -> rgbx8888") << QImage::Format_RGB32 << QImage::Format_RGBX8888 << QColor(Qt::red) << QColor(Qt::blue);
+    QTest::newRow("rgba8888 -> argb32") << QImage::Format_RGBA8888 << QImage::Format_ARGB32 << QColor(Qt::red) << QColor(Qt::blue);
+    QTest::newRow("argb32pm -> rgba8888pm") << QImage::Format_RGBA8888_Premultiplied << QImage::Format_ARGB32_Premultiplied << QColor(Qt::green) << QColor(Qt::green);
+#endif
+    QTest::newRow("rgb32 -> argb32") << QImage::Format_RGB32 << QImage::Format_ARGB32 << QColor(Qt::cyan) << QColor(Qt::cyan);
+    QTest::newRow("argb32pm -> rgb32") << QImage::Format_ARGB32_Premultiplied << QImage::Format_RGB32 << QColor(Qt::transparent) << QColor(Qt::black);
+    QTest::newRow("argb32 -> rgb32") << QImage::Format_ARGB32 << QImage::Format_RGB32 << QColor(255, 0, 0, 127) << QColor(255, 0, 0);
+    QTest::newRow("argb32pm -> rgb32") << QImage::Format_ARGB32_Premultiplied << QImage::Format_RGB32 << QColor(255, 0, 0, 127) << QColor(127, 0, 0);
+}
+
+void tst_QImage::reinterpretAsFormat()
+{
+    QFETCH(QImage::Format, in_format);
+    QFETCH(QImage::Format, out_format);
+    QFETCH(QColor, in_color);
+    QFETCH(QColor, out_color);
+
+    QImage image(1, 1, in_format);
+    image.setPixelColor(0, 0, in_color);
+    QVERIFY(image.reinterpretAsFormat(out_format));
+    QCOMPARE(image.pixelColor(0, 0), out_color);
+}
+
+void tst_QImage::reinterpretAsFormat2()
+{
+    const uint imageData[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    {
+        QImage image(reinterpret_cast<const uchar*>(imageData), 4, 2, QImage::Format_RGB32);
+        QCOMPARE(image.pixelColor(0, 0), QColor(Qt::black));
+        QVERIFY(image.isDetached());
+        QVERIFY(image.reinterpretAsFormat(QImage::Format_ARGB32_Premultiplied));
+        QCOMPARE(image.constBits(), reinterpret_cast<const uchar*>(imageData));
+        QCOMPARE(image.pixelColor(0, 0), QColor(Qt::transparent));
+
+        QVERIFY(!image.reinterpretAsFormat(QImage::Format_Grayscale8));
+    }
+    {
+        QImage image(reinterpret_cast<const uchar*>(imageData), 8, 4, QImage::Format_Indexed8);
+        image.setColor(0, qRgb(255, 255, 255));
+        QCOMPARE(image.pixelColor(0, 0), QColor(Qt::white));
+        QVERIFY(image.reinterpretAsFormat(QImage::Format_Grayscale8));
+        QCOMPARE(image.pixelColor(0, 0), QColor(Qt::black));
+        QVERIFY(image.reinterpretAsFormat(QImage::Format_Alpha8));
+        QCOMPARE(image.pixelColor(0, 0), QColor(Qt::transparent));
+
+        QVERIFY(!image.reinterpretAsFormat(QImage::Format_RGB16));
+    }
+}
+
+void tst_QImage::complexTransform8bit()
+{
+    QImage img1(100, 100, QImage::Format_RGB32);
+    img1.fill(Qt::green);
+    img1 = img1.convertToFormat(QImage::Format_Indexed8);
+    QImage img2 = img1.transformed(QTransform().rotate(45), Qt::SmoothTransformation);
+    // Currently the format is always QImage::Format_ARGB32_Premultiplied, but it
+    // doesn't have to be, and if it becomes indexed this test is no longer be valid.
+    QVERIFY(img2.format() > QImage::Format_Indexed8);
+    QCOMPARE(img2.colorCount(), 0);
 }
 
 #ifdef Q_OS_DARWIN

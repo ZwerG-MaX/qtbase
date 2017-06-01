@@ -239,9 +239,9 @@ private:
         int i = data.indexOf("a href=\"?view=detail");
         if (i > 0) {
             QString href = data.mid(i, data.indexOf('\"', i + 8) - i + 1);
-            QRegExp regex("dpap=([A-Za-z0-9]+)");
-            regex.indexIn(href);
-            QString airport = regex.cap(1);
+            QRegularExpression regex("dpap=([A-Za-z0-9]+)");
+            QRegularExpressionMatch match = regex.match(href);
+            QString airport = match.captured(1);
             QUrlQuery query(m_url);
             query.addQueryItem("dpap", airport);
             m_url.setQuery(query);
@@ -270,19 +270,18 @@ private:
                 inFlightStatus |= className == "FlightDetailHeaderStatus";
                 inFlightMap |= className == "flightMap";
                 if (xml.name() == "td" && !className.isEmpty()) {
-                    QString cn = className.toString();
-                    if (cn.contains("fieldTitle")) {
+                    if (className.contains("fieldTitle")) {
                         inFieldName = true;
                         fieldNames += QString();
                         fieldValues += QString();
                     }
-                    if (cn.contains("fieldValue"))
+                    if (className.contains("fieldValue"))
                         inFieldValue = true;
                 }
                 if (xml.name() == "img" && inFlightMap) {
-                    QString src = xml.attributes().value("src").toString();
-                    src.prepend("http://mobile.flightview.com/");
-                    QUrl url = QUrl::fromPercentEncoding(src.toLatin1());
+                    const QByteArray encoded
+                        = ("http://mobile.flightview.com/" % xml.attributes().value("src")).toLatin1();
+                    QUrl url = QUrl::fromPercentEncoding(encoded);
                     mapReplies.append(m_manager.get(QNetworkRequest(url)));
                 }
             }

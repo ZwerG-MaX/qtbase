@@ -40,7 +40,6 @@
 #ifndef QWINDOWSTHEME_H
 #define QWINDOWSTHEME_H
 
-#include "qwindowsthreadpoolrunner.h"
 #include <qpa/qplatformtheme.h>
 
 #include <QtCore/QSharedPointer>
@@ -58,15 +57,15 @@ public:
 
     static QWindowsTheme *instance() { return m_instance; }
 
-    bool usePlatformNativeDialog(DialogType type) const Q_DECL_OVERRIDE;
-    QPlatformDialogHelper *createPlatformDialogHelper(DialogType type) const Q_DECL_OVERRIDE;
-    QVariant themeHint(ThemeHint) const Q_DECL_OVERRIDE;
-    const QPalette *palette(Palette type = SystemPalette) const Q_DECL_OVERRIDE
+    bool usePlatformNativeDialog(DialogType type) const override;
+    QPlatformDialogHelper *createPlatformDialogHelper(DialogType type) const override;
+    QVariant themeHint(ThemeHint) const override;
+    const QPalette *palette(Palette type = SystemPalette) const override
         { return m_palettes[type]; }
-    const QFont *font(Font type = SystemFont) const Q_DECL_OVERRIDE
+    const QFont *font(Font type = SystemFont) const override
         { return m_fonts[type]; }
 
-    QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const Q_DECL_OVERRIDE;
+    QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const override;
 
     QIcon fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions = 0) const override;
 
@@ -88,7 +87,6 @@ private:
     static QWindowsTheme *m_instance;
     QPalette *m_palettes[NPalettes];
     QFont *m_fonts[NFonts];
-    const QSharedPointer<QWindowsThreadPoolRunner> m_threadPoolRunner;
     QList<QSize> m_fileIconSizes;
 };
 

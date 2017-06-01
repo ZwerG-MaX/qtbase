@@ -49,6 +49,8 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtFbSupport/private/qfbvthandler_p.h>
 
+#include <errno.h>
+
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(qLcEglfsKmsDebug)
@@ -92,10 +94,8 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
     return fb.take();
 }
 
-QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QEglFSKmsIntegration *integration,
-                                       QEglFSKmsDevice *device,
-                                       QEglFSKmsOutput output)
-    : QEglFSKmsScreen(integration, device, output)
+QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QKmsDevice *device, const QKmsOutput &output)
+    : QEglFSKmsScreen(device, output)
     , m_gbm_surface(Q_NULLPTR)
     , m_gbm_bo_current(Q_NULLPTR)
     , m_gbm_bo_next(Q_NULLPTR)
@@ -105,12 +105,17 @@ QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QEglFSKmsIntegration *integration,
 
 QEglFSKmsGbmScreen::~QEglFSKmsGbmScreen()
 {
+    const int remainingScreenCount = qGuiApp->screens().count();
+    qCDebug(qLcEglfsKmsDebug, "Screen dtor. Remaining screens: %d", remainingScreenCount);
+    if (!remainingScreenCount && !device()->screenConfig()->separateScreens())
+        static_cast<QEglFSKmsGbmDevice *>(device())->destroyGlobalCursor();
 }
 
 QPlatformCursor *QEglFSKmsGbmScreen::cursor() const
 {
-    if (integration()->hwCursor()) {
-        if (!integration()->separateScreens())
+    QKmsScreenConfig *config = device()->screenConfig();
+    if (config->hwCursor()) {
+        if (!config->separateScreens())
             return static_cast<QEglFSKmsGbmDevice *>(device())->globalCursor();
 
         if (m_cursor.isNull()) {
@@ -181,24 +186,41 @@ void QEglFSKmsGbmScreen::flip()
 
     FrameBuffer *fb = framebufferForBufferObject(m_gbm_bo_next);
 
-    if (!output().mode_set) {
-        int ret = drmModeSetCrtc(device()->fd(),
-                                 output().crtc_id,
+    QKmsOutput &op(output());
+    const int fd = device()->fd();
+    const uint32_t w = op.modes[op.mode].hdisplay;
+    const uint32_t h = op.modes[op.mode].vdisplay;
+
+    if (!op.mode_set) {
+        int ret = drmModeSetCrtc(fd,
+                                 op.crtc_id,
                                  fb->fb,
                                  0, 0,
-                                 &output().connector_id, 1,
-                                 &output().modes[output().mode]);
+                                 &op.connector_id, 1,
+                                 &op.modes[op.mode]);
 
-        if (ret) {
-            qErrnoWarning("Could not set DRM mode!");
+        if (ret == -1) {
+            qErrnoWarning(errno, "Could not set DRM mode!");
         } else {
-            output().mode_set = true;
+            op.mode_set = true;
             setPowerState(PowerStateOn);
+
+            if (!op.plane_set) {
+                op.plane_set = true;
+                if (op.wants_plane) {
+                    int ret = drmModeSetPlane(fd, op.plane_id, op.crtc_id,
+                                              uint32_t(-1), 0,
+                                              0, 0, w, h,
+                                              0 << 16, 0 << 16, w << 16, h << 16);
+                    if (ret == -1)
+                        qErrnoWarning(errno, "drmModeSetPlane failed");
+                }
+            }
         }
     }
 
-    int ret = drmModePageFlip(device()->fd(),
-                              output().crtc_id,
+    int ret = drmModePageFlip(fd,
+                              op.crtc_id,
                               fb->fb,
                               DRM_MODE_PAGE_FLIP_EVENT,
                               this);

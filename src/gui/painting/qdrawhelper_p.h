@@ -64,6 +64,8 @@
 #include "private/qrasterdefs_p.h"
 #include <private/qsimd_p.h>
 
+#include <QtCore/qsharedpointer.h>
+
 QT_BEGIN_NAMESPACE
 
 #if defined(Q_CC_GNU)
@@ -111,13 +113,13 @@ typedef void (*AlphamapBlitFunc)(QRasterBuffer *rasterBuffer,
                                  int x, int y, const QRgba64 &color,
                                  const uchar *bitmap,
                                  int mapWidth, int mapHeight, int mapStride,
-                                 const QClipData *clip);
+                                 const QClipData *clip, bool useGammaCorrection);
 
 typedef void (*AlphaRGBBlitFunc)(QRasterBuffer *rasterBuffer,
                                  int x, int y, const QRgba64 &color,
                                  const uint *rgbmask,
                                  int mapWidth, int mapHeight, int mapStride,
-                                 const QClipData *clip);
+                                 const QClipData *clip, bool useGammaCorrection);
 
 typedef void (*RectFillFunc)(QRasterBuffer *rasterBuffer,
                              int x, int y, int width, int height,
@@ -157,7 +159,6 @@ struct DrawHelper {
 extern SrcOverBlendFunc qBlendFunctions[QImage::NImageFormats][QImage::NImageFormats];
 extern SrcOverScaleFunc qScaleFunctions[QImage::NImageFormats][QImage::NImageFormats];
 extern SrcOverTransformFunc qTransformFunctions[QImage::NImageFormats][QImage::NImageFormats];
-extern MemRotateFunc qMemRotateFunctions[QImage::NImageFormats][3];
 
 extern DrawHelper qDrawHelper[QImage::NImageFormats];
 
@@ -335,7 +336,11 @@ struct QSpanData
         QGradientData gradient;
         QTextureData texture;
     };
-    QExplicitlySharedDataPointer<const QSharedData> cachedGradient;
+    class Pinnable {
+    protected:
+        ~Pinnable() {}
+    }; // QSharedPointer<const void> is not supported
+    QSharedPointer<const Pinnable> cachedGradient;
 
 
     void init(QRasterBuffer *rb, const QRasterPaintEngine *pe);
@@ -343,18 +348,6 @@ struct QSpanData
     void setupMatrix(const QTransform &matrix, int bilinear);
     void initTexture(const QImage *image, int alpha, QTextureData::Type = QTextureData::Plain, const QRect &sourceRect = QRect());
     void adjustSpanMethods();
-};
-
-struct QDrawHelperGammaTables
-{
-    explicit QDrawHelperGammaTables(qreal smoothing);
-
-    void refresh(qreal smoothing);
-
-    uchar qt_pow_rgb_gamma[256];
-    uchar qt_pow_rgb_invgamma[256];
-    uint qt_pow_gamma[256];
-    uchar qt_pow_invgamma[2048];
 };
 
 static inline uint qt_gradient_clamp(const QGradientData *data, int ipos)
@@ -840,13 +833,13 @@ inline void qt_memfill(T *dest, T value, int count)
     int n = (count + 7) / 8;
     switch (count & 0x07)
     {
-    case 0: do { *dest++ = value;
-    case 7:      *dest++ = value;
-    case 6:      *dest++ = value;
-    case 5:      *dest++ = value;
-    case 4:      *dest++ = value;
-    case 3:      *dest++ = value;
-    case 2:      *dest++ = value;
+    case 0: do { *dest++ = value; Q_FALLTHROUGH();
+    case 7:      *dest++ = value; Q_FALLTHROUGH();
+    case 6:      *dest++ = value; Q_FALLTHROUGH();
+    case 5:      *dest++ = value; Q_FALLTHROUGH();
+    case 4:      *dest++ = value; Q_FALLTHROUGH();
+    case 3:      *dest++ = value; Q_FALLTHROUGH();
+    case 2:      *dest++ = value; Q_FALLTHROUGH();
     case 1:      *dest++ = value;
     } while (--n > 0);
     }
@@ -882,13 +875,13 @@ do {                                          \
     int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
-    case 0: do { *--_d = *--_s;                 \
-    case 7:      *--_d = *--_s;                 \
-    case 6:      *--_d = *--_s;                 \
-    case 5:      *--_d = *--_s;                 \
-    case 4:      *--_d = *--_s;                 \
-    case 3:      *--_d = *--_s;                 \
-    case 2:      *--_d = *--_s;                 \
+    case 0: do { *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 7:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 6:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 5:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 4:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 3:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 2:      *--_d = *--_s; Q_FALLTHROUGH(); \
     case 1:      *--_d = *--_s;                 \
     } while (--n > 0);                        \
     }                                         \
@@ -902,13 +895,13 @@ do {                                          \
     int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
-    case 0: do { *_d++ = *_s++;                 \
-    case 7:      *_d++ = *_s++;                 \
-    case 6:      *_d++ = *_s++;                 \
-    case 5:      *_d++ = *_s++;                 \
-    case 4:      *_d++ = *_s++;                 \
-    case 3:      *_d++ = *_s++;                 \
-    case 2:      *_d++ = *_s++;                 \
+    case 0: do { *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 7:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 6:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 5:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 4:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 3:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 2:      *_d++ = *_s++; Q_FALLTHROUGH(); \
     case 1:      *_d++ = *_s++;                 \
     } while (--n > 0);                        \
     }                                         \
@@ -1238,6 +1231,7 @@ extern QPixelLayout qPixelLayouts[QImage::NImageFormats];
 extern const FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
 extern StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
 
+extern MemRotateFunc qMemRotateFunctions[QPixelLayout::BPPCount][3];
 
 
 QT_END_NAMESPACE

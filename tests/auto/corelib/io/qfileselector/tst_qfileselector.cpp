@@ -126,6 +126,14 @@ void tst_QFileSelector::basicTest_data()
     QTest::newRow("platform3") << QString(":/platforms/test3") << QStringList()
                                << expectedPlatform3File;
 
+#ifdef Q_OS_MACOS
+    // special case for compatibility code
+    QTest::newRow("osx-compat") << QString(":/platforms/test4") << QStringList()
+                                << ":/platforms/+osx/test4";
+    QTest::newRow("mac-compat") << QString(":/platforms/test5") << QStringList()
+                                << ":/platforms/+mac/test5";
+#endif
+
     QString resourceTestPath(":/extras/test");
     QString custom1("custom1");
     QTest::newRow("custom1-noselector") << resourceTestPath << QStringList()
@@ -138,7 +146,7 @@ void tst_QFileSelector::basicTest_data()
         << QString(":/extras/test2");
 
     QTest::newRow("custom1-withselector-nobasefile") << QString(":/extras/test3") << (QStringList() << custom1)
-        << QString(":/extras/test3");
+        << QString(":/extras/+custom1/test3");
 
     QString custom2("custom2");
     QString custom3("custom3");

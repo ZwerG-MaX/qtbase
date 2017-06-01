@@ -57,6 +57,9 @@
 #include "QtCore/qhash.h"
 #include "QtCore/qshareddata.h"
 #include "private/qiodevice_p.h"
+
+QT_REQUIRE_CONFIG(processenvironment);
+
 #ifdef Q_OS_UNIX
 #include <QtCore/private/qorderedmutexlocker_p.h>
 #endif
@@ -69,8 +72,6 @@ typedef HANDLE Q_PIPE;
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
 #endif
-
-#ifndef QT_NO_PROCESS
 
 QT_BEGIN_NAMESPACE
 
@@ -233,6 +234,8 @@ template<> Q_INLINE_TEMPLATE void QSharedDataPointer<QProcessEnvironmentPrivate>
     d = x;
 }
 
+#if QT_CONFIG(process)
+
 class QProcessPrivate : public QIODevicePrivate
 {
 public:
@@ -386,8 +389,8 @@ public:
     void setErrorAndEmit(QProcess::ProcessError error, const QString &description = QString());
 };
 
-QT_END_NAMESPACE
+#endif // QT_CONFIG(process)
 
-#endif // QT_NO_PROCESS
+QT_END_NAMESPACE
 
 #endif // QPROCESS_P_H

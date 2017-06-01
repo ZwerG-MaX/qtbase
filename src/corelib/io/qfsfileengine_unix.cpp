@@ -144,7 +144,7 @@ static inline bool setCloseOnExec(int fd)
 static inline QString msgOpenDirectory()
 {
     const char message[] = QT_TRANSLATE_NOOP("QIODevice", "file to open is a directory");
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(translation)
     return QIODevice::tr(message);
 #else
     return QLatin1String(message);
@@ -629,7 +629,7 @@ QString QFSFileEngine::fileName(FileName file) const
 bool QFSFileEngine::isRelativePath() const
 {
     Q_D(const QFSFileEngine);
-    return d->fileEntry.filePath().length() ? d->fileEntry.filePath()[0] != QLatin1Char('/') : true;
+    return d->fileEntry.filePath().length() ? d->fileEntry.filePath().at(0) != QLatin1Char('/') : true;
 }
 
 uint QFSFileEngine::ownerId(FileOwner own) const
@@ -688,6 +688,19 @@ QDateTime QFSFileEngine::fileTime(FileTime time) const
 
 uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFlags flags)
 {
+#if (defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)) && Q_PROCESSOR_WORDSIZE == 4
+    // The Linux mmap2 system call on 32-bit takes a page-shifted 32-bit
+    // integer so the maximum offset is 1 << (32+12) (the shift is always 12,
+    // regardless of the actual page size). Unfortunately, the mmap64()
+    // function is known to be broken in all Linux libcs (glibc, uclibc, musl
+    // and Bionic): all of them do the right shift, but don't confirm that the
+    // result fits into the 32-bit parameter to the kernel.
+
+    static qint64 MaxFileOffset = (Q_INT64_C(1) << (32+12)) - 1;
+#else
+    static qint64 MaxFileOffset = std::numeric_limits<QT_OFF_T>::max();
+#endif
+
     Q_Q(QFSFileEngine);
     Q_UNUSED(flags);
     if (openMode == QIODevice::NotOpen) {
@@ -695,7 +708,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
         return 0;
     }
 
-    if (offset < 0 || offset != qint64(QT_OFF_T(offset))
+    if (offset < 0 || offset > MaxFileOffset
             || size < 0 || quint64(size) > quint64(size_t(-1))) {
         q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
         return 0;

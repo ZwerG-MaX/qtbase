@@ -56,6 +56,10 @@
 #  define WM_GESTURE 0x0119
 #endif
 
+#ifndef WM_DPICHANGED
+#  define WM_DPICHANGED 0x02E0
+#endif
+
 QT_BEGIN_NAMESPACE
 
 namespace QtWindows
@@ -96,12 +100,14 @@ enum WindowsEventType // Simplify event types
     FocusInEvent = WindowEventFlag + 17,
     FocusOutEvent = WindowEventFlag + 18,
     WhatsThisEvent = WindowEventFlag + 19,
+    DpiChangedEvent = WindowEventFlag + 21,
     MouseEvent = MouseEventFlag + 1,
     MouseWheelEvent = MouseEventFlag + 2,
     CursorEvent = MouseEventFlag + 3,
     TouchEvent = TouchEventFlag + 1,
     NonClientMouseEvent = NonClientEventFlag + MouseEventFlag + 1,
     NonClientHitTest = NonClientEventFlag + 2,
+    NonClientCreate = NonClientEventFlag + 3,
     KeyEvent = KeyEventFlag + 1,
     KeyDownEvent = KeyEventFlag + KeyDownEventFlag + 1,
     KeyboardLayoutChangeEvent = KeyEventFlag + 2,
@@ -114,6 +120,7 @@ enum WindowsEventType // Simplify event types
     QueryEndSessionApplicationEvent = ApplicationEventFlag + 4,
     EndSessionApplicationEvent = ApplicationEventFlag + 5,
     AppCommandEvent = ApplicationEventFlag + 6,
+    DeviceChangeEvent = ApplicationEventFlag + 7,
     InputMethodStartCompositionEvent = InputMethodEventFlag + 1,
     InputMethodCompositionEvent = InputMethodEventFlag + 2,
     InputMethodEndCompositionEvent = InputMethodEventFlag + 3,
@@ -177,6 +184,8 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::HideEvent;
     case WM_SIZE:
         return QtWindows::ResizeEvent;
+    case WM_NCCREATE:
+        return QtWindows::NonClientCreate;
     case WM_NCCALCSIZE:
         return QtWindows::CalculateSize;
     case WM_NCHITTEST:
@@ -263,6 +272,10 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
 #endif
     case WM_GESTURE:
         return QtWindows::GestureEvent;
+    case WM_DEVICECHANGE:
+        return QtWindows::DeviceChangeEvent;
+    case WM_DPICHANGED:
+        return QtWindows::DpiChangedEvent;
     default:
         break;
     }

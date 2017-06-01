@@ -408,7 +408,6 @@ QWidget *QApplicationPrivate::focus_widget = 0;        // has keyboard input foc
 QWidget *QApplicationPrivate::hidden_focus_widget = 0; // will get keyboard input focus after show()
 QWidget *QApplicationPrivate::active_window = 0;        // toplevel with keyboard focus
 #ifndef QT_NO_WHEELEVENT
-int QApplicationPrivate::wheel_scroll_lines;   // number of lines to scroll
 QPointer<QWidget> QApplicationPrivate::wheel_widget;
 #endif
 bool qt_in_tab_key_event = false;
@@ -565,6 +564,10 @@ QApplication::QApplication(int &argc, char **argv, int _internal)
 */
 void QApplicationPrivate::init()
 {
+#if defined(Q_OS_MACOS)
+    QMacAutoReleasePool pool;
+#endif
+
     QGuiApplicationPrivate::init();
 
     initResources();
@@ -642,19 +645,12 @@ void QApplicationPrivate::initialize()
     if (qEnvironmentVariableIntValue("QT_USE_NATIVE_WINDOWS") > 0)
         QCoreApplication::setAttribute(Qt::AA_NativeWindows);
 
-#ifndef QT_NO_WHEELEVENT
-    QApplicationPrivate::wheel_scroll_lines = 3;
-#endif
-
     if (qt_is_gui_used)
         initializeMultitouch();
 
     if (QApplication::desktopSettingsAware())
         if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
             QApplicationPrivate::enabledAnimations = theme->themeHint(QPlatformTheme::UiEffects).toInt();
-#ifndef QT_NO_WHEELEVENT
-            QApplicationPrivate::wheel_scroll_lines = theme->themeHint(QPlatformTheme::WheelScrollLines).toInt();
-#endif
         }
 
     is_app_running = true; // no longer starting up
@@ -2169,11 +2165,14 @@ QWidget *qt_tlw_for_window(QWindow *wnd)
     // QTBUG-32177, wnd might be a QQuickView embedded via window container.
     while (wnd && !wnd->isTopLevel()) {
         QWindow *parent = wnd->parent();
-        // Don't end up in windows not belonging to this application
-        if (parent && parent->type() != Qt::ForeignWindow)
-            wnd = wnd->parent();
-        else
+        if (!parent)
             break;
+
+        // Don't end up in windows not belonging to this application
+        if (parent->handle() && parent->handle()->isForeignWindow())
+            break;
+
+        wnd = wnd->parent();
     }
     if (wnd) {
         const auto tlws = qApp->topLevelWidgets();
@@ -2455,26 +2454,11 @@ bool QApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blockingWin
     for (int i = 0; i < modalWindowList.count(); ++i) {
         QWindow *modalWindow = modalWindowList.at(i);
 
-        {
-            // check if the modal window is our window or a (transient) parent of our window
-            QWindow *w = window;
-            while (w) {
-                if (w == modalWindow) {
-                    *blockingWindow = 0;
-                    return false;
-                }
-                QWindow *p = w->parent();
-                if (!p)
-                    p = w->transientParent();
-                w = p;
-            }
-
-            // Embedded in-process windows are not visible in normal parent-child chain,
-            // so check the native parent chain, too.
-            const QPlatformWindow *platWin = window->handle();
-            const QPlatformWindow *modalPlatWin = modalWindow->handle();
-            if (platWin && modalPlatWin && platWin->isEmbedded(modalPlatWin))
-                return false;
+        // A window is not blocked by another modal window if the two are
+        // the same, or if the window is a child of the modal window.
+        if (window == modalWindow || modalWindow->isAncestorOf(window, QWindow::IncludeTransients)) {
+            *blockingWindow = 0;
+            return false;
         }
 
         Qt::WindowModality windowModality = modalWindow->modality();
@@ -3202,17 +3186,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                 if (!w->hasMouseTracking()
                     && mouse->type() == QEvent::MouseMove && mouse->buttons() == 0) {
                     // but still send them through all application event filters (normally done by notify_helper)
-                    for (int i = 0; d->extraData && i < d->extraData->eventFilters.size(); ++i) {
-                        QObject *obj = d->extraData->eventFilters.at(i);
-                        if (!obj)
-                            continue;
-                        if (Q_UNLIKELY(obj->d_func()->threadData != w->d_func()->threadData)) {
-                            qWarning("QApplication: Object event filter cannot be in a different thread.");
-                            continue;
-                        }
-                        if (obj->eventFilter(w, w == receiver ? mouse : &me))
-                            break;
-                    }
+                    d->sendThroughApplicationEventFilters(w, w == receiver ? mouse : &me);
                     res = true;
                 } else {
                     w->setAttribute(Qt::WA_NoMouseReplay, false);
@@ -3305,7 +3279,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                 QWheelEvent we(relpos, wheel->globalPos(), wheel->pixelDelta(), wheel->angleDelta(), wheel->delta(), wheel->orientation(), wheel->buttons(),
                                wheel->modifiers(), phase, wheel->source(), wheel->inverted());
                 bool eventAccepted;
-                while (w) {
+                do {
                     we.spont = spontaneous && w == receiver;
                     we.ignore();
                     res = d->notify_helper(w, &we);
@@ -3323,7 +3297,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 
                     we.p += w->pos();
                     w = w->parentWidget();
-                }
+                } while (w);
                 wheel->setAccepted(eventAccepted);
             } else if (!spontaneous) {
                 // wheel_widget may forward the wheel event to a delegate widget,
@@ -3558,9 +3532,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             touchEvent->setTarget(widget);
             for (int i = 0; i < touchEvent->_touchPoints.size(); ++i) {
                 QTouchEvent::TouchPoint &pt = touchEvent->_touchPoints[i];
-                QRectF rect = pt.rect();
-                rect.translate(offset);
-                pt.d->rect = rect;
+                pt.d->pos = pt.pos() + offset;
                 pt.d->startPos = pt.startPos() + offset;
                 pt.d->lastPos = pt.lastPos() + offset;
             }
@@ -4066,16 +4038,18 @@ int QApplication::keyboardInputInterval()
     or \l{QAbstractItemView::ScrollPerPixel}{scroll one pixel}.
 
     By default, this property has a value of 3.
+
+    \sa QStyleHints::wheelScrollLines()
 */
 #ifndef QT_NO_WHEELEVENT
 int QApplication::wheelScrollLines()
 {
-    return QApplicationPrivate::wheel_scroll_lines;
+    return styleHints()->wheelScrollLines();
 }
 
 void QApplication::setWheelScrollLines(int lines)
 {
-    QApplicationPrivate::wheel_scroll_lines = lines;
+    styleHints()->setWheelScrollLines(lines);
 }
 #endif
 
@@ -4257,12 +4231,10 @@ bool QApplicationPrivate::updateTouchPointsForWidget(QWidget *widget, QTouchEven
         QTouchEvent::TouchPoint &touchPoint = touchEvent->_touchPoints[i];
 
         // preserve the sub-pixel resolution
-        QRectF rect = touchPoint.screenRect();
-        const QPointF screenPos = rect.center();
+        const QPointF screenPos = touchPoint.screenRect().center();
         const QPointF delta = screenPos - screenPos.toPoint();
 
-        rect.moveCenter(widget->mapFromGlobal(screenPos.toPoint()) + delta);
-        touchPoint.d->rect = rect;
+        touchPoint.d->pos = widget->mapFromGlobal(screenPos.toPoint()) + delta;
         touchPoint.d->startPos = widget->mapFromGlobal(touchPoint.startScreenPos().toPoint()) + delta;
         touchPoint.d->lastPos = widget->mapFromGlobal(touchPoint.lastScreenPos().toPoint()) + delta;
 
@@ -4501,9 +4473,13 @@ void QApplicationPrivate::notifyThemeChanged()
 #ifndef QT_NO_DRAGANDDROP
 void QApplicationPrivate::notifyDragStarted(const QDrag *drag)
 {
-    // Prevent pickMouseReceiver() from using the widget where the drag was started after a drag operation.
     QGuiApplicationPrivate::notifyDragStarted(drag);
-    qt_button_down = 0;
+    // QTBUG-26145
+    // Prevent pickMouseReceiver() from using the widget where the drag was started after a drag operation...
+    // QTBUG-56713
+    // ...only if qt_button_down is not a QQuickWidget
+    if (qt_button_down && !qt_button_down->inherits("QQuickWidget"))
+        qt_button_down = nullptr;
 }
 #endif // QT_NO_DRAGANDDROP
 

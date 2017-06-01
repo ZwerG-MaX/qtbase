@@ -82,7 +82,9 @@
 
     \section1 SOCKS5
 
-    The SOCKS5 support in Qt 4 is based on \l{http://www.rfc-editor.org/rfc/rfc1928.txt}{RFC 1928} and \l{http://www.rfc-editor.org/rfc/rfc1929.txt}{RFC 1929}.
+    The SOCKS5 support since Qt 4 is based on
+    \l{http://www.rfc-editor.org/rfc/rfc1928.txt}{RFC 1928} and
+    \l{http://www.rfc-editor.org/rfc/rfc1929.txt}{RFC 1929}.
     The supported authentication methods are no authentication and
     username/password authentication.  Both IPv4 and IPv6 are
     supported. Domain names are resolved through the SOCKS5 server if
@@ -1515,8 +1517,8 @@ bool QNetworkProxyFactory::usesSystemConfiguration()
     Enables the use of the platform-specific proxy settings, and only those.
     See systemProxyForQuery() for more information.
 
-    Calling setUseSystemConfiguration(\c{true}) will reset any proxy or
-    QNetworkProxyFactory already set.
+    Calling this function with \a enable set to \c true resets any proxy
+    or QNetworkProxyFactory that is already set.
 
     \note See the systemProxyForQuery() documentation for a list of
     limitations related to the use of system proxies.
@@ -1634,10 +1636,6 @@ QList<QNetworkProxy> QNetworkProxyFactory::proxyForQuery(const QNetworkProxyQuer
 }
 
 #ifndef QT_NO_DEBUG_STREAM
-/*!
-    \since 5.0
-    Outputs a QNetworkProxy details to a debug stream
-*/
 QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
 {
     QDebugStateSaver saver(debug);
@@ -1684,6 +1682,21 @@ QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
     if (caps & QNetworkProxy::SctpListeningCapability)
         scaps << QStringLiteral("SctpListen");
     debug << '[' << scaps.join(QLatin1Char(' ')) << ']';
+    return debug;
+}
+
+QDebug operator<<(QDebug debug, const QNetworkProxyQuery &proxyQuery)
+{
+    QDebugStateSaver saver(debug);
+    debug.resetFormat().nospace()
+        << "ProxyQuery("
+        << "type: " << proxyQuery.queryType()
+        << ", protocol: " << proxyQuery.protocolTag()
+        << ", peerPort: " << proxyQuery.peerPort()
+        << ", peerHostName: " << proxyQuery.peerHostName()
+        << ", localPort: " << proxyQuery.localPort()
+        << ", url: " << proxyQuery.url()
+        << ')';
     return debug;
 }
 #endif

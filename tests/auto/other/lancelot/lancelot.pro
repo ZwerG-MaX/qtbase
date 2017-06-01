@@ -1,7 +1,6 @@
 CONFIG += testcase
-CONFIG -= app_bundle
 TARGET = tst_lancelot
-QT += xml testlib
+QT += testlib
 
 SOURCES += tst_lancelot.cpp \
            paintcommands.cpp

@@ -300,6 +300,9 @@ private slots:
 
     void QTBUG56252();
 
+    void blendNullRGB32();
+    void toRGB64();
+
 private:
     void fillData();
     void setPenColor(QPainter& p);
@@ -4840,6 +4843,18 @@ void tst_QPainter::blendARGBonRGB_data()
                                              << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 127;
     QTest::newRow("ARGB_PM source-in RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32_Premultiplied
                                                 << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB over RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32
+                                        << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM over RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32_Premultiplied
+                                           << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32
+                                          << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 255;
+    QTest::newRow("ARGB_PM source RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32_Premultiplied
+                                             << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 255;
+    QTest::newRow("ARGB source-in RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32
+                                             << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 255;
+    QTest::newRow("ARGB_PM source-in RGBA8888") << QImage::Format_RGBA8888 << QImage::Format_ARGB32_Premultiplied
+                                                << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 255;
     QTest::newRow("ARGB over RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32
                                      << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 123;
     QTest::newRow("ARGB_PM over RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32_Premultiplied
@@ -4902,7 +4917,7 @@ void tst_QPainter::blendARGBonRGB()
     painter.drawImage(0, 0, imageArgb);
     painter.end();
 
-    QCOMPARE(qRed(imageRgb.pixel(0,0)), expected_red);
+    QCOMPARE(imageRgb.pixelColor(0,0).red(), expected_red);
 }
 
 enum CosmeticStrokerPaint
@@ -5137,6 +5152,39 @@ void tst_QPainter::QTBUG56252()
     painter.end();
 
     // If no crash or illegal memory read, all is fine
+}
+
+void tst_QPainter::blendNullRGB32()
+{
+    quint32 data[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    QImage nullImage((const uchar*)data, 16, 1,  QImage::Format_RGB32);
+    QImage image(16, 1, QImage::Format_RGB32);
+    image.fill(Qt::white);
+
+    QPainter paint(&image);
+    paint.setCompositionMode(QPainter::CompositionMode_Source);
+    paint.setOpacity(0.5);
+    paint.drawImage(0, 0, nullImage);
+    paint.end();
+
+    for (int i=0; i < image.width(); ++i)
+        QVERIFY(image.pixel(i,0) != 0xffffffff);
+}
+
+void tst_QPainter::toRGB64()
+{
+    QImage dst(10, 1, QImage::Format_BGR30);
+    QImage src(10, 1, QImage::Format_RGB16);
+    src.fill(Qt::white);
+
+    QPainter paint(&dst);
+    paint.drawImage(0, 0, src);
+    paint.end();
+
+    for (int i=0; i < dst.width(); ++i) {
+        QVERIFY(dst.pixelColor(i,0) == QColor(Qt::white));
+    }
 }
 
 QTEST_MAIN(tst_QPainter)

@@ -39,19 +39,18 @@
 ****************************************************************************/
 
 #include "qeglfskmsegldeviceintegration.h"
+#include "qeglfskmsegldevice.h"
+#include "qeglfskmsegldevicescreen.h"
 #include <QtEglSupport/private/qeglconvenience_p.h>
 #include "private/qeglfswindow_p.h"
 #include "private/qeglfscursor_p.h"
-#include "qeglfskmsegldevice.h"
-#include "qeglfskmsscreen.h"
 #include <QLoggingCategory>
 #include <private/qmath_p.h>
 
 QT_BEGIN_NAMESPACE
 
 QEglFSKmsEglDeviceIntegration::QEglFSKmsEglDeviceIntegration()
-    : QEglFSKmsIntegration()
-    , m_egl_device(EGL_NO_DEVICE_EXT)
+    : m_egl_device(EGL_NO_DEVICE_EXT)
     , m_funcs(Q_NULLPTR)
 {
     qCDebug(qLcEglfsKmsDebug, "New DRM/KMS on EGLDevice integration created");
@@ -101,44 +100,60 @@ bool QEglFSKmsEglDeviceIntegration::supportsPBuffers() const
     return true;
 }
 
-class QEglJetsonTK1Window : public QEglFSWindow
+class QEglFSKmsEglDeviceWindow : public QEglFSWindow
 {
 public:
-    QEglJetsonTK1Window(QWindow *w, const QEglFSKmsEglDeviceIntegration *integration)
+    QEglFSKmsEglDeviceWindow(QWindow *w, const QEglFSKmsEglDeviceIntegration *integration)
         : QEglFSWindow(w)
         , m_integration(integration)
         , m_egl_stream(EGL_NO_STREAM_KHR)
     { }
 
-    void invalidateSurface() Q_DECL_OVERRIDE;
-    void resetSurface() Q_DECL_OVERRIDE;
+    void invalidateSurface() override;
+    void resetSurface() override;
 
     const QEglFSKmsEglDeviceIntegration *m_integration;
     EGLStreamKHR m_egl_stream;
     EGLint m_latency;
 };
 
-void QEglJetsonTK1Window::invalidateSurface()
+void QEglFSKmsEglDeviceWindow::invalidateSurface()
 {
     QEglFSWindow::invalidateSurface();
     m_integration->m_funcs->destroy_stream(screen()->display(), m_egl_stream);
 }
 
-void QEglJetsonTK1Window::resetSurface()
+void QEglFSKmsEglDeviceWindow::resetSurface()
 {
     qCDebug(qLcEglfsKmsDebug, "Creating stream");
 
     EGLDisplay display = screen()->display();
-    EGLOutputLayerEXT layer = EGL_NO_OUTPUT_LAYER_EXT;
-    EGLint count;
+    EGLint streamAttribs[3];
+    int streamAttribCount = 0;
+    int fifoLength = qEnvironmentVariableIntValue("QT_QPA_EGLFS_STREAM_FIFO_LENGTH");
+    if (fifoLength > 0) {
+        streamAttribs[streamAttribCount++] = EGL_STREAM_FIFO_LENGTH_KHR;
+        streamAttribs[streamAttribCount++] = fifoLength;
+    }
+    streamAttribs[streamAttribCount++] = EGL_NONE;
 
-    m_egl_stream = m_integration->m_funcs->create_stream(display, Q_NULLPTR);
+    m_egl_stream = m_integration->m_funcs->create_stream(display, streamAttribs);
     if (m_egl_stream == EGL_NO_STREAM_KHR) {
         qWarning("resetSurface: Couldn't create EGLStream for native window");
         return;
     }
 
     qCDebug(qLcEglfsKmsDebug, "Created stream %p on display %p", m_egl_stream, display);
+
+    EGLint count;
+    if (m_integration->m_funcs->query_stream(display, m_egl_stream, EGL_STREAM_FIFO_LENGTH_KHR, &count)) {
+        if (count > 0)
+            qCDebug(qLcEglfsKmsDebug, "Using EGLStream FIFO mode with %d frames", count);
+        else
+            qCDebug(qLcEglfsKmsDebug, "Using EGLStream mailbox mode");
+    } else {
+        qCDebug(qLcEglfsKmsDebug, "Could not query number of EGLStream FIFO frames");
+    }
 
     if (!m_integration->m_funcs->get_output_layers(display, Q_NULLPTR, Q_NULLPTR, 0, &count) || count == 0) {
         qWarning("No output layers found");
@@ -155,19 +170,23 @@ void QEglJetsonTK1Window::resetSurface()
         return;
     }
 
-    QEglFSKmsScreen *cur_screen = static_cast<QEglFSKmsScreen*>(screen());
+    QEglFSKmsEglDeviceScreen *cur_screen = static_cast<QEglFSKmsEglDeviceScreen *>(screen());
     Q_ASSERT(cur_screen);
-    qCDebug(qLcEglfsKmsDebug, "Searching for id: %d", cur_screen->output().crtc_id);
+    QKmsOutput &output(cur_screen->output());
+    const uint32_t wantedId = !output.wants_plane ? output.crtc_id : output.plane_id;
+    qCDebug(qLcEglfsKmsDebug, "Searching for id: %d", wantedId);
 
+    EGLOutputLayerEXT layer = EGL_NO_OUTPUT_LAYER_EXT;
     for (int i = 0; i < actualCount; ++i) {
         EGLAttrib id;
         if (m_integration->m_funcs->query_output_layer_attrib(display, layers[i], EGL_DRM_CRTC_EXT, &id)) {
             qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - crtc %d", i, layers[i], (int) id);
-            if (id == EGLAttrib(cur_screen->output().crtc_id))
+            if (id == EGLAttrib(wantedId))
                 layer = layers[i];
         } else if (m_integration->m_funcs->query_output_layer_attrib(display, layers[i], EGL_DRM_PLANE_EXT, &id)) {
-            // Not used yet, just for debugging.
             qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - plane %d", i, layers[i], (int) id);
+            if (id == EGLAttrib(wantedId))
+                layer = layers[i];
         } else {
             qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - unknown", i, layers[i]);
         }
@@ -176,8 +195,10 @@ void QEglJetsonTK1Window::resetSurface()
     QByteArray reqLayerIndex = qgetenv("QT_QPA_EGLFS_LAYER_INDEX");
     if (!reqLayerIndex.isEmpty()) {
         int idx = reqLayerIndex.toInt();
-        if (idx >= 0 && idx < layers.count())
+        if (idx >= 0 && idx < layers.count()) {
+            qCDebug(qLcEglfsKmsDebug, "EGLOutput layer index override = %d", idx);
             layer = layers[idx];
+        }
     }
 
     if (layer == EGL_NO_OUTPUT_LAYER_EXT) {
@@ -213,7 +234,7 @@ void QEglJetsonTK1Window::resetSurface()
 
 QEglFSWindow *QEglFSKmsEglDeviceIntegration::createWindow(QWindow *window) const
 {
-    QEglJetsonTK1Window *eglWindow = new QEglJetsonTK1Window(window, this);
+    QEglFSKmsEglDeviceWindow *eglWindow = new QEglFSKmsEglDeviceWindow(window, this);
 
     m_funcs->initialize(eglWindow->screen()->display());
     if (Q_UNLIKELY(!(m_funcs->has_egl_output_base && m_funcs->has_egl_output_drm && m_funcs->has_egl_stream &&
@@ -223,10 +244,8 @@ QEglFSWindow *QEglFSKmsEglDeviceIntegration::createWindow(QWindow *window) const
     return eglWindow;
 }
 
-QEglFSKmsDevice *QEglFSKmsEglDeviceIntegration::createDevice(const QString &devicePath)
+QKmsDevice *QEglFSKmsEglDeviceIntegration::createDevice()
 {
-    Q_UNUSED(devicePath)
-
     if (Q_UNLIKELY(!query_egl_device()))
         qFatal("Could not set up EGL device!");
 
@@ -234,7 +253,7 @@ QEglFSKmsDevice *QEglFSKmsEglDeviceIntegration::createDevice(const QString &devi
     if (Q_UNLIKELY(!deviceName))
         qFatal("Failed to query device name from EGLDevice");
 
-    return new QEglFSKmsEglDevice(this, deviceName);
+    return new QEglFSKmsEglDevice(this, screenConfig(), deviceName);
 }
 
 bool QEglFSKmsEglDeviceIntegration::query_egl_device()
@@ -261,7 +280,11 @@ bool QEglFSKmsEglDeviceIntegration::query_egl_device()
 
 QPlatformCursor *QEglFSKmsEglDeviceIntegration::createCursor(QPlatformScreen *screen) const
 {
-    return separateScreens() ? new QEglFSCursor(screen) : nullptr;
+#if QT_CONFIG(opengl)
+    if (screenConfig()->separateScreens())
+        return  new QEglFSCursor(screen);
+#endif
+    return nullptr;
 }
 
 QT_END_NAMESPACE

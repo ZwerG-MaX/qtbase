@@ -105,8 +105,8 @@ Q_CORE_EXPORT int qvsnprintf(char *str, size_t n, const char *fmt, va_list ap);
 Q_CORE_EXPORT int qsnprintf(char *str, size_t n, const char *fmt, ...);
 
 // qChecksum: Internet checksum
-
-Q_CORE_EXPORT quint16 qChecksum(const char *s, uint len);
+Q_CORE_EXPORT quint16 qChecksum(const char *s, uint len);                            // ### Qt 6: Remove
+Q_CORE_EXPORT quint16 qChecksum(const char *s, uint len, Qt::ChecksumType standard); // ### Qt 6: Use Qt::ChecksumType standard = Qt::ChecksumIso3309
 
 class QByteRef;
 class QString;
@@ -140,8 +140,6 @@ struct QByteArrayDataPtr
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(size, sizeof(QByteArrayData)) \
     /**/
 
-#if defined(Q_COMPILER_LAMBDA)
-
 #  define QByteArrayLiteral(str) \
     ([]() -> QByteArray { \
         enum { Size = sizeof(str) - 1 }; \
@@ -153,14 +151,6 @@ struct QByteArrayDataPtr
         return ba; \
     }()) \
     /**/
-
-#endif
-
-#ifndef QByteArrayLiteral
-// no lambdas, not GCC, just return a temporary QByteArray
-
-# define QByteArrayLiteral(str) QByteArray(str, sizeof(str) - 1)
-#endif
 
 class Q_CORE_EXPORT QByteArray
 {
@@ -237,9 +227,9 @@ public:
     int count(const char *a) const;
     int count(const QByteArray &a) const;
 
-    QByteArray left(int len) const Q_REQUIRED_RESULT;
-    QByteArray right(int len) const Q_REQUIRED_RESULT;
-    QByteArray mid(int index, int len = -1) const Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QByteArray left(int len) const;
+    Q_REQUIRED_RESULT QByteArray right(int len) const;
+    Q_REQUIRED_RESULT QByteArray mid(int index, int len = -1) const;
 
     bool startsWith(const QByteArray &a) const;
     bool startsWith(char c) const;
@@ -252,42 +242,42 @@ public:
     void truncate(int pos);
     void chop(int n);
 
-#if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(QT_COMPILING_QSTRING_COMPAT_CPP)
-#  if defined(Q_CC_GNU)
+#if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(QT_COMPILING_QSTRING_COMPAT_CPP) && !defined(Q_CLANG_QDOC)
+#  if defined(Q_CC_GNU) && !defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
     // required due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61941
 #    pragma push_macro("Q_REQUIRED_RESULT")
 #    undef Q_REQUIRED_RESULT
 #    define Q_REQUIRED_RESULT
 #    define Q_REQUIRED_RESULT_pushed
 #  endif
-    Q_ALWAYS_INLINE QByteArray toLower() const & Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray toLower() const &
     { return toLower_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray toLower() && Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray toLower() &&
     { return toLower_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray toUpper() const & Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray toUpper() const &
     { return toUpper_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray toUpper() && Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray toUpper() &&
     { return toUpper_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray trimmed() const & Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray trimmed() const &
     { return trimmed_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray trimmed() && Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray trimmed() &&
     { return trimmed_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray simplified() const & Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray simplified() const &
     { return simplified_helper(*this); }
-    Q_ALWAYS_INLINE QByteArray simplified() && Q_REQUIRED_RESULT
+    Q_REQUIRED_RESULT Q_ALWAYS_INLINE QByteArray simplified() &&
     { return simplified_helper(*this); }
 #  ifdef Q_REQUIRED_RESULT_pushed
 #    pragma pop_macro("Q_REQUIRED_RESULT")
 #  endif
 #else
-    QByteArray toLower() const Q_REQUIRED_RESULT;
-    QByteArray toUpper() const Q_REQUIRED_RESULT;
-    QByteArray trimmed() const Q_REQUIRED_RESULT;
-    QByteArray simplified() const Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QByteArray toLower() const;
+    Q_REQUIRED_RESULT QByteArray toUpper() const;
+    Q_REQUIRED_RESULT QByteArray trimmed() const;
+    Q_REQUIRED_RESULT QByteArray simplified() const;
 #endif
 
-    QByteArray leftJustified(int width, char fill = ' ', bool truncate = false) const Q_REQUIRED_RESULT;
-    QByteArray rightJustified(int width, char fill = ' ', bool truncate = false) const Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QByteArray leftJustified(int width, char fill = ' ', bool truncate = false) const;
+    Q_REQUIRED_RESULT QByteArray rightJustified(int width, char fill = ' ', bool truncate = false) const;
 
     QByteArray &prepend(char c);
     QByteArray &prepend(int count, char c);
@@ -322,7 +312,7 @@ public:
 
     QList<QByteArray> split(char sep) const;
 
-    QByteArray repeated(int times) const Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QByteArray repeated(int times) const;
 
 #ifndef QT_NO_CAST_TO_ASCII
     QT_ASCII_CAST_WARN QByteArray &append(const QString &s);
@@ -357,6 +347,7 @@ public:
     QByteArray toBase64(Base64Options options) const;
     QByteArray toBase64() const; // ### Qt6 merge with previous
     QByteArray toHex() const;
+    QByteArray toHex(char separator) const; // ### Qt6 merge with previous
     QByteArray toPercentEncoding(const QByteArray &exclude = QByteArray(),
                                  const QByteArray &include = QByteArray(),
                                  char percent = '%') const;
@@ -371,16 +362,16 @@ public:
     QByteArray &setNum(double, char f = 'g', int prec = 6);
     QByteArray &setRawData(const char *a, uint n); // ### Qt 6: use an int
 
-    static QByteArray number(int, int base = 10) Q_REQUIRED_RESULT;
-    static QByteArray number(uint, int base = 10) Q_REQUIRED_RESULT;
-    static QByteArray number(qlonglong, int base = 10) Q_REQUIRED_RESULT;
-    static QByteArray number(qulonglong, int base = 10) Q_REQUIRED_RESULT;
-    static QByteArray number(double, char f = 'g', int prec = 6) Q_REQUIRED_RESULT;
-    static QByteArray fromRawData(const char *, int size) Q_REQUIRED_RESULT;
-    static QByteArray fromBase64(const QByteArray &base64, Base64Options options) Q_REQUIRED_RESULT;
-    static QByteArray fromBase64(const QByteArray &base64) Q_REQUIRED_RESULT; // ### Qt6 merge with previous
-    static QByteArray fromHex(const QByteArray &hexEncoded) Q_REQUIRED_RESULT;
-    static QByteArray fromPercentEncoding(const QByteArray &pctEncoded, char percent = '%') Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT static QByteArray number(int, int base = 10);
+    Q_REQUIRED_RESULT static QByteArray number(uint, int base = 10);
+    Q_REQUIRED_RESULT static QByteArray number(qlonglong, int base = 10);
+    Q_REQUIRED_RESULT static QByteArray number(qulonglong, int base = 10);
+    Q_REQUIRED_RESULT static QByteArray number(double, char f = 'g', int prec = 6);
+    Q_REQUIRED_RESULT static QByteArray fromRawData(const char *, int size);
+    Q_REQUIRED_RESULT static QByteArray fromBase64(const QByteArray &base64, Base64Options options);
+    Q_REQUIRED_RESULT static QByteArray fromBase64(const QByteArray &base64); // ### Qt6 merge with previous
+    Q_REQUIRED_RESULT static QByteArray fromHex(const QByteArray &hexEncoded);
+    Q_REQUIRED_RESULT static QByteArray fromPercentEncoding(const QByteArray &pctEncoded, char percent = '%');
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
     static QByteArray fromCFData(CFDataRef data);

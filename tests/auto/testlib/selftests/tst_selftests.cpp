@@ -36,6 +36,8 @@
 
 #include <private/cycle_p.h>
 
+#include "emulationdetector.h"
+
 struct LoggerSet;
 
 class tst_Selftests: public QObject
@@ -536,7 +538,7 @@ void tst_Selftests::runSubTest_data()
     }
 }
 
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
 
 static QProcessEnvironment processEnvironment()
 {
@@ -550,6 +552,7 @@ static QProcessEnvironment processEnvironment()
                 || key == QLatin1String("GRAPHICS_ROOT") || key == QLatin1String("TZ")
 #elif defined(Q_OS_UNIX)
                 || key == QLatin1String("HOME") || key == QLatin1String("USER") // Required for X11 on openSUSE
+                || key == QLatin1String("QEMU_SET_ENV") || key == QLatin1String("QEMU_LD_PREFIX") // Required for QEMU
 #  if !defined(Q_OS_MAC)
                 || key == QLatin1String("DISPLAY") || key == QLatin1String("XAUTHLOCALHOSTNAME")
                 || key.startsWith(QLatin1String("XDG_"))
@@ -592,8 +595,10 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
 
     QProcess proc;
     QProcessEnvironment environment = processEnvironment();
-    if (crashes)
+    if (crashes) {
+        environment.insert("QTEST_DISABLE_CORE_DUMP", "1");
         environment.insert("QTEST_DISABLE_STACK_DUMP", "1");
+    }
     proc.setProcessEnvironment(environment);
     const QString path = subdir + QLatin1Char('/') + subdir;
     proc.start(path, arguments);
@@ -639,6 +644,16 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
 #ifdef Q_CC_MINGW
         && subdir != QLatin1String("blacklisted") // calls qFatal()
         && subdir != QLatin1String("silent") // calls qFatal()
+#endif
+#ifdef Q_OS_LINUX
+        // QEMU outputs to stderr about uncaught signals
+        && (!EmulationDetector::isRunningArmOnX86() ||
+                (subdir != QLatin1String("blacklisted")
+                 && subdir != QLatin1String("silent")
+                 && subdir != QLatin1String("assert")
+                 && subdir != QLatin1String("crashes")
+                )
+            )
 #endif
         && subdir != QLatin1String("benchlibcallgrind"))
         QVERIFY2(err.isEmpty(), err.constData());
@@ -818,11 +833,11 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     }
 }
 
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 
 void tst_Selftests::runSubTest()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
     QFETCH(QString, subdir);
@@ -831,7 +846,7 @@ void tst_Selftests::runSubTest()
     QFETCH(bool, crashes);
 
     doRunSubTest(subdir, loggers, arguments, crashes);
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 // attribute must contain ="

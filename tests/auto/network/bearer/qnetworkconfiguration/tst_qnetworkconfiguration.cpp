@@ -53,6 +53,7 @@ private slots:
     void comparison();
     void children();
     void isRoamingAvailable();
+    void connectTimeout();
 #endif
 };
 
@@ -114,7 +115,7 @@ void tst_QNetworkConfiguration::comparison()
 
     QSignalSpy spy(&manager, SIGNAL(updateCompleted()));
     manager.updateConfigurations(); //initiate scans
-    QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, TestTimeOut); //wait for scan to complete
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, TestTimeOut); //wait for scan to complete
 
     QList<QNetworkConfiguration> configs = manager.allConfigurations(QNetworkConfiguration::Discovered);
     QVERIFY(configs.count());
@@ -161,7 +162,7 @@ void tst_QNetworkConfiguration::isRoamingAvailable()
     //force update to get maximum list
     QSignalSpy spy(&manager, SIGNAL(updateCompleted()));
     manager.updateConfigurations(); //initiate scans
-    QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, TestTimeOut); //wait for scan to complete
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, TestTimeOut); //wait for scan to complete
 
     foreach(QNetworkConfiguration c, configs)
     {
@@ -179,6 +180,21 @@ void tst_QNetworkConfiguration::isRoamingAvailable()
         } else {
             QVERIFY(!c.isRoamingAvailable());
         }
+    }
+}
+
+void tst_QNetworkConfiguration::connectTimeout()
+{
+    QNetworkConfigurationManager manager;
+    QList<QNetworkConfiguration> configs = manager.allConfigurations();
+
+    foreach (QNetworkConfiguration networkConfiguration, configs) {
+        QCOMPARE(networkConfiguration.connectTimeout(), 30000);
+
+        bool result = networkConfiguration.setConnectTimeout(100);
+        QVERIFY(result);
+
+        QCOMPARE(networkConfiguration.connectTimeout(), 100);
     }
 }
 #endif

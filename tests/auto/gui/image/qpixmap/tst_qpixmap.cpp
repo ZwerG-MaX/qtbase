@@ -99,6 +99,7 @@ private slots:
     void task_51271();
 
     void convertFromImageNoDetach();
+    void convertFromImageNoDetach2();
     void convertFromImageDetach();
     void convertFromImageCacheKey();
 
@@ -118,6 +119,7 @@ private slots:
     void refUnref();
 
     void copy();
+    void deepCopyPreservesDpr();
     void depthOfNullObjects();
 
     void transformed();
@@ -766,6 +768,33 @@ void tst_QPixmap::convertFromImageNoDetach()
     QCOMPARE(constOrig.bits(), constCopy.bits());
 }
 
+void tst_QPixmap::convertFromImageNoDetach2()
+{
+    QPixmap randomPixmap(10, 10);
+    if (randomPixmap.handle()->classId() != QPlatformPixmap::RasterClass)
+        QSKIP("Test only valid for raster pixmaps");
+
+    //first get the screen format
+    QImage::Format screenFormat = randomPixmap.toImage().format();
+    QVERIFY(screenFormat != QImage::Format_Invalid);
+    if (screenFormat != QImage::Format_RGB32 &&
+        screenFormat != QImage::Format_ARGB32_Premultiplied)
+        QSKIP("Test only valid for platforms with RGB32 pixmaps");
+
+    QImage orig(100,100, QImage::Format_ARGB32_Premultiplied);
+    orig.fill(Qt::white);
+
+    const uchar *origBits = orig.constBits();
+
+    QPixmap pix = QPixmap::fromImage(std::move(orig));
+    QImage copy = pix.toImage();
+
+    QVERIFY(!copy.hasAlphaChannel());
+    QCOMPARE(copy.format(), QImage::Format_RGB32);
+
+    QCOMPARE(origBits, copy.constBits());
+}
+
 void tst_QPixmap::convertFromImageDetach()
 {
     QImage img(10,10, QImage::Format_RGB32);
@@ -1103,6 +1132,19 @@ void tst_QPixmap::copy()
 
     QPixmap transCopy = trans.copy();
     QCOMPARE(trans, transCopy);
+}
+
+// QTBUG-58653: Force a deep copy of a pixmap by
+// having a QPainter and check whether DevicePixelRatio is preserved
+void tst_QPixmap::deepCopyPreservesDpr()
+{
+    const qreal dpr = 2;
+    QPixmap src(32, 32);
+    src.setDevicePixelRatio(dpr);
+    src.fill(Qt::red);
+    QPainter painter(&src);
+    const QPixmap dest = src.copy();
+    QCOMPARE(dest.devicePixelRatio(), dpr);
 }
 
 void tst_QPixmap::depthOfNullObjects()

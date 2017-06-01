@@ -1119,7 +1119,7 @@ void QMenuBar::keyPressEvent(QKeyEvent *e)
         int clashCount = 0;
         QAction *first = 0, *currentSelected = 0, *firstAfterCurrent = 0;
         {
-            QChar c = e->text()[0].toUpper();
+            const QChar c = e->text().at(0).toUpper();
             for(int i = 0; i < d->actions.size(); ++i) {
                 if (d->actionRects.at(i).isNull())
                     continue;
@@ -1192,10 +1192,6 @@ QPlatformMenu *QMenuBarPrivate::getPlatformMenu(QAction *action)
     QPlatformMenu *platformMenu = action->menu()->platformMenu();
     if (!platformMenu && platformMenuBar) {
         platformMenu = platformMenuBar->createMenu();
-        // QPlatformMenuBar::createMenu() was introduced in Qt 5.7. Not all third party
-        // platform themes are using it, so fallback to QPlatformTheme::createPlatformMenu().
-        if (!platformMenu)
-            platformMenu = QGuiApplicationPrivate::platformTheme()->createPlatformMenu();
         if (platformMenu)
             action->menu()->setPlatformMenu(platformMenu);
     }
@@ -1271,10 +1267,12 @@ void QMenuBar::actionEvent(QActionEvent *e)
     } else if(e->type() == QEvent::ActionRemoved) {
         e->action()->disconnect(this);
     }
-    if (isVisible()) {
+    // updateGeometries() is also needed for native menu bars because
+    // it updates shortcutIndexMap
+    if (isVisible() || isNativeMenuBar())
         d->updateGeometries();
+    if (isVisible())
         update();
-    }
 }
 
 /*!
@@ -1472,6 +1470,17 @@ bool QMenuBar::eventFilter(QObject *object, QEvent *event)
         }
     }
 
+    if (isNativeMenuBar() && event->type() == QEvent::ShowToParent) {
+        // On some desktops like Unity, the D-Bus menu bar is unregistered
+        // when the window is hidden. So when the window is shown, we need
+        // to forcefully re-register it. The only way to force re-registering
+        // with D-Bus menu is the handleReparent method.
+        QWidget *widget = qobject_cast<QWidget *>(object);
+        QWindow *handle = widget ? widget->windowHandle() : nullptr;
+        if (handle != nullptr)
+            d->platformMenuBar->handleReparent(handle);
+    }
+
     if (style()->styleHint(QStyle::SH_MenuBar_AltKeyNavigation, 0, this)) {
         if (d->altPressed) {
             switch (event->type()) {
@@ -1492,6 +1501,7 @@ bool QMenuBar::eventFilter(QObject *object, QEvent *event)
             case QEvent::FocusIn:
             case QEvent::FocusOut:
             case QEvent::ActivationChange:
+            case QEvent::Shortcut:
                 d->altPressed = false;
                 qApp->removeEventFilter(this);
                 break;
@@ -1686,6 +1696,13 @@ void QMenuBarPrivate::_q_internalShortcutActivated(int id)
 {
     Q_Q(QMenuBar);
     QAction *act = actions.at(id);
+    if (act && act->menu()) {
+        if (QPlatformMenu *platformMenu = act->menu()->platformMenu()) {
+            platformMenu->showPopup(q->windowHandle(), actionRects.at(id), Q_NULLPTR);
+            return;
+        }
+    }
+
     setCurrentAction(act, true, true);
     if (act && !act->menu()) {
         activateAction(act, QAction::Trigger);

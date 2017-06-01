@@ -150,7 +150,8 @@ public:
         m_fnConstraint = fnConstraint;
     }
 
-    QSizeF m_sizeHints[Qt::NSizeHints];
+    // Initializer {} is a workaround for gcc bug 68949
+    QSizeF m_sizeHints[Qt::NSizeHints] {};
     QSizeF (*m_fnConstraint)(Qt::SizeHint, const QSizeF &);
 
 };
@@ -280,8 +281,10 @@ struct ItemDesc
     int m_rowSpan;
     int m_colSpan;
     QSizePolicy m_sizePolicy;
-    QSizeF m_sizeHints[Qt::NSizeHints];
-    QSizeF m_sizes[Qt::NSizeHints];
+
+    // Initializer {} is a workaround for gcc bug 68949
+    QSizeF m_sizeHints[Qt::NSizeHints] {};
+    QSizeF m_sizes[Qt::NSizeHints] {};
     Qt::Alignment m_align;
 
     Qt::Orientation m_constraintOrientation;
@@ -1073,7 +1076,7 @@ void tst_QGraphicsGridLayout::itemAt()
         } else {
             const QByteArray message = "QGraphicsGridLayout::itemAt: invalid index " + QByteArray::number(i);
             QTest::ignoreMessage(QtWarningMsg, message.constData());
-            QCOMPARE(layout->itemAt(i), static_cast<QGraphicsLayoutItem*>(0));
+            QCOMPARE(layout->itemAt(i), nullptr);
         }
     }
     delete widget;
@@ -1102,7 +1105,7 @@ void tst_QGraphicsGridLayout::removeAt()
     QGraphicsLayoutItem *item0 = layout->itemAt(0);
     QCOMPARE(item0->parentLayoutItem(), static_cast<QGraphicsLayoutItem *>(layout));
     layout->removeAt(0);
-    QCOMPARE(item0->parentLayoutItem(), static_cast<QGraphicsLayoutItem *>(0));
+    QCOMPARE(item0->parentLayoutItem(), nullptr);
     QCOMPARE(layout->count(), 0);
     QTest::ignoreMessage(QtWarningMsg, QString::fromLatin1("QGraphicsGridLayout::removeAt: invalid index 0").toLatin1().constData());
     layout->removeAt(0);

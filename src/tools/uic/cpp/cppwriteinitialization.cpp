@@ -48,10 +48,11 @@ namespace {
     // Fixup an enumeration name from class Qt.
     // They are currently stored as "BottomToolBarArea" instead of "Qt::BottomToolBarArea".
     // due to MO issues. This might be fixed in the future.
-    void fixQtEnumerationName(QString& name) {
+    QLatin1String qtEnumerationPrefix(const QString &name) {
         static const QLatin1String prefix("Qt::");
         if (name.indexOf(prefix) != 0)
-            name.prepend(prefix);
+            return prefix;
+        return QLatin1String();
     }
     // figure out the toolbar area of a DOM attrib list.
     // By legacy, it is stored as an integer. As of 4.3.0, it is the enumeration value.
@@ -62,16 +63,12 @@ namespace {
 
         switch (pstyle->kind()) {
         case DomProperty::Number: {
-            QString area = QLatin1String("static_cast<Qt::ToolBarArea>(");
-            area += QString::number(pstyle->elementNumber());
-            area += QLatin1String("), ");
-            return area;
+            return QLatin1String("static_cast<Qt::ToolBarArea>(")
+                   + QString::number(pstyle->elementNumber()) + QLatin1String("), ");
         }
         case DomProperty::Enum: {
-            QString area = pstyle->elementEnum();
-            fixQtEnumerationName(area);
-            area += QLatin1String(", ");
-            return area;
+            const QString area = pstyle->elementEnum();
+            return qtEnumerationPrefix(area) + area + QLatin1String(", ");
         }
         default:
             break;
@@ -152,7 +149,8 @@ namespace {
             if (const DomResourceIcon *dri = p->elementIconSet()) {
                 if (!isIconFormat44(dri)) {
                     if (dri->text().isEmpty())  {
-                        const QString msg = QString::fromUtf8("%1: Warning: An invalid icon property '%2' was encountered.").arg(fileName).arg(p->attributeName());
+                        const QString msg = QString::fromLatin1("%1: Warning: An invalid icon property '%2' was encountered.")
+                                            .arg(fileName, p->attributeName());
                         qWarning("%s", qPrintable(msg));
                         return false;
                     }
@@ -162,7 +160,8 @@ namespace {
         case DomProperty::Pixmap:
             if (const DomResourcePixmap *drp = p->elementPixmap())
                 if (drp->text().isEmpty()) {
-                    const QString msg = QString::fromUtf8("%1: Warning: An invalid pixmap property '%2' was encountered.").arg(fileName).arg(p->attributeName());
+                    const QString msg = QString::fromUtf8("%1: Warning: An invalid pixmap property '%2' was encountered.")
+                                        .arg(fileName, p->attributeName());
                     qWarning("%s", qPrintable(msg));
                     return false;
                 }
@@ -1029,7 +1028,7 @@ void WriteInitialization::acceptLayoutItem(DomLayoutItem *node)
             const int row = node->attributeRow();
             const int colSpan = node->hasAttributeColSpan() ? node->attributeColSpan() : 1;
             const QString role = formLayoutRole(node->attributeColumn(), colSpan);
-            addArgs = QString::fromLatin1("%1, %2, %3").arg(row).arg(role).arg(itemName);
+            addArgs = QString::fromLatin1("%1, %2, %3").arg(row).arg(role, itemName);
         } else {
             addArgs = itemName;
             if (layout->attributeClass().contains(QLatin1String("Box")) && !node->attributeAlignment().isEmpty())
@@ -1151,6 +1150,7 @@ void WriteInitialization::writeProperties(const QString &varName,
         DomPropertyMap properties = propertyMap(lst);
         if (properties.contains(QLatin1String("control"))) {
             DomProperty *p = properties.value(QLatin1String("control"));
+            Q_ASSERT( p );
             m_output << m_indent << varName << "->setControl("
                    << writeString(toString(p->elementString()), m_dindent) << ");\n";
         }
@@ -1364,7 +1364,7 @@ void WriteInitialization::writeProperties(const QString &varName,
         case DomProperty::Locale: {
              const DomLocale *locale = p->elementLocale();
              propertyValue = QString::fromLatin1("QLocale(QLocale::%1, QLocale::%2)")
-                             .arg(locale->attributeLanguage()).arg(locale->attributeCountry());
+                             .arg(locale->attributeLanguage(), locale->attributeCountry());
             break;
         }
         case DomProperty::SizePolicy: {
@@ -1481,6 +1481,8 @@ void WriteInitialization::writeProperties(const QString &varName,
                 defineC = whatsThisDefineC;
             else if (propertyName == QLatin1String("statusTip"))
                 defineC = statusTipDefineC;
+            else if (propertyName == QLatin1String("shortcut"))
+                defineC = shortcutDefineC;
             else if (propertyName == QLatin1String("accessibleName") || propertyName == QLatin1String("accessibleDescription"))
                 defineC = accessibilityDefineC;
 

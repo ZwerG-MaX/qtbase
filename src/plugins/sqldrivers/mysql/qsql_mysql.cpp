@@ -699,10 +699,8 @@ QVariant QMYSQLResult::data(int field)
         }
         if(ok)
             return v;
-        else
-            return QVariant();
+        return QVariant();
     }
-        return QVariant(val.toDouble());
     case QVariant::Date:
         return qDateFromString(val);
     case QVariant::Time:
@@ -719,12 +717,11 @@ QVariant QMYSQLResult::data(int field)
         }
         return QVariant(ba);
     }
-    default:
     case QVariant::String:
+    default:
         return QVariant(val);
     }
-    qWarning("QMYSQLResult::data: unknown data type");
-    return QVariant();
+    Q_UNREACHABLE();
 }
 
 bool QMYSQLResult::isNull(int field)
@@ -1424,13 +1421,17 @@ bool QMYSQLDriver::open(const QString& db,
     if (mysql_get_client_version() >= 50503 && mysql_get_server_version(d->mysql) >= 50503) {
         // force the communication to be utf8mb4 (only utf8mb4 supports 4-byte characters)
         mysql_set_character_set(d->mysql, "utf8mb4");
-    } else {
+#ifndef QT_NO_TEXTCODEC
+        d->tc = QTextCodec::codecForName("UTF-8");
+#endif
+    } else
+    {
         // force the communication to be utf8
         mysql_set_character_set(d->mysql, "utf8");
-    }
-#endif
 #ifndef QT_NO_TEXTCODEC
-    d->tc = codec(d->mysql);
+        d->tc = codec(d->mysql);
+#endif
+    }
 #endif
 
 #if MYSQL_VERSION_ID >= 40108

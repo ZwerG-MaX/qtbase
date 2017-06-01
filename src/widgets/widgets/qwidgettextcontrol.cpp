@@ -848,21 +848,21 @@ void QWidgetTextControl::redo()
 }
 
 QWidgetTextControl::QWidgetTextControl(QObject *parent)
-    : QObject(*new QWidgetTextControlPrivate, parent)
+    : QInputControl(QInputControl::TextEdit, *new QWidgetTextControlPrivate, parent)
 {
     Q_D(QWidgetTextControl);
     d->init();
 }
 
 QWidgetTextControl::QWidgetTextControl(const QString &text, QObject *parent)
-    : QObject(*new QWidgetTextControlPrivate, parent)
+    : QInputControl(QInputControl::TextEdit, *new QWidgetTextControlPrivate, parent)
 {
     Q_D(QWidgetTextControl);
     d->init(Qt::RichText, text);
 }
 
 QWidgetTextControl::QWidgetTextControl(QTextDocument *doc, QObject *parent)
-    : QObject(*new QWidgetTextControlPrivate, parent)
+    : QInputControl(QInputControl::TextEdit, *new QWidgetTextControlPrivate, parent)
 {
     Q_D(QWidgetTextControl);
     d->init(Qt::RichText, QString(), doc);
@@ -1141,52 +1141,8 @@ void QWidgetTextControl::processEvent(QEvent *e, const QMatrix &matrix, QWidget 
         case QEvent::ShortcutOverride:
             if (d->interactionFlags & Qt::TextEditable) {
                 QKeyEvent* ke = static_cast<QKeyEvent *>(e);
-                if (ke->modifiers() == Qt::NoModifier
-                    || ke->modifiers() == Qt::ShiftModifier
-                    || ke->modifiers() == Qt::KeypadModifier) {
-                    if (ke->key() < Qt::Key_Escape) {
-                        ke->accept();
-                    } else {
-                        switch (ke->key()) {
-                            case Qt::Key_Return:
-                            case Qt::Key_Enter:
-                            case Qt::Key_Delete:
-                            case Qt::Key_Home:
-                            case Qt::Key_End:
-                            case Qt::Key_Backspace:
-                            case Qt::Key_Left:
-                            case Qt::Key_Right:
-                            case Qt::Key_Up:
-                            case Qt::Key_Down:
-                            case Qt::Key_Tab:
-                            ke->accept();
-                        default:
-                            break;
-                        }
-                    }
-#ifndef QT_NO_SHORTCUT
-                } else if (ke == QKeySequence::Copy
-                           || ke == QKeySequence::Paste
-                           || ke == QKeySequence::Cut
-                           || ke == QKeySequence::Redo
-                           || ke == QKeySequence::Undo
-                           || ke == QKeySequence::MoveToNextWord
-                           || ke == QKeySequence::MoveToPreviousWord
-                           || ke == QKeySequence::MoveToStartOfDocument
-                           || ke == QKeySequence::MoveToEndOfDocument
-                           || ke == QKeySequence::SelectNextWord
-                           || ke == QKeySequence::SelectPreviousWord
-                           || ke == QKeySequence::SelectStartOfLine
-                           || ke == QKeySequence::SelectEndOfLine
-                           || ke == QKeySequence::SelectStartOfBlock
-                           || ke == QKeySequence::SelectEndOfBlock
-                           || ke == QKeySequence::SelectStartOfDocument
-                           || ke == QKeySequence::SelectEndOfDocument
-                           || ke == QKeySequence::SelectAll
-                          ) {
+                if (isCommonTextEditShortcut(ke))
                     ke->accept();
-#endif
-                }
             }
             break;
         default:
@@ -1361,14 +1317,7 @@ void QWidgetTextControlPrivate::keyPressEvent(QKeyEvent *e)
 
 process:
     {
-        // QTBUG-35734: ignore Ctrl/Ctrl+Shift; accept only AltGr (Alt+Ctrl) on German keyboards
-        if (e->modifiers() == Qt::ControlModifier
-            || e->modifiers() == (Qt::ShiftModifier | Qt::ControlModifier)) {
-            e->ignore();
-            return;
-        }
-        QString text = e->text();
-        if (!text.isEmpty() && (text.at(0).isPrint() || text.at(0) == QLatin1Char('\t'))) {
+        if (q->isAcceptableInput(e)) {
             if (overwriteMode
                 // no need to call deleteChar() if we have a selection, insertText
                 // does it already
@@ -1376,7 +1325,7 @@ process:
                 && !cursor.atBlockEnd())
                 cursor.deleteChar();
 
-            cursor.insertText(text);
+            cursor.insertText(e->text());
             selectionChanged();
         } else {
             e->ignore();
@@ -2059,14 +2008,57 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
             preeditCursor = a.start;
             hideCursor = !a.length;
         } else if (a.type == QInputMethodEvent::TextFormat) {
-            QTextCharFormat f = qvariant_cast<QTextFormat>(a.value).toCharFormat();
+            QTextCharFormat f = cursor.charFormat();
+            f.merge(qvariant_cast<QTextFormat>(a.value).toCharFormat());
             if (f.isValid()) {
                 QTextLayout::FormatRange o;
                 o.start = a.start + cursor.position() - block.position();
                 o.length = a.length;
                 o.format = f;
-                overrides.append(o);
+
+                // Make sure list is sorted by start index
+                QVector<QTextLayout::FormatRange>::iterator it = overrides.end();
+                while (it != overrides.begin()) {
+                    QVector<QTextLayout::FormatRange>::iterator previous = it - 1;
+                    if (o.start >= previous->start) {
+                        overrides.insert(it, o);
+                        break;
+                    }
+                    it = previous;
+                }
+
+                if (it == overrides.begin())
+                    overrides.prepend(o);
             }
+        }
+    }
+
+    if (cursor.charFormat().isValid()) {
+        int start = cursor.position() - block.position();
+        int end = start + e->preeditString().length();
+
+        QVector<QTextLayout::FormatRange>::iterator it = overrides.begin();
+        while (it != overrides.end()) {
+            QTextLayout::FormatRange range = *it;
+            int rangeStart = range.start;
+            if (rangeStart > start) {
+                QTextLayout::FormatRange o;
+                o.start = start;
+                o.length = rangeStart - start;
+                o.format = cursor.charFormat();
+                it = overrides.insert(it, o) + 1;
+            }
+
+            ++it;
+            start = range.start + range.length;
+        }
+
+        if (start < end) {
+            QTextLayout::FormatRange o;
+            o.start = start;
+            o.length = end - start;
+            o.format = cursor.charFormat();
+            overrides.append(o);
         }
     }
     layout->setFormats(overrides);
@@ -3124,6 +3116,7 @@ void QWidgetTextControlPrivate::append(const QString &text, Qt::TextFormat forma
         tmp.insertText(text);
     }
 #else
+    Q_UNUSED(format);
     tmp.insertText(text);
 #endif // QT_NO_TEXTHTMLPARSER
     if (!cursor.hasSelection())

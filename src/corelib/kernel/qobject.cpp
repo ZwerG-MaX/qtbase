@@ -147,12 +147,13 @@ static inline QMutex *signalSlotLock(const QObject *o)
         uint(quintptr(o)) % sizeof(_q_ObjectMutexPool)/sizeof(QBasicMutex)]);
 }
 
-// ### Qt >= 5.6, remove qt_add/removeObject
+#if QT_VERSION < 0x60000
 extern "C" Q_CORE_EXPORT void qt_addObject(QObject *)
 {}
 
 extern "C" Q_CORE_EXPORT void qt_removeObject(QObject *)
 {}
+#endif
 
 struct QConnectionSenderSwitcher {
     QObject *receiver;
@@ -754,30 +755,6 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     \sa {Object Trees & Ownership}
 */
 
-/*!
-    \relates QObject
-
-    Returns a pointer to the object named \a name that inherits \a
-    type and with a given \a parent.
-
-    Returns 0 if there is no such child.
-
-    \snippet code/src_corelib_kernel_qobject.cpp 0
-*/
-
-void *qt_find_obj_child(QObject *parent, const char *type, const QString &name)
-{
-    QObjectList list = parent->children();
-    if (list.size() == 0) return 0;
-    for (int i = 0; i < list.size(); ++i) {
-        QObject *obj = list.at(i);
-        if (name == obj->objectName() && obj->inherits(type))
-            return obj;
-    }
-    return 0;
-}
-
-
 /*****************************************************************************
   QObject member functions
  *****************************************************************************/
@@ -835,7 +812,9 @@ QObject::QObject(QObject *parent)
             QT_RETHROW;
         }
     }
+#if QT_VERSION < 0x60000
     qt_addObject(this);
+#endif
     if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
         reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
 }
@@ -868,7 +847,9 @@ QObject::QObject(QObjectPrivate &dd, QObject *parent)
             QT_RETHROW;
         }
     }
+#if QT_VERSION < 0x60000
     qt_addObject(this);
+#endif
     if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
         reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
 }
@@ -1040,7 +1021,9 @@ QObject::~QObject()
     if (!d->children.isEmpty())
         d->deleteChildren();
 
+#if QT_VERSION < 0x60000
     qt_removeObject(this);
+#endif
     if (Q_UNLIKELY(qtHookData[QHooks::RemoveQObject]))
         reinterpret_cast<QHooks::RemoveQObjectCallback>(qtHookData[QHooks::RemoveQObject])(this);
 
@@ -1649,6 +1632,45 @@ int QObject::startTimer(int interval, Qt::TimerType timerType)
     d->extraData->runningTimers.append(timerId);
     return timerId;
 }
+
+/*!
+    \since 5.9
+    \overload
+    \fn int QObject::startTimer(std::chrono::milliseconds time, Qt::TimerType timerType)
+
+    Starts a timer and returns a timer identifier, or returns zero if
+    it could not start a timer.
+
+    A timer event will occur every \a time interval until killTimer()
+    is called. If \a time is equal to \c{std::chrono::duration::zero()},
+    then the timer event occurs once every time there are no more window
+    system events to process.
+
+    The virtual timerEvent() function is called with the QTimerEvent
+    event parameter class when a timer event occurs. Reimplement this
+    function to get timer events.
+
+    If multiple timers are running, the QTimerEvent::timerId() can be
+    used to find out which timer was activated.
+
+    Example:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 8
+
+    Note that QTimer's accuracy depends on the underlying operating system and
+    hardware. The \a timerType argument allows you to customize the accuracy of
+    the timer. See Qt::TimerType for information on the different timer types.
+    Most platforms support an accuracy of 20 milliseconds; some provide more.
+    If Qt is unable to deliver the requested number of timer events, it will
+    silently discard some.
+
+    The QTimer class provides a high-level programming interface with
+    single-shot timers and timer signals instead of events. There is
+    also a QBasicTimer class that is more lightweight than QTimer and
+    less clumsy than using timer IDs directly.
+
+    \sa timerEvent(), killTimer(), QTimer::singleShot()
+*/
 
 /*!
     Kills the timer with timer identifier, \a id.
@@ -2614,6 +2636,9 @@ static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaM
     (exact same signal to the exact same slot on the same objects),
     the connection will fail and connect will return an invalid QMetaObject::Connection.
 
+    \note Qt::UniqueConnections do not work for lambdas, non-member functions
+    and functors; they only apply to connecting to member functions.
+
     The optional \a type parameter describes the type of connection
     to establish. In particular, it determines whether a particular
     signal is delivered to a slot immediately or queued for delivery
@@ -2628,7 +2653,8 @@ static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaM
     call qRegisterMetaType() to register the data type before you
     establish the connection.
 
-    \sa disconnect(), sender(), qRegisterMetaType(), Q_DECLARE_METATYPE()
+    \sa disconnect(), sender(), qRegisterMetaType(), Q_DECLARE_METATYPE(),
+    {Differences between String-Based and Functor-Based Connections}
 */
 QMetaObject::Connection QObject::connect(const QObject *sender, const char *signal,
                                      const QObject *receiver, const char *method,
@@ -3683,7 +3709,7 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
                 continue;
 
             QObject * const receiver = c->receiver;
-            const bool receiverInSameThread = currentThreadId == receiver->d_func()->threadData->threadId;
+            const bool receiverInSameThread = currentThreadId == receiver->d_func()->threadData->threadId.load();
 
             // determine if this connection should be sent immediately or
             // put into the event queue
@@ -3941,9 +3967,8 @@ QList<QByteArray> QObject::dynamicPropertyNames() const
   QObject debugging output routines.
  *****************************************************************************/
 
-static void dumpRecursive(int level, QObject *object)
+static void dumpRecursive(int level, const QObject *object)
 {
-#if defined(QT_DEBUG)
     if (object) {
         QByteArray buf;
         buf.fill(' ', level / 2 * 8);
@@ -3972,45 +3997,65 @@ static void dumpRecursive(int level, QObject *object)
                 dumpRecursive(level+1, children.at(i));
         }
     }
-#else
-    Q_UNUSED(level)
-        Q_UNUSED(object)
-#endif
 }
 
 /*!
-    Dumps a tree of children to the debug output.
+    \overload
+    \obsolete
 
-    This function is useful for debugging, but does nothing if the
-    library has been compiled in release mode (i.e. without debugging
-    information).
+    Dumps a tree of children to the debug output.
 
     \sa dumpObjectInfo()
 */
 
 void QObject::dumpObjectTree()
 {
+    const_cast<const QObject *>(this)->dumpObjectTree();
+}
+
+/*!
+    Dumps a tree of children to the debug output.
+
+    \note before Qt 5.9, this function was not const.
+
+    \sa dumpObjectInfo()
+*/
+
+void QObject::dumpObjectTree() const
+{
     dumpRecursive(0, this);
 }
 
 /*!
+    \overload
+    \obsolete
+
     Dumps information about signal connections, etc. for this object
     to the debug output.
-
-    This function is useful for debugging, but does nothing if the
-    library has been compiled in release mode (i.e. without debugging
-    information).
 
     \sa dumpObjectTree()
 */
 
 void QObject::dumpObjectInfo()
 {
-#if defined(QT_DEBUG)
+    const_cast<const QObject *>(this)->dumpObjectInfo();
+}
+
+/*!
+    Dumps information about signal connections, etc. for this object
+    to the debug output.
+
+    \note before Qt 5.9, this function was not const.
+
+    \sa dumpObjectTree()
+*/
+
+void QObject::dumpObjectInfo() const
+{
     qDebug("OBJECT %s::%s", metaObject()->className(),
            objectName().isEmpty() ? "unnamed" : objectName().toLocal8Bit().data());
 
-    Q_D(QObject);
+    Q_D(const QObject);
     QMutexLocker locker(signalSlotLock(this));
 
     // first, look for connections where this object is the sender
@@ -4066,7 +4111,6 @@ void QObject::dumpObjectInfo()
     } else {
         qDebug("        <None>");
     }
-#endif
 }
 
 #ifndef QT_NO_USERDATA
@@ -4248,7 +4292,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
 
     This macro registers an enum type with the meta-object system.
     It must be placed after the enum declaration in a class that has the Q_OBJECT or the
-    Q_GADGET macro. For namespaces use \l Q_ENUM_NS instead.
+    Q_GADGET macro. For namespaces use \l Q_ENUM_NS() instead.
 
     For example:
 
@@ -4275,7 +4319,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     This macro registers a single \l{QFlags}{flags type} with the
     meta-object system. It is typically used in a class definition to declare
     that values of a given enum can be used as flags and combined using the
-    bitwise OR operator. For namespaces use \l Q_FLAG_NS instead.
+    bitwise OR operator. For namespaces use \l Q_FLAG_NS() instead.
 
     The macro must be placed after the enum declaration.
 
@@ -4296,6 +4340,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
 
 /*!
     \macro Q_ENUM_NS(...)
+    \relates QObject
     \since 5.8
 
     This macro registers an enum type with the meta-object system.
@@ -4319,6 +4364,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
 
 /*!
     \macro Q_FLAG_NS(...)
+    \relates QObject
     \since 5.8
 
     This macro registers a single \l{QFlags}{flags type} with the
@@ -4613,10 +4659,8 @@ void qDeleteInEventHandler(QObject *o)
 
     Overloaded functions can be resolved with help of \l qOverload.
 
-    \note The number of arguments in the signal or slot are limited to 6 if
-    the compiler does not support C++11 variadic templates.
+    \sa {Differences between String-Based and Functor-Based Connections}
  */
-
 
 /*!
     \fn QMetaObject::Connection QObject::connect(const QObject *sender, PointerToMemberFunction signal, Functor functor)
@@ -4640,7 +4684,7 @@ void qDeleteInEventHandler(QObject *o)
 
     \snippet code/src_corelib_kernel_qobject.cpp 45
 
-    If your compiler support C++11 lambda expressions, you can use them:
+    Lambda expressions can also be used:
 
     \snippet code/src_corelib_kernel_qobject.cpp 46
 
@@ -4650,9 +4694,6 @@ void qDeleteInEventHandler(QObject *o)
 
     Overloaded functions can be resolved with help of \l qOverload.
 
-    \note If the compiler does not support C++11 variadic templates, the number
-    of arguments in the signal or slot are limited to 6, and the functor object
-    must not have an overloaded or templated operator().
  */
 
 /*!
@@ -4665,7 +4706,10 @@ void qDeleteInEventHandler(QObject *o)
 
     Creates a connection of a given \a type from \a signal in
     \a sender object to \a functor to be placed in a specific event
-    loop of \a context, and returns a handle to the connection
+    loop of \a context, and returns a handle to the connection.
+
+    \note Qt::UniqueConnections do not work for lambdas, non-member functions
+    and functors; they only apply to connecting to member functions.
 
     The signal must be a function declared as a signal in the header.
     The slot function can be any function or functor that can be connected
@@ -4680,7 +4724,7 @@ void qDeleteInEventHandler(QObject *o)
 
     \snippet code/src_corelib_kernel_qobject.cpp 50
 
-    If your compiler support C++11 lambda expressions, you can use them:
+    Lambda expressions can also be used:
 
     \snippet code/src_corelib_kernel_qobject.cpp 51
 
@@ -4690,10 +4734,6 @@ void qDeleteInEventHandler(QObject *o)
     are still alive when the signal is emitted.
 
     Overloaded functions can be resolved with help of \l qOverload.
-
-    \note If the compiler does not support C++11 variadic templates, the number
-    of arguments in the signal or slot are limited to 6, and the functor object
-    must not have an overloaded or templated operator().
  */
 
 /*!
@@ -5041,4 +5081,5 @@ bool QMetaObject::Connection::isConnected_helper() const
 
 QT_END_NAMESPACE
 
+#include "moc_qnamespace.cpp"
 #include "moc_qobject.cpp"

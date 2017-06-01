@@ -79,6 +79,9 @@ public:
 
     QPlatformOffscreenSurface *handle() const;
 
+    void *nativeHandle() const;
+    void setNativeHandle(void *handle);
+
 Q_SIGNALS:
     void screenChanged(QScreen *screen);
 

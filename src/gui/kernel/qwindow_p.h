@@ -113,29 +113,17 @@ public:
     {
     }
 
-    void init();
+    void init(QScreen *targetScreen = nullptr);
 
     void maybeQuitOnLastWindowClosed();
 #ifndef QT_NO_CURSOR
     void setCursor(const QCursor *c = 0);
-    void applyCursor();
+    bool applyCursor();
 #endif
 
     void deliverUpdateRequest();
 
-    QPoint globalPosition() const {
-        Q_Q(const QWindow);
-        QPoint offset = q->position();
-        for (const QWindow *p = q->parent(); p; p = p->parent()) {
-            if (p->type() != Qt::ForeignWindow) {
-                offset += p->position();
-            } else { // QTBUG-43252, mapToGlobal() for foreign children.
-                offset += p->mapToGlobal(QPoint(0, 0));
-                break;
-            }
-        }
-        return offset;
-    }
+    QPoint globalPosition() const;
 
     QWindow *topLevelWindow() const;
 
@@ -144,8 +132,12 @@ public:
     void updateVisibility();
     void _q_clearAlert();
 
+    enum SiblingPosition { PositionTop, PositionBottom };
+    void updateSiblingPosition(SiblingPosition);
+
     bool windowRecreationRequired(QScreen *newScreen) const;
-    void create(bool recursive);
+    void create(bool recursive, WId nativeHandle = 0);
+    void destroy();
     void setTopLevelScreen(QScreen *newScreen, bool recreate);
     void connectToScreen(QScreen *topLevelScreen);
     void disconnectFromScreen();

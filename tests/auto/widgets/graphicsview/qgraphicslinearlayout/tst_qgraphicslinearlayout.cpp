@@ -165,7 +165,8 @@ public:
         return QGraphicsWidget::sizeHint(which, constraint);
     }
 
-    QSizeF m_sizeHints[Qt::NSizeHints];
+    // Initializer {} is a workaround for gcc bug 68949
+    QSizeF m_sizeHints[Qt::NSizeHints] {};
     QBrush m_brush;
 };
 
@@ -800,7 +801,7 @@ void tst_QGraphicsLinearLayout::removeAt()
         QCOMPARE(wParent, static_cast<QGraphicsLayoutItem *>(&layout));
         layout.removeAt(removeItemAt);
         wParent = w->parentLayoutItem();
-        QCOMPARE(wParent, static_cast<QGraphicsLayoutItem *>(0));
+        QCOMPARE(wParent, nullptr);
         delete w;
     }
     QCOMPARE(layout.count(), itemCount + layoutCount - (w ? 1 : 0));

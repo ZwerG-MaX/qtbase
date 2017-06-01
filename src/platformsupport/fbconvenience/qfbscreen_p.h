@@ -66,9 +66,17 @@ class QFbBackingStore;
 class QFbScreen : public QObject, public QPlatformScreen
 {
     Q_OBJECT
+
 public:
+    enum Flag {
+        DontForceFirstWindowToFullScreen = 0x01
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     QFbScreen();
     ~QFbScreen();
+
+    virtual bool initialize();
 
     QRect geometry() const Q_DECL_OVERRIDE { return mGeometry; }
     int depth() const Q_DECL_OVERRIDE { return mDepth; }
@@ -85,6 +93,8 @@ public:
     virtual void raise(QFbWindow *window);
     virtual void lower(QFbWindow *window);
     virtual void topWindowChanged(QWindow *) {}
+    virtual int windowCount() const;
+    virtual Flags flags() const;
 
     void addPendingBackingStore(QFbBackingStore *bs) { mPendingBackingStores << bs; }
 
@@ -112,19 +122,16 @@ protected:
     int mDepth;
     QImage::Format mFormat;
     QSizeF mPhysicalSize;
-    QImage *mScreenImage;
+    QImage mScreenImage;
 
 private:
-    void invalidateRectCache() { mIsUpToDate = false; }
-    void generateRects();
-
-    QPainter *mCompositePainter;
-    QVector<QPair<QRect, int> > mCachedRects;
+    QPainter *mPainter;
     QList<QFbBackingStore*> mPendingBackingStores;
 
     friend class QFbWindow;
-    bool mIsUpToDate;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QFbScreen::Flags)
 
 QT_END_NAMESPACE
 

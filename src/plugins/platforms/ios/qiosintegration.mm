@@ -61,6 +61,7 @@
 #include <QtFontDatabaseSupport/private/qcoretextfontdatabase_p.h>
 #include <QtClipboardSupport/private/qmacmime_p.h>
 #include <QDir>
+#include <QOperatingSystemVersion>
 
 #import <AudioToolbox/AudioServices.h>
 
@@ -68,13 +69,15 @@
 
 QT_BEGIN_NAMESPACE
 
+class QCoreTextFontEngine;
+
 QIOSIntegration *QIOSIntegration::instance()
 {
     return static_cast<QIOSIntegration *>(QGuiApplicationPrivate::platformIntegration());
 }
 
 QIOSIntegration::QIOSIntegration()
-    : m_fontDatabase(new QCoreTextFontDatabase)
+    : m_fontDatabase(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>)
 #if !defined(Q_OS_TVOS) && !defined(QT_NO_CLIPBOARD)
     , m_clipboard(new QIOSClipboard)
 #endif
@@ -119,7 +122,7 @@ QIOSIntegration::QIOSIntegration()
     m_touchDevice = new QTouchDevice;
     m_touchDevice->setType(QTouchDevice::TouchScreen);
     QTouchDevice::Capabilities touchCapabilities = QTouchDevice::Position | QTouchDevice::NormalizedPosition;
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_9_0) {
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::IOS, 9)) {
         if (mainScreen.traitCollection.forceTouchCapability == UIForceTouchCapabilityAvailable)
             touchCapabilities |= QTouchDevice::Pressure;
     }

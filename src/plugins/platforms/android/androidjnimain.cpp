@@ -82,8 +82,8 @@ static jobject m_serviceObject = nullptr;
 static jmethodID m_setSurfaceGeometryMethodID = nullptr;
 static jmethodID m_destroySurfaceMethodID = nullptr;
 
-static bool m_activityActive = true; // defaults to true because when the platform plugin is
-                                     // initialized, QtActivity::onResume() has already been called
+static int m_pendingApplicationState = -1;
+static QBasicMutex m_pendingAppStateMtx;
 
 static jclass m_bitmapClass  = nullptr;
 static jmethodID m_createBitmapMethodID = nullptr;
@@ -130,13 +130,22 @@ static const char m_qtTag[] = "Qt";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
+static void flushPendingApplicationState();
+
 namespace QtAndroid
 {
     void setAndroidPlatformIntegration(QAndroidPlatformIntegration *androidPlatformIntegration)
     {
-        m_surfacesMutex.lock();
+        QMutexLocker lock(&m_surfacesMutex);
         m_androidPlatformIntegration = androidPlatformIntegration;
-        m_surfacesMutex.unlock();
+
+        // flush the pending state if necessary.
+        if (m_androidPlatformIntegration) {
+            flushPendingApplicationState();
+        } else {
+            QMutexLocker locker(&m_pendingAppStateMtx);
+            m_pendingApplicationState = -1;
+        }
     }
 
     QAndroidPlatformIntegration *androidPlatformIntegration()
@@ -213,12 +222,6 @@ namespace QtAndroid
 
         QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "setFullScreen", "(Z)V", true);
         m_statusBarShowing = false;
-    }
-
-    void setApplicationActive()
-    {
-        if (m_activityActive)
-            QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationActive);
     }
 
     jobject createBitmap(QImage img, JNIEnv *env)
@@ -402,16 +405,16 @@ namespace QtAndroid
         if (surfaceId == -1)
             return;
 
-        QMutexLocker lock(&m_surfacesMutex);
-        const auto &it = m_surfaces.find(surfaceId);
-        if (it != m_surfaces.end())
-            m_surfaces.remove(surfaceId);
+        {
+            QMutexLocker lock(&m_surfacesMutex);
+            const auto &it = m_surfaces.find(surfaceId);
+            if (it != m_surfaces.end())
+                m_surfaces.erase(it);
+        }
 
         QJNIEnvironmentPrivate env;
-        if (!env)
-            return;
-
-        env->CallStaticVoidMethod(m_applicationClass,
+        if (env)
+            env->CallStaticVoidMethod(m_applicationClass,
                                      m_destroySurfaceMethodID,
                                      surfaceId);
     }
@@ -446,6 +449,16 @@ namespace QtAndroid
 
 } // namespace QtAndroid
 
+// Force an update of the pending application state (state set before the platform plugin was created)
+static void flushPendingApplicationState()
+{
+    QMutexLocker locker(&m_pendingAppStateMtx);
+    if (m_pendingApplicationState == -1)
+        return;
+
+    QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(m_pendingApplicationState));
+    m_pendingApplicationState = -1;
+}
 
 static jboolean startQtAndroidPlugin(JNIEnv* /*env*/, jobject /*object*//*, jobject applicationAssetManager*/)
 {
@@ -538,6 +551,12 @@ static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring para
     return pthread_create(&m_qtAppThread, nullptr, startMainMethod, nullptr) == 0;
 }
 
+static void quitQtCoreApplication(JNIEnv *env, jclass /*clazz*/)
+{
+    Q_UNUSED(env);
+    QCoreApplication::quit();
+}
+
 static void quitQtAndroidPlugin(JNIEnv *env, jclass /*clazz*/)
 {
     Q_UNUSED(env);
@@ -583,14 +602,12 @@ static void setSurface(JNIEnv *env, jobject /*thiz*/, jint id, jobject jSurface,
 {
     QMutexLocker lock(&m_surfacesMutex);
     const auto &it = m_surfaces.find(id);
-    if (it.value() == nullptr) // This should never happen...
+    if (it == m_surfaces.end())
         return;
 
-    if (it == m_surfaces.end()) {
-        qWarning()<<"Can't find surface" << id;
-        return;
-    }
-    it.value()->surfaceChanged(env, jSurface, w, h);
+    auto surfaceClient = it.value();
+    if (surfaceClient)
+        surfaceClient->surfaceChanged(env, jSurface, w, h);
 }
 
 static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
@@ -651,12 +668,13 @@ static void updateWindow(JNIEnv */*env*/, jobject /*thiz*/)
 
 static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state)
 {
-    m_activityActive = (state == Qt::ApplicationActive);
-
-    if (!m_main || !m_androidPlatformIntegration || !QGuiApplicationPrivate::platformIntegration()) {
-        QAndroidPlatformIntegration::setDefaultApplicationState(Qt::ApplicationState(state));
+    if (!m_main || !QtAndroid::androidPlatformIntegration()) {
+        QMutexLocker locker(&m_pendingAppStateMtx);
+        m_pendingApplicationState = Qt::ApplicationState(state);
         return;
     }
+
+    flushPendingApplicationState();
 
     if (state == Qt::ApplicationActive)
         QtAndroidPrivate::handleResume();
@@ -734,6 +752,7 @@ static JNINativeMethod methods[] = {
     {"startQtAndroidPlugin", "()Z", (void *)startQtAndroidPlugin},
     {"startQtApplication", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)startQtApplication},
     {"quitQtAndroidPlugin", "()V", (void *)quitQtAndroidPlugin},
+    {"quitQtCoreApplication", "()V", (void *)quitQtCoreApplication},
     {"terminateQt", "()V", (void *)terminateQt},
     {"setDisplayMetrics", "(IIIIDDDD)V", (void *)setDisplayMetrics},
     {"setSurface", "(ILjava/lang/Object;II)V", (void *)setSurface},

@@ -82,7 +82,7 @@ QMacTimeZonePrivate::~QMacTimeZonePrivate()
     [m_nstz release];
 }
 
-QTimeZonePrivate *QMacTimeZonePrivate::clone()
+QMacTimeZonePrivate *QMacTimeZonePrivate::clone() const
 {
     return new QMacTimeZonePrivate(*this);
 }
@@ -271,6 +271,11 @@ QList<QByteArray> QMacTimeZonePrivate::availableTimeZoneIds() const
     list.erase(std::unique(list.begin(), list.end()), list.end());
 
     return list;
+}
+
+NSTimeZone *QMacTimeZonePrivate::nsTimeZone() const
+{
+    return m_nstz;
 }
 
 QT_END_NAMESPACE

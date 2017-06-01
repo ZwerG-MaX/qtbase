@@ -39,7 +39,9 @@
 
 #include "qeglfsdeviceintegration_p.h"
 #include "qeglfsintegration_p.h"
-#include "qeglfscursor_p.h"
+#ifndef QT_NO_OPENGL
+# include "qeglfscursor_p.h"
+#endif
 #include "qeglfswindow_p.h"
 #include "qeglfsscreen_p.h"
 #include "qeglfshooks_p.h"
@@ -69,16 +71,16 @@ Q_LOGGING_CATEGORY(qLcEglDevDebug, "qt.qpa.egldeviceintegration")
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
                           (QEglFSDeviceIntegrationFactoryInterface_iid, QLatin1String("/egldeviceintegrations"), Qt::CaseInsensitive))
 
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, directLoader,
                           (QEglFSDeviceIntegrationFactoryInterface_iid, QLatin1String(""), Qt::CaseInsensitive))
 
-#endif // QT_NO_LIBRARY
+#endif // QT_CONFIG(library)
 
 QStringList QEglFSDeviceIntegrationFactory::keys(const QString &pluginPath)
 {
     QStringList list;
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
     if (!pluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(pluginPath);
         list = directLoader()->keyMap().values();
@@ -102,7 +104,7 @@ QStringList QEglFSDeviceIntegrationFactory::keys(const QString &pluginPath)
 QEglFSDeviceIntegration *QEglFSDeviceIntegrationFactory::create(const QString &key, const QString &pluginPath)
 {
     QEglFSDeviceIntegration *integration = Q_NULLPTR;
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
     if (!pluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(pluginPath);
         integration = qLoadPlugin<QEglFSDeviceIntegration, QEglFSDeviceIntegrationPlugin>(directLoader(), key);
@@ -226,7 +228,7 @@ QDpi QEglFSDeviceIntegration::logicalDpi() const
 
 qreal QEglFSDeviceIntegration::pixelDensity() const
 {
-    return qRound(logicalDpi().first / qreal(100));
+    return qMax(1, qRound(logicalDpi().first / qreal(100)));
 }
 
 Qt::ScreenOrientation QEglFSDeviceIntegration::nativeOrientation() const
@@ -312,7 +314,12 @@ bool QEglFSDeviceIntegration::hasCapability(QPlatformIntegration::Capability cap
 
 QPlatformCursor *QEglFSDeviceIntegration::createCursor(QPlatformScreen *screen) const
 {
+#ifndef QT_NO_OPENGL
     return new QEglFSCursor(static_cast<QEglFSScreen *>(screen));
+#else
+    Q_UNUSED(screen);
+    return nullptr;
+#endif
 }
 
 void QEglFSDeviceIntegration::waitForVSync(QPlatformSurface *surface) const
@@ -355,7 +362,7 @@ EGLConfig QEglFSDeviceIntegration::chooseConfig(EGLDisplay display, const QSurfa
     public:
         Chooser(EGLDisplay display)
             : QEglConfigChooser(display) { }
-        bool filterConfig(EGLConfig config) const Q_DECL_OVERRIDE {
+        bool filterConfig(EGLConfig config) const override {
             return qt_egl_device_integration()->filterConfig(display(), config)
                     && QEglConfigChooser::filterConfig(config);
         }

@@ -209,7 +209,6 @@ public:
     bool dirty;
     QTabWidget::TabPosition pos;
     QTabWidget::TabShape shape;
-    int alignment;
     QWidget *leftCornerWidget;
     QWidget *rightCornerWidget;
 };
@@ -732,7 +731,7 @@ QTabBar* QTabWidget::tabBar() const
     return d->tabs;
 }
 
-/*!
+/*
     Ensures that the selected tab's page is visible and appropriately
     sized.
 */

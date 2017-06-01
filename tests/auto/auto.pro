@@ -23,6 +23,7 @@ uikit: SUBDIRS  = corelib gui
 
 wince:                                      SUBDIRS -= printsupport
 cross_compile:                              SUBDIRS -= tools cmake installed_cmake
+else:!qtConfig(process):                    SUBDIRS -= tools
 !qtHaveModule(opengl):                      SUBDIRS -= opengl
 !qtHaveModule(gui):                         SUBDIRS -= gui
 !qtHaveModule(widgets):                     SUBDIRS -= widgets
@@ -30,6 +31,8 @@ cross_compile:                              SUBDIRS -= tools cmake installed_cma
 !qtHaveModule(concurrent):                  SUBDIRS -= concurrent
 !qtHaveModule(network):                     SUBDIRS -= network
 !qtHaveModule(dbus):                        SUBDIRS -= dbus
+!qtHaveModule(xml):                         SUBDIRS -= xml
+!qtHaveModule(sql):                         SUBDIRS -= sql
 
 # Disable the QtDBus tests if we can't connect to the session bus
 !cross_compile:qtHaveModule(dbus) {

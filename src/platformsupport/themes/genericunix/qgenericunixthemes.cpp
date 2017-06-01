@@ -225,6 +225,8 @@ QVariant QGenericUnixTheme::themeHint(ThemeHint hint) const
     }
     case QPlatformTheme::KeyboardScheme:
         return QVariant(int(X11KeyboardScheme));
+    case QPlatformTheme::UiEffects:
+        return QVariant(int(HoverEffect));
     default:
         break;
     }
@@ -540,6 +542,8 @@ QVariant QKdeTheme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(d->singleClick);
     case QPlatformTheme::WheelScrollLines:
         return QVariant(d->wheelScrollLines);
+    case QPlatformTheme::UiEffects:
+        return QVariant(int(HoverEffect));
     default:
         break;
     }
@@ -551,6 +555,7 @@ QIcon QKdeTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions
 #if QT_CONFIG(mimetype)
     return xdgFileIcon(fileInfo);
 #else
+    Q_UNUSED(fileInfo);
     return QIcon();
 #endif
 }
@@ -716,6 +721,7 @@ QIcon QGnomeTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptio
 #if QT_CONFIG(mimetype)
     return xdgFileIcon(fileInfo);
 #else
+    Q_UNUSED(fileInfo);
     return QIcon();
 #endif
 }
@@ -818,11 +824,13 @@ QStringList QGenericUnixTheme::themeNames()
                 result.push_back(QStringLiteral("gtk3"));
                 // fallback to the generic Gnome theme if loading the GTK3 theme fails
                 result.push_back(QLatin1String(QGnomeTheme::name));
+            } else {
+                // unknown, but lowercase the name (our standard practice) and
+                // remove any "x-" prefix
+                QString s = QString::fromLatin1(desktopName.toLower());
+                result.push_back(s.startsWith(QLatin1String("x-")) ? s.mid(2) : s);
             }
         }
-        const QString session = QString::fromLocal8Bit(qgetenv("DESKTOP_SESSION"));
-        if (!session.isEmpty() && session != QLatin1String("default") && !result.contains(session))
-            result.push_back(session);
     } // desktopSettingsAware
     result.append(QLatin1String(QGenericUnixTheme::name));
     return result;

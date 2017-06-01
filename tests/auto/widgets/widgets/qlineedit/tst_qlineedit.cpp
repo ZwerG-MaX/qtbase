@@ -294,6 +294,8 @@ private slots:
     void inputMethodQueryImHints_data();
     void inputMethodQueryImHints();
 
+    void inputMethodUpdate();
+
     void undoRedoAndEchoModes_data();
     void undoRedoAndEchoModes();
 
@@ -308,6 +310,7 @@ private slots:
 
     void shortcutOverrideOnReadonlyLineEdit_data();
     void shortcutOverrideOnReadonlyLineEdit();
+    void QTBUG59957_clearButtonLeftmostAction();
 
 protected slots:
     void editingFinished();
@@ -322,6 +325,7 @@ private:
     // keyClicks(..) is moved to QtTestCase
     void psKeyClick(QWidget *target, Qt::Key key, Qt::KeyboardModifiers pressState = 0);
     void psKeyClick(QTestEventList &keys, Qt::Key key, Qt::KeyboardModifiers pressState = 0);
+    bool unselectingWithLeftOrRightChangesCursorPosition();
     QLineEdit *ensureTestWidget();
 
     bool validInput;
@@ -711,8 +715,8 @@ void tst_QLineEdit::clearInputMask()
 {
     QLineEdit *testWidget = ensureTestWidget();
     testWidget->setInputMask("000.000.000.000");
-    QVERIFY(testWidget->inputMask() != QString::null);
-    testWidget->setInputMask(QString::null);
+    QVERIFY(!testWidget->inputMask().isNull());
+    testWidget->setInputMask(QString());
     QCOMPARE(testWidget->inputMask(), QString());
 }
 
@@ -1312,9 +1316,10 @@ void tst_QLineEdit::undo_keypressevents_data()
 
         // unselect any current selection
         keys.addKeyClick(Qt::Key_Right);
-#if defined Q_OS_WIN || defined Q_OS_QNX //Windows and QNX do not jump to the beginning of the selection
-        keys.addKeyClick(Qt::Key_Left);
-#endif
+
+        // If previous right changed cursor position, go back left
+        if (unselectingWithLeftOrRightChangesCursorPosition())
+            keys.addKeyClick(Qt::Key_Left);
 
         // selecting '12'
         keys.addKeyClick(Qt::Key_Right, Qt::ShiftModifier);
@@ -2275,7 +2280,7 @@ void tst_QLineEdit::textChangedAndTextEdited()
 
     changed_count = 0;
     edited_count = 0;
-    changed_string = QString::null;
+    changed_string.clear();
 
     testWidget->setText("foo");
     QCOMPARE(changed_count, 1);
@@ -2284,7 +2289,7 @@ void tst_QLineEdit::textChangedAndTextEdited()
 
     changed_count = 0;
     edited_count = 0;
-    changed_string = QString::null;
+    changed_string.clear();
 
     testWidget->setText("");
     QCOMPARE(changed_count, 1);
@@ -3106,7 +3111,7 @@ void tst_QLineEdit::maxLengthAndInputMask()
     QVERIFY(testWidget->inputMask().isNull());
     testWidget->setMaxLength(10);
     QCOMPARE(testWidget->maxLength(), 10);
-    testWidget->setInputMask(QString::null);
+    testWidget->setInputMask(QString());
     QVERIFY(testWidget->inputMask().isNull());
     QCOMPARE(testWidget->maxLength(), 10);
 }
@@ -3295,14 +3300,11 @@ void tst_QLineEdit::leftKeyOnSelectedText()
     QCOMPARE(testWidget->cursorPosition(), 2);
     QCOMPARE(testWidget->selectedText(), QString("23"));
     QTest::keyClick(testWidget, Qt::Key_Left);
-#if defined Q_OS_WIN || defined Q_OS_QNX
-    QCOMPARE(testWidget->cursorPosition(), 1);
-#else
-    // Selection is cleared ands cursor remains at position 2.
-    // X11 used to behave like window prior to 4.2. Changes caused by QKeySequence
-    // resulted in an inadvertant change in behavior
-    QCOMPARE(testWidget->cursorPosition(), 2);
-#endif
+
+    if (unselectingWithLeftOrRightChangesCursorPosition())
+        QCOMPARE(testWidget->cursorPosition(), 1);
+    else
+        QCOMPARE(testWidget->cursorPosition(), 2);
 }
 
 void tst_QLineEdit::inlineCompletion()
@@ -4184,6 +4186,57 @@ void tst_QLineEdit::inputMethodQueryImHints()
     QCOMPARE(static_cast<Qt::InputMethodHints>(value.toInt()), hints);
 }
 
+void tst_QLineEdit::inputMethodUpdate()
+{
+    QLineEdit *testWidget = ensureTestWidget();
+
+    centerOnScreen(testWidget);
+    testWidget->show();
+    QVERIFY(QTest::qWaitForWindowExposed(testWidget));
+
+    testWidget->setText("");
+    testWidget->activateWindow();
+    testWidget->setFocus();
+    QTRY_VERIFY(testWidget->hasFocus());
+    QTRY_COMPARE(qApp->focusObject(), testWidget);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, 0, 1, QVariant());
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("preedit text");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+    QCOMPARE(testWidget->text(), QString("preedit text"));
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, 0, 0, QVariant());
+        QInputMethodEvent event("", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+}
+
 void tst_QLineEdit::undoRedoAndEchoModes_data()
 {
     QTest::addColumn<int>("echoMode");
@@ -4557,6 +4610,49 @@ void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
 
     const int activationCount = shouldBeHandledByQLineEdit ? 0 : 1;
     QCOMPARE(spy.count(), activationCount);
+}
+
+void tst_QLineEdit::QTBUG59957_clearButtonLeftmostAction()
+{
+#ifndef QT_BUILD_INTERNAL
+    QSKIP("This test requires a developer build");
+#else
+    QLineEdit lineEdit;
+    lineEdit.setClearButtonEnabled(true);
+
+    auto clearButton = lineEdit.findChild<QLineEditIconButton *>();
+    QVERIFY(clearButton);
+
+    QPixmap pixmap(16, 16);
+    lineEdit.addAction(QIcon(pixmap), QLineEdit::TrailingPosition);
+    lineEdit.addAction(QIcon(pixmap), QLineEdit::TrailingPosition);
+
+    lineEdit.show();
+
+    const auto buttons = lineEdit.findChildren<QLineEditIconButton *>();
+    for (const auto button : buttons) {
+        if (button == clearButton)
+            continue;
+        QVERIFY(clearButton->x() < button->x());
+    }
+#endif // QT_BUILD_INTERNAL
+}
+
+bool tst_QLineEdit::unselectingWithLeftOrRightChangesCursorPosition()
+{
+#if defined Q_OS_WIN || defined Q_OS_QNX //Windows and QNX do not jump to the beginning of the selection
+    return true;
+#endif
+    // Platforms minimal/offscreen also need left after unselecting with right
+    if (!QGuiApplication::platformName().compare("minimal", Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare("offscreen", Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    // Selection is cleared ands cursor remains at previous position.
+    // X11 used to behave like window prior to 4.2. Changes caused by QKeySequence
+    // resulted in an inadvertant change in behavior
+    return false;
 }
 
 QTEST_MAIN(tst_QLineEdit)

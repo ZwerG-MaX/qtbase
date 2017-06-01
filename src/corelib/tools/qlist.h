@@ -126,6 +126,7 @@ class QList
 public:
     struct MemoryLayout
         : std::conditional<
+            // must stay isStatic until ### Qt 6 for BC reasons (don't use !isRelocatable)!
             QTypeInfo<T>::isStatic || QTypeInfo<T>::isLarge,
             QListData::IndirectLayout,
             typename std::conditional<
@@ -894,7 +895,7 @@ Q_OUTOFLINE_TEMPLATE int QList<T>::removeAll(const T &_t)
             *n++ = *i;
     }
 
-    int removedCount = e - n;
+    int removedCount = int(e - n);
     d->end -= removedCount;
     return removedCount;
 }

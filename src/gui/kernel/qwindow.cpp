@@ -155,8 +155,17 @@ QWindow::QWindow(QScreen *targetScreen)
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->connectToScreen(targetScreen ? targetScreen : QGuiApplication::primaryScreen());
-    d->init();
+    d->init(targetScreen);
+}
+
+static QWindow *nonDesktopParent(QWindow *parent)
+{
+    if (parent && parent->type() == Qt::Desktop) {
+        qWarning("QWindows can not be reparented into desktop windows");
+        return nullptr;
+    }
+
+    return parent;
 }
 
 /*!
@@ -170,14 +179,8 @@ QWindow::QWindow(QScreen *targetScreen)
     \sa setParent()
 */
 QWindow::QWindow(QWindow *parent)
-    : QObject(*new QWindowPrivate(), parent)
-    , QSurface(QSurface::Window)
+    : QWindow(*new QWindowPrivate(), parent)
 {
-    Q_D(QWindow);
-    d->parentWindow = parent;
-    if (!parent)
-        d->connectToScreen(QGuiApplication::primaryScreen());
-    d->init();
 }
 
 /*!
@@ -193,13 +196,10 @@ QWindow::QWindow(QWindow *parent)
     \sa setParent()
 */
 QWindow::QWindow(QWindowPrivate &dd, QWindow *parent)
-    : QObject(dd, parent)
+    : QObject(dd, nonDesktopParent(parent))
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->parentWindow = parent;
-    if (!parent)
-        d->connectToScreen(QGuiApplication::primaryScreen());
     d->init();
 }
 
@@ -208,15 +208,21 @@ QWindow::QWindow(QWindowPrivate &dd, QWindow *parent)
 */
 QWindow::~QWindow()
 {
-    destroy();
+    Q_D(QWindow);
+    d->destroy();
     QGuiApplicationPrivate::window_list.removeAll(this);
     if (!QGuiApplicationPrivate::is_app_closing)
         QGuiApplicationPrivate::instance()->modalWindowList.removeOne(this);
 }
 
-void QWindowPrivate::init()
+void QWindowPrivate::init(QScreen *targetScreen)
 {
     Q_Q(QWindow);
+
+    parentWindow = static_cast<QWindow *>(q->QObject::parent());
+
+    if (!parentWindow)
+        connectToScreen(targetScreen ? targetScreen : QGuiApplication::primaryScreen());
 
     // If your application aborts here, you are probably creating a QWindow
     // before the screen list is populated.
@@ -343,6 +349,30 @@ void QWindowPrivate::updateVisibility()
         emit q->visibilityChanged(visibility);
 }
 
+void QWindowPrivate::updateSiblingPosition(SiblingPosition position)
+{
+    Q_Q(QWindow);
+
+    if (!q->parent())
+        return;
+
+    QObjectList &siblings = q->parent()->d_ptr->children;
+
+    const int siblingCount = siblings.size() - 1;
+    if (siblingCount == 0)
+        return;
+
+    const int currentPosition = siblings.indexOf(q);
+    Q_ASSERT(currentPosition >= 0);
+
+    const int targetPosition = position == PositionTop ? siblingCount : 0;
+
+    if (currentPosition == targetPosition)
+        return;
+
+    siblings.move(currentPosition, targetPosition);
+}
+
 inline bool QWindowPrivate::windowRecreationRequired(QScreen *newScreen) const
 {
     Q_Q(const QWindow);
@@ -394,7 +424,7 @@ void QWindowPrivate::setTopLevelScreen(QScreen *newScreen, bool recreate)
     }
 }
 
-void QWindowPrivate::create(bool recursive)
+void QWindowPrivate::create(bool recursive, WId nativeHandle)
 {
     Q_Q(QWindow);
     if (platformWindow)
@@ -403,8 +433,10 @@ void QWindowPrivate::create(bool recursive)
     if (q->parent())
         q->parent()->create();
 
-    platformWindow = QGuiApplicationPrivate::platformIntegration()->createPlatformWindow(q);
-    Q_ASSERT(platformWindow || q->type() == Qt::ForeignWindow);
+    QPlatformIntegration *platformIntegration = QGuiApplicationPrivate::platformIntegration();
+    platformWindow = nativeHandle ? platformIntegration->createForeignWindow(q, nativeHandle)
+        : platformIntegration->createPlatformWindow(q);
+    Q_ASSERT(platformWindow);
 
     if (!platformWindow) {
         qWarning() << "Failed to create platform window for" << q << "with flags" << q->flags();
@@ -507,7 +539,9 @@ void QWindow::setVisible(bool visible)
         // can defer creation until the parent is created or we're re-parented.
         if (parent() && !parent()->handle())
             return;
-        else
+
+        // We only need to create the window if it's being shown
+        if (visible)
             create();
     }
 
@@ -549,7 +583,8 @@ void QWindow::setVisible(bool visible)
         d->applyCursor();
 #endif
 
-    d->platformWindow->setVisible(visible);
+    if (d->platformWindow)
+        d->platformWindow->setVisible(visible);
 
     if (!visible) {
         QHideEvent hideEvent;
@@ -596,13 +631,26 @@ WId QWindow::winId() const
 {
     Q_D(const QWindow);
 
-    if (type() == Qt::ForeignWindow)
-        return WId(property("_q_foreignWinId").value<WId>());
-
     if(!d->platformWindow)
         const_cast<QWindow *>(this)->create();
 
     return d->platformWindow->winId();
+}
+
+ /*!
+    Returns the parent window, if any.
+
+    If \a mode is IncludeTransients, then the transient parent is returned
+    if there is no parent.
+
+    A window without a parent is known as a top level window.
+
+    \since 5.9
+*/
+QWindow *QWindow::parent(AncestorMode mode) const
+{
+    Q_D(const QWindow);
+    return d->parentWindow ? d->parentWindow : (mode == IncludeTransients ? transientParent() : nullptr);
 }
 
 /*!
@@ -627,6 +675,8 @@ QWindow *QWindow::parent() const
 */
 void QWindow::setParent(QWindow *parent)
 {
+    parent = nonDesktopParent(parent);
+
     Q_D(QWindow);
     if (d->parentWindow == parent)
         return;
@@ -797,10 +847,15 @@ QSurfaceFormat QWindow::format() const
 
     The actual window flags might differ from the flags set with setFlags()
     if the requested flags could not be fulfilled.
+
+    \sa setFlag()
 */
 void QWindow::setFlags(Qt::WindowFlags flags)
 {
     Q_D(QWindow);
+    if (d->windowFlags == flags)
+        return;
+
     if (d->platformWindow)
         d->platformWindow->setWindowFlags(flags);
     d->windowFlags = flags;
@@ -809,7 +864,29 @@ void QWindow::setFlags(Qt::WindowFlags flags)
 Qt::WindowFlags QWindow::flags() const
 {
     Q_D(const QWindow);
-    return d->windowFlags;
+    Qt::WindowFlags flags = d->windowFlags;
+
+    if (d->platformWindow && d->platformWindow->isForeignWindow())
+        flags |= Qt::ForeignWindow;
+
+    return flags;
+}
+
+/*!
+    \since 5.9
+
+    Sets the window flag \a flag on this window if \a on is true;
+    otherwise clears the flag.
+
+    \sa setFlags(), flags(), type()
+*/
+void QWindow::setFlag(Qt::WindowType flag, bool on)
+{
+    Q_D(QWindow);
+    if (on)
+        setFlags(d->windowFlags | flag);
+    else
+        setFlags(d->windowFlags & ~flag);
 }
 
 /*!
@@ -920,6 +997,9 @@ QIcon QWindow::icon() const
 void QWindow::raise()
 {
     Q_D(QWindow);
+
+    d->updateSiblingPosition(QWindowPrivate::PositionTop);
+
     if (d->platformWindow)
         d->platformWindow->raise();
 }
@@ -932,6 +1012,9 @@ void QWindow::raise()
 void QWindow::lower()
 {
     Q_D(QWindow);
+
+    d->updateSiblingPosition(QWindowPrivate::PositionBottom);
+
     if (d->platformWindow)
         d->platformWindow->lower();
 }
@@ -1065,11 +1148,10 @@ bool QWindow::isActive() const
     if (focus == this)
         return true;
 
-    if (!parent() && !transientParent()) {
+    if (QWindow *p = parent(IncludeTransients))
+        return p->isActive();
+    else
         return isAncestorOf(focus);
-    } else {
-        return (parent() && parent()->isActive()) || (transientParent() && transientParent()->isActive());
-    }
 }
 
 /*!
@@ -1116,20 +1198,19 @@ Qt::ScreenOrientation QWindow::contentOrientation() const
     Common values are 1.0 on normal displays and 2.0 on Apple "retina" displays.
 
     \note For windows not backed by a platform window, meaning that create() was not
-    called, the function will fall back to QGuiApplication::devicePixelRatio() which in
-    turn returns the highest screen device pixel ratio found on the system.
+    called, the function will fall back to the associated QScreen's device pixel ratio.
 
-    \sa QScreen::devicePixelRatio(), QGuiApplication::devicePixelRatio()
+    \sa QScreen::devicePixelRatio()
 */
 qreal QWindow::devicePixelRatio() const
 {
     Q_D(const QWindow);
 
-    // If there is no platform window use the app global devicePixelRatio,
-    // which is the the highest devicePixelRatio found on the system
-    // screens, and will be correct for single-display systems (a very common case).
+    // If there is no platform window use the associated screen's devicePixelRatio,
+    // which typically is the primary screen and will be correct for single-display
+    // systems (a very common case).
     if (!d->platformWindow)
-        return qApp->devicePixelRatio();
+        return screen()->devicePixelRatio();
 
     return d->platformWindow->devicePixelRatio() * QHighDpiScaling::factor(this);
 }
@@ -1197,6 +1278,10 @@ void QWindow::setTransientParent(QWindow *parent)
         qWarning() << parent << "must be a top level window.";
         return;
     }
+    if (parent == this) {
+        qWarning() << "transient parent" << parent << "can not be same as window";
+        return;
+    }
 
     d->transientParent = parent;
 
@@ -1233,8 +1318,15 @@ bool QWindow::isAncestorOf(const QWindow *child, AncestorMode mode) const
     if (child->parent() == this || (mode == IncludeTransients && child->transientParent() == this))
         return true;
 
-    return (child->parent() && isAncestorOf(child->parent(), mode))
-        || (mode == IncludeTransients && child->transientParent() && isAncestorOf(child->transientParent(), mode));
+    if (QWindow *parent = child->parent(mode)) {
+        if (isAncestorOf(parent, mode))
+            return true;
+    } else if (handle() && child->handle()) {
+        if (handle()->isAncestorOf(child->handle()))
+            return true;
+    }
+
+    return false;
 }
 
 /*!
@@ -1455,6 +1547,8 @@ void QWindow::setSizeIncrement(const QSize &size)
     Sets the geometry of the window, excluding its window frame, to a
     rectangle constructed from \a posx, \a posy, \a w and \a h.
 
+    The geometry is in relation to the virtualGeometry() of its screen.
+
     \sa geometry()
 */
 void QWindow::setGeometry(int posx, int posy, int w, int h)
@@ -1464,6 +1558,8 @@ void QWindow::setGeometry(int posx, int posy, int w, int h)
 
 /*!
     \brief Sets the geometry of the window, excluding its window frame, to \a rect.
+
+    The geometry is in relation to the virtualGeometry() of its screen.
 
     \sa geometry()
 */
@@ -1526,6 +1622,8 @@ QScreen *QWindowPrivate::screenForGeometry(const QRect &newGeometry)
 /*!
     Returns the geometry of the window, excluding its window frame.
 
+    The geometry is in relation to the virtualGeometry() of its screen.
+
     \sa frameMargins(), frameGeometry()
 */
 QRect QWindow::geometry() const
@@ -1551,6 +1649,8 @@ QMargins QWindow::frameMargins() const
 
 /*!
     Returns the geometry of the window, including its window frame.
+
+    The geometry is in relation to the virtualGeometry() of its screen.
 
     \sa geometry(), frameMargins()
 */
@@ -1584,6 +1684,8 @@ QPoint QWindow::framePosition() const
 /*!
     Sets the upper left position of the window (\a point) including its window frame.
 
+    The position is in relation to the virtualGeometry() of its screen.
+
     \sa setGeometry(), frameGeometry()
 */
 void QWindow::setFramePosition(const QPoint &point)
@@ -1601,6 +1703,8 @@ void QWindow::setFramePosition(const QPoint &point)
 /*!
     \brief set the position of the window on the desktop to \a pt
 
+    The position is in relation to the virtualGeometry() of its screen.
+
     \sa position()
 */
 void QWindow::setPosition(const QPoint &pt)
@@ -1610,6 +1714,8 @@ void QWindow::setPosition(const QPoint &pt)
 
 /*!
     \brief set the position of the window on the desktop to \a posx, \a posy
+
+    The position is in relation to the virtualGeometry() of its screen.
 
     \sa position()
 */
@@ -1674,42 +1780,63 @@ void QWindow::destroy()
     if (!d->platformWindow)
         return;
 
-    QObjectList childrenWindows = children();
+    if (d->platformWindow->isForeignWindow())
+        return;
+
+    d->destroy();
+}
+
+void QWindowPrivate::destroy()
+{
+    if (!platformWindow)
+        return;
+
+    Q_Q(QWindow);
+    QObjectList childrenWindows = q->children();
     for (int i = 0; i < childrenWindows.size(); i++) {
         QObject *object = childrenWindows.at(i);
         if (object->isWindowType()) {
             QWindow *w = static_cast<QWindow*>(object);
-            w->destroy();
+            qt_window_private(w)->destroy();
         }
     }
 
-    if (QGuiApplicationPrivate::focus_window == this)
-        QGuiApplicationPrivate::focus_window = parent();
-    if (QGuiApplicationPrivate::currentMouseWindow == this)
-        QGuiApplicationPrivate::currentMouseWindow = parent();
-    if (QGuiApplicationPrivate::currentMousePressWindow == this)
-        QGuiApplicationPrivate::currentMousePressWindow = parent();
+    if (QGuiApplicationPrivate::focus_window == q)
+        QGuiApplicationPrivate::focus_window = q->parent();
+    if (QGuiApplicationPrivate::currentMouseWindow == q)
+        QGuiApplicationPrivate::currentMouseWindow = q->parent();
+    if (QGuiApplicationPrivate::currentMousePressWindow == q)
+        QGuiApplicationPrivate::currentMousePressWindow = q->parent();
 
     for (int i = 0; i < QGuiApplicationPrivate::tabletDevicePoints.size(); ++i)
-        if (QGuiApplicationPrivate::tabletDevicePoints.at(i).target == this)
-            QGuiApplicationPrivate::tabletDevicePoints[i].target = parent();
+        if (QGuiApplicationPrivate::tabletDevicePoints.at(i).target == q)
+            QGuiApplicationPrivate::tabletDevicePoints[i].target = q->parent();
 
-    bool wasVisible = isVisible();
-    d->visibilityOnDestroy = wasVisible && d->platformWindow;
+    bool wasVisible = q->isVisible();
+    visibilityOnDestroy = wasVisible && platformWindow;
 
-    setVisible(false);
+    q->setVisible(false);
+
+    // Let subclasses act, typically by doing graphics resource cleaup, when
+    // the window, to which graphics resource may be tied, is going away.
+    //
+    // NB! This is disfunctional when destroy() is invoked from the dtor since
+    // a reimplemented event() will not get called in the subclasses at that
+    // stage. However, the typical QWindow cleanup involves either close() or
+    // going through QWindowContainer, both of which will do an explicit, early
+    // destroy(), which is good here.
 
     QPlatformSurfaceEvent e(QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed);
-    QGuiApplication::sendEvent(this, &e);
+    QGuiApplication::sendEvent(q, &e);
 
-    delete d->platformWindow;
-    d->resizeEventPending = true;
-    d->receivedExpose = false;
-    d->exposed = false;
-    d->platformWindow = 0;
+    delete platformWindow;
+    resizeEventPending = true;
+    receivedExpose = false;
+    exposed = false;
+    platformWindow = 0;
 
     if (wasVisible)
-        d->maybeQuitOnLastWindowClosed();
+        maybeQuitOnLastWindowClosed();
 }
 
 /*!
@@ -1787,8 +1914,9 @@ QScreen *QWindow::screen() const
 
     If the window has been created, it will be recreated on the \a newScreen.
 
-    Note that if the screen is part of a virtual desktop of multiple screens,
-    the window can appear on any of the screens returned by QScreen::virtualSiblings().
+    \note If the screen is part of a virtual desktop of multiple screens,
+    the window will not move automatically to \a newScreen. To place the
+    window relative to the screen, use the screen's topLeft() position.
 
     This function only works for top level windows.
 
@@ -2351,7 +2479,7 @@ QPoint QWindow::mapToGlobal(const QPoint &pos) const
     Q_D(const QWindow);
     // QTBUG-43252, prefer platform implementation for foreign windows.
     if (d->platformWindow
-        && (type() == Qt::ForeignWindow || d->platformWindow->isEmbedded())) {
+        && (d->platformWindow->isForeignWindow() || d->platformWindow->isEmbedded())) {
         return QHighDpi::fromNativeLocalPosition(d->platformWindow->mapToGlobal(QHighDpi::toNativeLocalPosition(pos, this)), this);
     }
     return pos + d->globalPosition();
@@ -2371,12 +2499,28 @@ QPoint QWindow::mapFromGlobal(const QPoint &pos) const
     Q_D(const QWindow);
     // QTBUG-43252, prefer platform implementation for foreign windows.
     if (d->platformWindow
-        && (type() == Qt::ForeignWindow || d->platformWindow->isEmbedded())) {
+        && (d->platformWindow->isForeignWindow() || d->platformWindow->isEmbedded())) {
         return QHighDpi::fromNativeLocalPosition(d->platformWindow->mapFromGlobal(QHighDpi::toNativeLocalPosition(pos, this)), this);
     }
     return pos - d->globalPosition();
 }
 
+QPoint QWindowPrivate::globalPosition() const
+{
+    Q_Q(const QWindow);
+    QPoint offset = q->position();
+    for (const QWindow *p = q->parent(); p; p = p->parent()) {
+        QPlatformWindow *pw = p->handle();
+        if (pw && pw->isForeignWindow()) {
+            // Use mapToGlobal() for foreign windows
+            offset += p->mapToGlobal(QPoint(0, 0));
+            break;
+        } else {
+            offset += p->position();
+        }
+    }
+    return offset;
+}
 
 Q_GUI_EXPORT QWindowPrivate *qt_window_private(QWindow *window)
 {
@@ -2416,10 +2560,7 @@ QWindow *QWindowPrivate::topLevelWindow() const
     QWindow *window = const_cast<QWindow *>(q);
 
     while (window) {
-        QWindow *parent = window->parent();
-        if (!parent)
-            parent = window->transientParent();
-
+        QWindow *parent = window->parent(QWindow::IncludeTransients);
         if (!parent)
             break;
 
@@ -2459,13 +2600,13 @@ QWindow *QWindow::fromWinId(WId id)
     }
 
     QWindow *window = new QWindow;
-    window->setFlags(Qt::ForeignWindow);
-    window->setProperty("_q_foreignWinId", QVariant::fromValue(id));
-    window->create();
+    qt_window_private(window)->create(false, id);
+
     if (!window->handle()) {
         delete window;
         return nullptr;
     }
+
     return window;
 }
 
@@ -2559,26 +2700,29 @@ void QWindowPrivate::setCursor(const QCursor *newCursor)
         cursor = QCursor(Qt::ArrowCursor);
         hasCursor = false;
     }
-    // Only attempt to set cursor and emit signal if there is an actual platform cursor
-    QScreen* screen = q->screen();
-    if (screen && screen->handle()->cursor()) {
-        applyCursor();
+    // Only attempt to emit signal if there is an actual platform cursor
+    if (applyCursor()) {
         QEvent event(QEvent::CursorChange);
         QGuiApplication::sendEvent(q, &event);
     }
 }
 
-void QWindowPrivate::applyCursor()
+// Apply the cursor and returns true iff the platform cursor exists
+bool QWindowPrivate::applyCursor()
 {
     Q_Q(QWindow);
-    if (platformWindow) {
-        if (QPlatformCursor *platformCursor = q->screen()->handle()->cursor()) {
+    if (QScreen *screen = q->screen()) {
+        if (QPlatformCursor *platformCursor = screen->handle()->cursor()) {
+            if (!platformWindow)
+                return true;
             QCursor *c = QGuiApplication::overrideCursor();
             if (!c && hasCursor)
                 c = &cursor;
             platformCursor->changeCursor(c, q);
+            return true;
         }
     }
+    return false;
 }
 #endif // QT_NO_CURSOR
 

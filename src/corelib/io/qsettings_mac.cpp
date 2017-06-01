@@ -211,7 +211,7 @@ static QCFType<CFPropertyListRef> macValue(const QVariant &value)
     default:
         QString string = QSettingsPrivate::variantToString(value);
         if (string.contains(QChar::Null))
-            result = string.toUtf8().toCFData();
+            result = std::move(string).toUtf8().toCFData();
         else
             result = string.toCFString();
     }
@@ -269,8 +269,10 @@ static QVariant qtValue(CFPropertyListRef cfvalue)
 
         // Fast-path for QByteArray, so that we don't have to go
         // though the expensive and lossy conversion via UTF-8.
-        if (!byteArray.startsWith('@'))
+        if (!byteArray.startsWith('@')) {
+            byteArray.detach();
             return byteArray;
+        }
 
         const QString str = QString::fromUtf8(byteArray.constData(), byteArray.size());
         return QSettingsPrivate::stringToVariant(str);
@@ -417,25 +419,19 @@ QMacSettingsPrivate::QMacSettingsPrivate(QSettings::Scope scope, const QString &
         curPos = nextDot + 1;
     }
     javaPackageName.prepend(domainName.midRef(curPos));
-    javaPackageName = javaPackageName.toLower();
+    javaPackageName = std::move(javaPackageName).toLower();
     if (curPos == 0)
         javaPackageName.prepend(QLatin1String("com."));
     suiteId = javaPackageName;
 
-    if (scope == QSettings::SystemScope)
-        spec |= F_System;
-
-    if (application.isEmpty()) {
-        spec |= F_Organization;
-    } else {
-        javaPackageName += QLatin1Char('.');
-        javaPackageName += application;
+    if (!application.isEmpty()) {
+        javaPackageName += QLatin1Char('.') + application;
         applicationId = javaPackageName;
     }
 
     numDomains = 0;
-    for (int i = (spec & F_System) ? 1 : 0; i < 2; ++i) {
-        for (int j = (spec & F_Organization) ? 1 : 0; j < 3; ++j) {
+    for (int i = (scope == QSettings::SystemScope) ? 1 : 0; i < 2; ++i) {
+        for (int j = (application.isEmpty()) ? 1 : 0; j < 3; ++j) {
             SearchDomain &domain = domains[numDomains++];
             domain.userName = (i == 0) ? kCFPreferencesCurrentUser : kCFPreferencesAnyUser;
             if (j == 0)
@@ -576,7 +572,7 @@ bool QMacSettingsPrivate::isWritable() const
 QString QMacSettingsPrivate::fileName() const
 {
     QString result;
-    if ((spec & F_System) == 0)
+    if (scope == QSettings::UserScope)
         result = QDir::homePath();
     result += QLatin1String("/Library/Preferences/");
     result += QString::fromCFString(domains[0].applicationOrSuiteId);

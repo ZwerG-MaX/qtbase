@@ -153,6 +153,41 @@ void tst_QCoreApplication::qAppName()
     QCOMPARE(QCoreApplication::applicationName(), QString());
 }
 
+void tst_QCoreApplication::qAppVersion()
+{
+#if defined(Q_OS_WIN)
+    const char appVersion[] = "1.2.3.4";
+#elif defined(Q_OS_DARWIN) || defined(Q_OS_ANDROID)
+    const char appVersion[] = "1.2.3";
+#else
+    const char appVersion[] = "";
+#endif
+
+    {
+        int argc = 0;
+        char *argv[] = { nullptr };
+        TestApplication app(argc, argv);
+        QCOMPARE(QCoreApplication::applicationVersion(), QString::fromLatin1(appVersion));
+    }
+    // The application version should still be available after destruction
+    QCOMPARE(QCoreApplication::applicationVersion(), QString::fromLatin1(appVersion));
+
+    // Setting the appversion before creating the application should work
+    const QString wantedAppVersion("0.0.1");
+    {
+        int argc = 0;
+        char *argv[] = { nullptr };
+        QCoreApplication::setApplicationVersion(wantedAppVersion);
+        TestApplication app(argc, argv);
+        QCOMPARE(QCoreApplication::applicationVersion(), wantedAppVersion);
+    }
+    QCOMPARE(QCoreApplication::applicationVersion(), wantedAppVersion);
+
+    // Restore to initial value
+    QCoreApplication::setApplicationVersion(QString());
+    QCOMPARE(QCoreApplication::applicationVersion(), QString());
+}
+
 void tst_QCoreApplication::argc()
 {
 #if defined(Q_OS_WINRT)
@@ -893,7 +928,7 @@ void tst_QCoreApplication::threadedEventDelivery()
     QCOMPARE(receiver.recordedEvents.contains(QEvent::User + 1), eventsReceived);
 }
 
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
 void tst_QCoreApplication::addRemoveLibPaths()
 {
     QStringList paths = QCoreApplication::libraryPaths();

@@ -2479,7 +2479,10 @@ void QHeaderView::mouseMoveEvent(QMouseEvent *e)
             if (d->shouldAutoScroll(e->pos()))
                 d->startAutoScroll();
             if (qAbs(pos - d->firstPos) >= QApplication::startDragDistance()
-                || !d->sectionIndicator->isHidden()) {
+#if QT_CONFIG(label)
+                || !d->sectionIndicator->isHidden()
+#endif
+                ) {
                 int visual = visualIndexAt(pos);
                 if (visual == -1)
                     return;
@@ -2548,7 +2551,11 @@ void QHeaderView::mouseReleaseEvent(QMouseEvent *e)
     int pos = d->orientation == Qt::Horizontal ? e->x() : e->y();
     switch (d->state) {
     case QHeaderViewPrivate::MoveSection:
-        if (!d->sectionIndicator->isHidden()) { // moving
+        if (true
+#if QT_CONFIG(label)
+            && !d->sectionIndicator->isHidden()
+#endif
+      ) { // moving
             int from = visualIndex(d->section);
             Q_ASSERT(from != -1);
             int to = visualIndex(d->target);
@@ -2558,6 +2565,7 @@ void QHeaderView::mouseReleaseEvent(QMouseEvent *e)
             d->updateSectionIndicator(d->section, pos);
             break;
         } // not moving
+        Q_FALLTHROUGH();
     case QHeaderViewPrivate::SelectSections:
         if (!d->clickableSections) {
             int section = logicalIndexAt(pos);
@@ -3138,9 +3146,11 @@ int QHeaderViewPrivate::sectionHandleAt(int position)
 void QHeaderViewPrivate::setupSectionIndicator(int section, int position)
 {
     Q_Q(QHeaderView);
+#if QT_CONFIG(label)
     if (!sectionIndicator) {
         sectionIndicator = new QLabel(viewport);
     }
+#endif
 
     int w, h;
     int p = q->sectionViewportPosition(section);
@@ -3151,7 +3161,9 @@ void QHeaderViewPrivate::setupSectionIndicator(int section, int position)
         w = viewport->width();
         h = q->sectionSize(section);
     }
+#if QT_CONFIG(label)
     sectionIndicator->resize(w, h);
+#endif
 
     QPixmap pm(w, h);
     pm.fill(QColor(0, 0, 0, 45));
@@ -3162,12 +3174,15 @@ void QHeaderViewPrivate::setupSectionIndicator(int section, int position)
     q->paintSection(&painter, rect, section);
     painter.end();
 
+#if QT_CONFIG(label)
     sectionIndicator->setPixmap(pm);
+#endif
     sectionIndicatorOffset = position - qMax(p, 0);
 }
 
 void QHeaderViewPrivate::updateSectionIndicator(int section, int position)
 {
+#if QT_CONFIG(label)
     if (!sectionIndicator)
         return;
 
@@ -3182,6 +3197,7 @@ void QHeaderViewPrivate::updateSectionIndicator(int section, int position)
         sectionIndicator->move(0, position - sectionIndicatorOffset);
 
     sectionIndicator->show();
+#endif
 }
 
 /*!
@@ -3856,6 +3872,22 @@ bool QHeaderViewPrivate::read(QDataStream &in)
         sectionItemsLengthTotal += section.size;
     if (sectionItemsLengthTotal != lengthIn)
         return false;
+
+    const int currentCount = (orient == Qt::Horizontal ? model->columnCount(root) : model->rowCount(root));
+    if (newSectionItems.count() < currentCount) {
+        // we have sections not in the saved state, give them default settings
+        if (!visualIndicesIn.isEmpty() && !logicalIndicesIn.isEmpty()) {
+            for (int i = newSectionItems.count(); i < currentCount; ++i) {
+                visualIndicesIn.append(i);
+                logicalIndicesIn.append(i);
+            }
+        }
+        const int insertCount = currentCount - newSectionItems.count();
+        const int insertLength = defaultSectionSizeIn * insertCount;
+        lengthIn += insertLength;
+        SectionItem section(defaultSectionSizeIn, globalResizeMode);
+        newSectionItems.insert(newSectionItems.count(), insertCount, section); // append
+    }
 
     orientation = static_cast<Qt::Orientation>(orient);
     sortIndicatorOrder = static_cast<Qt::SortOrder>(order);

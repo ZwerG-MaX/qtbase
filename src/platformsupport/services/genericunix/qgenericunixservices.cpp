@@ -40,10 +40,14 @@
 #include "qgenericunixservices_p.h"
 #include <QtGui/private/qtguiglobal_p.h>
 
-#include <QtCore/QStandardPaths>
-#include <QtCore/QProcess>
-#include <QtCore/QUrl>
 #include <QtCore/QDebug>
+#include <QtCore/QFile>
+#if QT_CONFIG(process)
+# include <QtCore/QProcess>
+#endif
+#include <QtCore/QSettings>
+#include <QtCore/QStandardPaths>
+#include <QtCore/QUrl>
 
 #include <stdlib.h>
 
@@ -66,11 +70,29 @@ static inline QByteArray detectDesktopEnvironment()
         return QByteArrayLiteral("GNOME");
 
     // Fallback to checking $DESKTOP_SESSION (unreliable)
-    const QByteArray desktopSession = qgetenv("DESKTOP_SESSION");
+    QByteArray desktopSession = qgetenv("DESKTOP_SESSION");
+
+    // This can be a path in /usr/share/xsessions
+    int slash = desktopSession.lastIndexOf('/');
+    if (slash != -1) {
+#ifndef QT_NO_SETTINGS
+        QSettings desktopFile(QFile::decodeName(desktopSession + ".desktop"), QSettings::IniFormat);
+        desktopFile.beginGroup(QStringLiteral("Desktop Entry"));
+        QByteArray desktopName = desktopFile.value(QStringLiteral("DesktopNames")).toByteArray();
+        if (!desktopName.isEmpty())
+            return desktopName;
+#endif
+
+        // try decoding just the basename
+        desktopSession = desktopSession.mid(slash + 1);
+    }
+
     if (desktopSession == "gnome")
         return QByteArrayLiteral("GNOME");
-    if (desktopSession == "xfce")
+    else if (desktopSession == "xfce")
         return QByteArrayLiteral("XFCE");
+    else if (desktopSession == "kde")
+        return QByteArrayLiteral("KDE");
 
     return QByteArrayLiteral("UNKNOWN");
 }
@@ -121,7 +143,7 @@ static inline bool launch(const QString &launcher, const QUrl &url)
     const QString command = launcher + QLatin1Char(' ') + QLatin1String(url.toEncoded());
     if (debug)
         qDebug("Launching %s", qPrintable(command));
-#if defined(QT_NO_PROCESS)
+#if !QT_CONFIG(process)
     const bool ok = ::system(qPrintable(command + QLatin1String(" &")));
 #else
     const bool ok = QProcess::startDetached(command);
@@ -166,12 +188,14 @@ QByteArray QGenericUnixServices::desktopEnvironment() const
 
 bool QGenericUnixServices::openUrl(const QUrl &url)
 {
+    Q_UNUSED(url)
     qWarning("openUrl() not supported on this platform");
     return false;
 }
 
 bool QGenericUnixServices::openDocument(const QUrl &url)
 {
+    Q_UNUSED(url)
     qWarning("openDocument() not supported on this platform");
     return false;
 }

@@ -38,9 +38,12 @@
 ****************************************************************************/
 
 #include "qcollator_p.h"
+#include "qlocale_p.h"
 #include "qstringlist.h"
 #include "qstring.h"
+
 #include <QtCore/private/qcore_mac_p.h>
+
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFLocale.h>
 
@@ -53,7 +56,7 @@ void QCollatorPrivate::init()
 {
     cleanup();
     LocaleRef localeRef;
-    int rc = LocaleRefFromLocaleString(locale.bcp47Name().toLocal8Bit(), &localeRef);
+    int rc = LocaleRefFromLocaleString(QLocalePrivate::get(locale)->bcp47Name().constData(), &localeRef);
     if (rc != 0)
         qWarning("couldn't initialize the locale");
 
@@ -128,7 +131,7 @@ QCollatorSortKey QCollator::sortKey(const QString &string) const
                           ret.size(), &actualSize, ret.data());
     }
     ret[actualSize] = 0;
-    return QCollatorSortKey(new QCollatorSortKeyPrivate(ret));
+    return QCollatorSortKey(new QCollatorSortKeyPrivate(std::move(ret)));
 }
 
 int QCollatorSortKey::compare(const QCollatorSortKey &key) const

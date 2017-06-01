@@ -76,7 +76,7 @@ void QSystemTrayIconPrivate::remove_sys()
 QRect QSystemTrayIconPrivate::geometry_sys() const
 {
     if (qpa_sys)
-        return geometry_sys_qpa();
+        return qpa_sys->geometry();
     else
         return QRect();
 }
@@ -84,19 +84,23 @@ QRect QSystemTrayIconPrivate::geometry_sys() const
 void QSystemTrayIconPrivate::updateIcon_sys()
 {
     if (qpa_sys)
-        updateIcon_sys_qpa();
+        qpa_sys->updateIcon(icon);
 }
 
 void QSystemTrayIconPrivate::updateMenu_sys()
 {
-    if (qpa_sys)
-        updateMenu_sys_qpa();
+#if QT_CONFIG(menu)
+    if (qpa_sys && menu) {
+        addPlatformMenu(menu);
+        qpa_sys->updateMenu(menu->platformMenu());
+    }
+#endif
 }
 
 void QSystemTrayIconPrivate::updateToolTip_sys()
 {
     if (qpa_sys)
-        updateToolTip_sys_qpa();
+        qpa_sys->updateToolTip(toolTip);
 }
 
 bool QSystemTrayIconPrivate::isSystemTrayAvailable_sys()
@@ -118,10 +122,11 @@ bool QSystemTrayIconPrivate::supportsMessages_sys()
 }
 
 void QSystemTrayIconPrivate::showMessage_sys(const QString &title, const QString &message,
-                                             QSystemTrayIcon::MessageIcon icon, int msecs)
+                                             const QIcon &icon, QSystemTrayIcon::MessageIcon msgIcon, int msecs)
 {
     if (qpa_sys)
-        showMessage_sys_qpa(title, message, icon, msecs);
+        qpa_sys->showMessage(title, message, icon,
+                        static_cast<QPlatformSystemTrayIcon::MessageIcon>(msgIcon), msecs);
 }
 
 QT_END_NAMESPACE

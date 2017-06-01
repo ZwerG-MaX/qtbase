@@ -55,7 +55,7 @@
 #include <QtCore/private/qglobal_p.h>
 #include "qcollator.h"
 #include <QVector>
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
 #include <unicode/ucol.h>
 #elif defined(Q_OS_OSX)
 #include <CoreServices/CoreServices.h>
@@ -65,7 +65,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
 typedef UCollator *CollatorType;
 typedef QByteArray CollatorKeyType;
 
@@ -85,12 +85,12 @@ typedef QVector<wchar_t> CollatorKeyType;
 typedef int CollatorType;
 #endif
 
-class Q_CORE_EXPORT QCollatorPrivate
+class QCollatorPrivate
 {
 public:
     QAtomicInt ref;
     QLocale locale;
-#if defined(Q_OS_WIN) && !defined(QT_USE_ICU)
+#if defined(Q_OS_WIN) && !QT_CONFIG(icu)
 #ifdef USE_COMPARESTRINGEX
     QString localeName;
 #else
@@ -127,13 +127,14 @@ private:
     Q_DISABLE_COPY(QCollatorPrivate)
 };
 
-class Q_CORE_EXPORT QCollatorSortKeyPrivate : public QSharedData
+class QCollatorSortKeyPrivate : public QSharedData
 {
     friend class QCollator;
 public:
-    QCollatorSortKeyPrivate(const CollatorKeyType &key)
+    template <typename...T>
+    explicit QCollatorSortKeyPrivate(T &&...args)
         : QSharedData()
-        , m_key(key)
+        , m_key(std::forward<T>(args)...)
     {
     }
 

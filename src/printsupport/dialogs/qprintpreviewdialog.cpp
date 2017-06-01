@@ -40,13 +40,11 @@
 #include "qprintpreviewdialog.h"
 #include "qprintpreviewwidget.h"
 #include <private/qprinter_p.h>
-#include "private/qdialog_p.h"
 #include "qprintdialog.h"
 
 #include <QtWidgets/qaction.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qcombobox.h>
-#include <QtWidgets/qlabel.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtPrintSupport/qpagesetupdialog.h>
 #include <QtPrintSupport/qprinter.h>
@@ -56,10 +54,14 @@
 #include <QtWidgets/qfiledialog.h>
 #include <QtWidgets/qmainwindow.h>
 #include <QtWidgets/qtoolbar.h>
-#include <QtWidgets/qformlayout.h>
 #include <QtCore/QCoreApplication>
 
 #ifndef QT_NO_PRINTPREVIEWDIALOG
+
+#include "private/qdialog_p.h"
+
+#include <QtWidgets/qformlayout.h>
+#include <QtWidgets/qlabel.h>
 
 static void initResources()
 {

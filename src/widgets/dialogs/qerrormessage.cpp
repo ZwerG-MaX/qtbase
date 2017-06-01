@@ -62,6 +62,13 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace {
+struct Message {
+    QString content;
+    QString type;
+};
+}
+
 class QErrorMessagePrivate : public QDialogPrivate
 {
     Q_DECLARE_PUBLIC(QErrorMessage)
@@ -70,7 +77,7 @@ public:
     QCheckBox * again;
     QTextEdit * errors;
     QLabel * icon;
-    std::queue<QPair<QString, QString> > pending;
+    std::queue<Message> pending;
     QSet<QString> doNotShow;
     QSet<QString> doNotShowType;
     QString currentMessage;
@@ -154,26 +161,35 @@ static void deleteStaticcQErrorMessage() // post-routine
 
 static bool metFatal = false;
 
+static QString msgType2i18nString(QtMsgType t)
+{
+    Q_STATIC_ASSERT(QtDebugMsg == 0);
+    Q_STATIC_ASSERT(QtWarningMsg == 1);
+    Q_STATIC_ASSERT(QtCriticalMsg == 2);
+    Q_STATIC_ASSERT(QtFatalMsg == 3);
+    Q_STATIC_ASSERT(QtInfoMsg == 4);
+
+    // adjust the array below if any of the above fire...
+
+    const char * const messages[] = {
+        QT_TRANSLATE_NOOP("QErrorMessage", "Debug Message:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Warning:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Critical Error:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Fatal Error:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Information:"),
+    };
+    Q_ASSERT(size_t(t) < sizeof messages / sizeof *messages);
+
+    return QCoreApplication::translate("QErrorMessage", messages[t]);
+}
+
 static void jump(QtMsgType t, const QMessageLogContext & /*context*/, const QString &m)
 {
     if (!qtMessageHandler)
         return;
 
-    QString rich;
-
-    switch (t) {
-    case QtDebugMsg:
-    default:
-        rich = QErrorMessage::tr("Debug Message:");
-        break;
-    case QtWarningMsg:
-        rich = QErrorMessage::tr("Warning:");
-        break;
-    case QtFatalMsg:
-        rich = QErrorMessage::tr("Fatal Error:");
-    }
-    rich = QString::fromLatin1("<p><b>%1</b></p>").arg(rich);
-    rich += Qt::convertFromPlainText(m, Qt::WhiteSpaceNormal);
+    QString rich = QLatin1String("<p><b>") + msgType2i18nString(t) + QLatin1String("</b></p>")
+                   + Qt::convertFromPlainText(m, Qt::WhiteSpaceNormal);
 
     // ### work around text engine quirk
     if (rich.endsWith(QLatin1String("</p>")))
@@ -297,9 +313,8 @@ bool QErrorMessagePrivate::isMessageToBeShown(const QString &message, const QStr
 bool QErrorMessagePrivate::nextPending()
 {
     while (!pending.empty()) {
-        QPair<QString,QString> &pendingMessage = pending.front();
-        QString message = qMove(pendingMessage.first);
-        QString type = qMove(pendingMessage.second);
+        QString message = std::move(pending.front().content);
+        QString type = std::move(pending.front().type);
         pending.pop();
         if (isMessageToBeShown(message, type)) {
 #ifndef QT_NO_TEXTHTMLPARSER
@@ -349,7 +364,7 @@ void QErrorMessage::showMessage(const QString &message, const QString &type)
     Q_D(QErrorMessage);
     if (!d->isMessageToBeShown(message, type))
         return;
-    d->pending.push(qMakePair(message, type));
+    d->pending.push({message, type});
     if (!isVisible() && d->nextPending())
         show();
 }

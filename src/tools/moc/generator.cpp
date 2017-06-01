@@ -515,7 +515,7 @@ void Generator::generateCode()
         for (int i = 0; i < extraList.count(); ++i) {
             fprintf(out, "    &%s::staticMetaObject,\n", extraList.at(i).constData());
         }
-        fprintf(out, "    Q_NULLPTR\n};\n\n");
+        fprintf(out, "    nullptr\n};\n\n");
     }
 
 //
@@ -527,24 +527,24 @@ void Generator::generateCode()
         fprintf(out, "const QMetaObject %s::staticMetaObject = {\n", cdef->qualified.constData());
 
     if (isQObject)
-        fprintf(out, "    { Q_NULLPTR, ");
+        fprintf(out, "    { nullptr, ");
     else if (cdef->superclassList.size() && (!cdef->hasQGadget || knownGadgets.contains(purestSuperClass)))
         fprintf(out, "    { &%s::staticMetaObject, ", purestSuperClass.constData());
     else
-        fprintf(out, "    { Q_NULLPTR, ");
+        fprintf(out, "    { nullptr, ");
     fprintf(out, "qt_meta_stringdata_%s.data,\n"
             "      qt_meta_data_%s, ", qualifiedClassNameIdentifier.constData(),
             qualifiedClassNameIdentifier.constData());
     if (hasStaticMetaCall)
         fprintf(out, " qt_static_metacall, ");
     else
-        fprintf(out, " Q_NULLPTR, ");
+        fprintf(out, " nullptr, ");
 
     if (extraList.isEmpty())
-        fprintf(out, "Q_NULLPTR, ");
+        fprintf(out, "nullptr, ");
     else
         fprintf(out, "qt_meta_extradata_%s, ", qualifiedClassNameIdentifier.constData());
-    fprintf(out, "Q_NULLPTR}\n};\n\n");
+    fprintf(out, "nullptr}\n};\n\n");
 
     if(isQt)
         return;
@@ -559,7 +559,7 @@ void Generator::generateCode()
 // Generate smart cast function
 //
     fprintf(out, "\nvoid *%s::qt_metacast(const char *_clname)\n{\n", cdef->qualified.constData());
-    fprintf(out, "    if (!_clname) return Q_NULLPTR;\n");
+    fprintf(out, "    if (!_clname) return nullptr;\n");
     fprintf(out, "    if (!strcmp(_clname, qt_meta_stringdata_%s.stringdata0))\n"
                   "        return static_cast<void*>(const_cast< %s*>(this));\n",
             qualifiedClassNameIdentifier.constData(), cdef->classname.constData());
@@ -584,7 +584,7 @@ void Generator::generateCode()
         QByteArray superClass = purestSuperClass;
         fprintf(out, "    return %s::qt_metacast(_clname);\n", superClass.constData());
     } else {
-        fprintf(out, "    return Q_NULLPTR;\n");
+        fprintf(out, "    return nullptr;\n");
     }
     fprintf(out, "}\n");
 
@@ -918,14 +918,21 @@ void Generator::generateMetacall()
         fprintf(out, "    _id = %s::qt_metacall(_c, _id, _a);\n", superClass.constData());
     }
 
-    fprintf(out, "    if (_id < 0)\n        return _id;\n");
-    fprintf(out, "    ");
 
     bool needElse = false;
     QVector<FunctionDef> methodList;
     methodList += cdef->signalList;
     methodList += cdef->slotList;
     methodList += cdef->methodList;
+
+    // If there are no methods or properties, we will return _id anyway, so
+    // don't emit this comparison -- it is unnecessary, and it makes coverity
+    // unhappy.
+    if (methodList.size() || cdef->propertyList.size()) {
+        fprintf(out, "    if (_id < 0)\n        return _id;\n");
+    }
+
+    fprintf(out, "    ");
 
     if (methodList.size()) {
         needElse = true;
@@ -1067,7 +1074,7 @@ void Generator::generateMetacall()
 
         fprintf(out, "\n#endif // QT_NO_PROPERTIES");
     }
-    if (methodList.size() || cdef->signalList.size() || cdef->propertyList.size())
+    if (methodList.size() || cdef->propertyList.size())
         fprintf(out, "\n    ");
     fprintf(out,"return _id;\n}\n");
 }
@@ -1186,7 +1193,7 @@ void Generator::generateStaticMetacall()
             }
             fprintf(out, ");");
             if (f.normalizedType != "void") {
-                fprintf(out, "\n            if (_a[0]) *reinterpret_cast< %s*>(_a[0]) = _r; } ",
+                fprintf(out, "\n            if (_a[0]) *reinterpret_cast< %s*>(_a[0]) = std::move(_r); } ",
                         noRef(f.normalizedType).constData());
                 isUsed_a = true;
             }
@@ -1476,12 +1483,9 @@ void Generator::generateSignal(FunctionDef *def,int index)
     }
 
     Q_ASSERT(!def->normalizedType.isEmpty());
-    if (def->arguments.isEmpty() && def->normalizedType == "void") {
-        if (def->isPrivateSignal)
-            fprintf(out, "QPrivateSignal");
-
+    if (def->arguments.isEmpty() && def->normalizedType == "void" && !def->isPrivateSignal) {
         fprintf(out, ")%s\n{\n"
-                "    QMetaObject::activate(%s, &staticMetaObject, %d, Q_NULLPTR);\n"
+                "    QMetaObject::activate(%s, &staticMetaObject, %d, nullptr);\n"
                 "}\n", constQualifier, thisPtr.constData(), index);
         return;
     }
@@ -1496,22 +1500,18 @@ void Generator::generateSignal(FunctionDef *def,int index)
     if (def->isPrivateSignal) {
         if (!def->arguments.isEmpty())
             fprintf(out, ", ");
-        fprintf(out, "QPrivateSignal");
+        fprintf(out, "QPrivateSignal _t%d", offset++);
     }
 
     fprintf(out, ")%s\n{\n", constQualifier);
     if (def->type.name.size() && def->normalizedType != "void") {
         QByteArray returnType = noRef(def->normalizedType);
-        if (returnType.endsWith('*')) {
-            fprintf(out, "    %s _t0 = 0;\n", returnType.constData());
-        } else {
-            fprintf(out, "    %s _t0 = %s();\n", returnType.constData(), returnType.constData());
-        }
+        fprintf(out, "    %s _t0{};\n", returnType.constData());
     }
 
     fprintf(out, "    void *_a[] = { ");
     if (def->normalizedType == "void") {
-        fprintf(out, "Q_NULLPTR");
+        fprintf(out, "nullptr");
     } else {
         if (def->returnTypeIsVolatile)
              fprintf(out, "const_cast<void*>(reinterpret_cast<const volatile void*>(&_t0))");
@@ -1520,7 +1520,7 @@ void Generator::generateSignal(FunctionDef *def,int index)
     }
     int i;
     for (i = 1; i < offset; ++i)
-        if (def->arguments.at(i - 1).type.isVolatile)
+        if (i <= def->arguments.count() && def->arguments.at(i - 1).type.isVolatile)
             fprintf(out, ", const_cast<void*>(reinterpret_cast<const volatile void*>(&_t%d))", i);
         else
             fprintf(out, ", const_cast<void*>(reinterpret_cast<const void*>(&_t%d))", i);

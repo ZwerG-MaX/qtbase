@@ -79,7 +79,10 @@ private:
     QEglFSCursor *m_cursor;
 };
 
-class Q_EGLFS_EXPORT QEglFSCursor : public QPlatformCursor, protected QOpenGLFunctions
+#if QT_CONFIG(opengl)
+
+class Q_EGLFS_EXPORT QEglFSCursor : public QPlatformCursor
+                                  , protected QOpenGLFunctions
 {
     Q_OBJECT
 public:
@@ -87,11 +90,11 @@ public:
     ~QEglFSCursor();
 
 #ifndef QT_NO_CURSOR
-    void changeCursor(QCursor *cursor, QWindow *widget) Q_DECL_OVERRIDE;
+    void changeCursor(QCursor *cursor, QWindow *widget) override;
 #endif
-    void pointerEvent(const QMouseEvent &event) Q_DECL_OVERRIDE;
-    QPoint pos() const Q_DECL_OVERRIDE;
-    void setPos(const QPoint &pos) Q_DECL_OVERRIDE;
+    void pointerEvent(const QMouseEvent &event) override;
+    QPoint pos() const override;
+    void setPos(const QPoint &pos) override;
 
     QRect cursorRect() const;
     void paintOnScreen();
@@ -100,7 +103,7 @@ public:
     void updateMouseStatus();
 
 private:
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
 #ifndef QT_NO_CURSOR
     bool setCurrentCursor(QCursor *cursor);
 #endif
@@ -153,6 +156,7 @@ private:
     };
     QHash<QOpenGLContext *, GraphicsContextData> m_gfx;
 };
+#endif // QT_CONFIG(opengl)
 
 QT_END_NAMESPACE
 

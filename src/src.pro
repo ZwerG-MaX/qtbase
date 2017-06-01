@@ -21,6 +21,10 @@ src_tools_rcc.subdir = tools/rcc
 src_tools_rcc.target = sub-rcc
 src_tools_rcc.depends = src_tools_bootstrap
 
+src_tools_qfloat16_tables.subdir = tools/qfloat16-tables
+src_tools_qfloat16_tables.target = sub-qfloat16-tables
+src_tools_qfloat16_tables.depends = src_tools_bootstrap
+
 src_tools_qlalr.subdir = tools/qlalr
 src_tools_qlalr.target = sub-qlalr
 force_bootstrap: src_tools_qlalr.depends = src_tools_bootstrap
@@ -51,7 +55,7 @@ src_winmain.depends = sub-corelib  # just for the module .pri file
 
 src_corelib.subdir = $$PWD/corelib
 src_corelib.target = sub-corelib
-src_corelib.depends = src_tools_moc src_tools_rcc
+src_corelib.depends = src_tools_moc src_tools_rcc src_tools_qfloat16_tables
 
 src_xml.subdir = $$PWD/xml
 src_xml.target = sub-xml
@@ -78,8 +82,8 @@ src_testlib.subdir = $$PWD/testlib
 src_testlib.target = sub-testlib
 src_testlib.depends = src_corelib   # testlib links only to corelib, but see below for the headers
 
-src_3rdparty_pcre.subdir = $$PWD/3rdparty/pcre
-src_3rdparty_pcre.target = sub-3rdparty-pcre
+src_3rdparty_pcre2.subdir = $$PWD/3rdparty/pcre2
+src_3rdparty_pcre2.target = sub-3rdparty-pcre2
 
 src_3rdparty_harfbuzzng.subdir = $$PWD/3rdparty/harfbuzz-ng
 src_3rdparty_harfbuzzng.target = sub-3rdparty-harfbuzzng
@@ -90,6 +94,9 @@ src_3rdparty_libpng.target = sub-3rdparty-libpng
 
 src_3rdparty_freetype.subdir = $$PWD/3rdparty/freetype
 src_3rdparty_freetype.target = sub-3rdparty-freetype
+
+src_3rdparty_gradle.subdir = $$PWD/3rdparty/gradle
+src_3rdparty_gradle.target = sub-3rdparty-gradle
 
 src_angle.subdir = $$PWD/angle
 src_angle.target = sub-angle
@@ -124,7 +131,6 @@ src_printsupport.depends = src_corelib src_gui src_widgets src_tools_uic
 
 src_plugins.subdir = $$PWD/plugins
 src_plugins.target = sub-plugins
-src_plugins.depends = src_sql src_xml src_network
 
 src_android.subdir = $$PWD/android
 
@@ -136,15 +142,24 @@ src_android.subdir = $$PWD/android
         src_3rdparty_freetype.depends += src_corelib
     }
 }
-SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
-qtConfig(regularexpression):pcre {
-    SUBDIRS += src_3rdparty_pcre
-    src_corelib.depends += src_3rdparty_pcre
+SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc src_tools_qfloat16_tables
+qtConfig(regularexpression):pcre2 {
+    SUBDIRS += src_3rdparty_pcre2
+    src_corelib.depends += src_3rdparty_pcre2
 }
 SUBDIRS += src_corelib src_tools_qlalr
-TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
+TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr src_tools_qfloat16_tables
 win32:SUBDIRS += src_winmain
-SUBDIRS += src_network src_sql src_xml src_testlib
+qtConfig(network) {
+    SUBDIRS += src_network
+    src_plugins.depends += src_network
+}
+qtConfig(sql) {
+    SUBDIRS += src_sql
+    src_plugins.depends += src_sql
+}
+qtConfig(xml): SUBDIRS += src_xml
+qtConfig(testlib): SUBDIRS += src_testlib
 qtConfig(dbus) {
     force_dbus_bootstrap|qtConfig(private_tests): \
         SUBDIRS += src_tools_bootstrap_dbus
@@ -192,12 +207,12 @@ SUBDIRS += src_plugins
 
 nacl: SUBDIRS -= src_network src_testlib
 
-android: SUBDIRS += src_android
+android: SUBDIRS += src_android src_3rdparty_gradle
 
 TR_EXCLUDE = \
     src_tools_bootstrap src_tools_moc src_tools_rcc src_tools_uic src_tools_qlalr \
     src_tools_bootstrap_dbus src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml \
-    src_3rdparty_pcre src_3rdparty_harfbuzzng src_3rdparty_freetype
+    src_3rdparty_pcre2 src_3rdparty_harfbuzzng src_3rdparty_freetype
 
 sub-tools.depends = $$TOOLS
 QMAKE_EXTRA_TARGETS = sub-tools

@@ -28,6 +28,7 @@ SOURCES += \
            ../../corelib/global/qlogging.cpp \
            ../../corelib/global/qmalloc.cpp \
            ../../corelib/global/qnumeric.cpp \
+           ../../corelib/global/qoperatingsystemversion.cpp \
            ../../corelib/io/qabstractfileengine.cpp \
            ../../corelib/io/qbuffer.cpp \
            ../../corelib/io/qdatastream.cpp \
@@ -45,6 +46,7 @@ SOURCES += \
            ../../corelib/io/qresource.cpp \
            ../../corelib/io/qtemporaryfile.cpp \
            ../../corelib/io/qtextstream.cpp \
+           ../../corelib/io/qsavefile.cpp \
            ../../corelib/io/qstandardpaths.cpp \
            ../../corelib/io/qloggingcategory.cpp \
            ../../corelib/io/qloggingregistry.cpp \
@@ -78,7 +80,6 @@ SOURCES += \
            ../../corelib/tools/qstringbuilder.cpp \
            ../../corelib/tools/qstring_compat.cpp \
            ../../corelib/tools/qstringlist.cpp \
-           ../../corelib/tools/qvector.cpp \
            ../../corelib/tools/qvsnprintf.cpp \
            ../../corelib/xml/qxmlutils.cpp \
            ../../corelib/xml/qxmlstream.cpp \
@@ -96,7 +97,8 @@ unix:SOURCES += ../../corelib/io/qfilesystemengine_unix.cpp \
                 ../../corelib/io/qfilesystemiterator_unix.cpp \
                 ../../corelib/io/qfsfileengine_unix.cpp
 
-win32:SOURCES += ../../corelib/io/qfilesystemengine_win.cpp \
+win32:SOURCES += ../../corelib/global/qoperatingsystemversion_win.cpp \
+                 ../../corelib/io/qfilesystemengine_win.cpp \
                  ../../corelib/io/qfilesystemiterator_win.cpp \
                  ../../corelib/io/qfsfileengine_win.cpp \
                  ../../corelib/kernel/qcoreapplication_win.cpp \
@@ -107,6 +109,7 @@ mac {
         ../../corelib/kernel/qcoreapplication_mac.cpp \
         ../../corelib/kernel/qcore_mac.cpp
     OBJECTIVE_SOURCES += \
+        ../../corelib/global/qoperatingsystemversion_darwin.mm \
         ../../corelib/kernel/qcore_mac_objc.mm \
         ../../corelib/kernel/qcore_foundation.mm
 
@@ -117,7 +120,6 @@ mac {
 
 macx {
     OBJECTIVE_SOURCES += \
-        ../../corelib/kernel/qcore_foundation.mm \
         ../../corelib/io/qstandardpaths_mac.mm
 } else:unix {
     SOURCES += \

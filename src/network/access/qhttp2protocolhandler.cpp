@@ -53,6 +53,10 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qurl.h>
 
+#ifndef QT_NO_NETWORKPROXY
+#include <QtNetwork/qnetworkproxy.h>
+#endif
+
 #include <algorithm>
 #include <vector>
 
@@ -61,7 +65,8 @@ QT_BEGIN_NAMESPACE
 namespace
 {
 
-HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxHeaderListSize)
+HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxHeaderListSize,
+                                bool useProxy)
 {
     using namespace HPack;
 
@@ -73,7 +78,7 @@ HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxH
     const auto auth = request.url().authority(QUrl::FullyEncoded | QUrl::RemoveUserInfo).toLatin1();
     header.push_back(HeaderField(":authority", auth));
     header.push_back(HeaderField(":method", request.methodName()));
-    header.push_back(HeaderField(":path", request.uri(false)));
+    header.push_back(HeaderField(":path", request.uri(useProxy)));
     header.push_back(HeaderField(":scheme", request.url().scheme().toLatin1()));
 
     HeaderSize size = header_size(header);
@@ -208,7 +213,7 @@ void QHttp2ProtocolHandler::_q_receiveReply()
     Q_ASSERT(m_socket);
     Q_ASSERT(m_channel);
 
-    do {
+    while (!goingAway || activeStreams.size()) {
         const auto result = frameReader.read(*m_socket);
         switch (result) {
         case FrameStatus::incompleteFrame:
@@ -264,13 +269,19 @@ void QHttp2ProtocolHandler::_q_receiveReply()
             // 5.1 - ignore unknown frames.
             break;
         }
-    } while (!goingAway || activeStreams.size());
+    }
 }
 
 bool QHttp2ProtocolHandler::sendRequest()
 {
-    if (goingAway)
+    if (goingAway) {
+        // Stop further calls to this method: we have received GOAWAY
+        // so we cannot create new streams.
+        m_channel->emitFinishedWithError(QNetworkReply::ProtocolUnknownError,
+                                         "GOAWAY received, cannot start a request");
+        m_channel->spdyRequestsToSend.clear();
         return false;
+    }
 
     if (!prefaceSent && !sendClientPreface())
         return false;
@@ -397,7 +408,11 @@ bool QHttp2ProtocolHandler::sendHEADERS(Stream &stream)
     frameWriter.append(quint32()); // No stream dependency in Qt.
     frameWriter.append(stream.weight());
 
-    const auto headers = build_headers(stream.request(), maxHeaderListSize);
+    bool useProxy = false;
+#ifndef QT_NO_NETWORKPROXY
+    useProxy = m_connection->d_func()->networkProxy.type() != QNetworkProxy::NoProxy;
+#endif
+    const auto headers = build_headers(stream.request(), maxHeaderListSize, useProxy);
     if (!headers.size()) // nothing fits into maxHeaderListSize
         return false;
 
@@ -756,14 +771,10 @@ void QHttp2ProtocolHandler::handleGOAWAY()
         // "The last stream identifier can be set to 0 if no
         // streams were processed."
         lastStreamID = 1;
-    }
-
-    if (!(lastStreamID & 0x1)) {
+    } else if (!(lastStreamID & 0x1)) {
         // 5.1.1 - we (client) use only odd numbers as stream identifiers.
         return connectionError(PROTOCOL_ERROR, "GOAWAY with invalid last stream ID");
-    }
-
-    if (lastStreamID >= nextID) {
+    } else if (lastStreamID >= nextID) {
         // "A server that is attempting to gracefully shut down a connection SHOULD
         // send an initial GOAWAY frame with the last stream identifier set to 2^31-1
         // and a NO_ERROR code."
@@ -775,6 +786,13 @@ void QHttp2ProtocolHandler::handleGOAWAY()
     }
 
     goingAway = true;
+
+    // For the requests (and streams) we did not start yet, we have to report an
+    // error.
+    m_channel->emitFinishedWithError(QNetworkReply::ProtocolUnknownError,
+                                     "GOAWAY received, cannot start a request");
+    // Also, prevent further calls to sendRequest:
+    m_channel->spdyRequestsToSend.clear();
 
     QNetworkReply::NetworkError error = QNetworkReply::NoError;
     QString message;
@@ -970,7 +988,7 @@ bool QHttp2ProtocolHandler::acceptSetting(Http2::Settings identifier, quint32 ne
     }
 
     if (identifier == Settings::MAX_CONCURRENT_STREAMS_ID) {
-        if (maxConcurrentStreams > maxPeerConcurrentStreams) {
+        if (newValue > maxPeerConcurrentStreams) {
             connectionError(PROTOCOL_ERROR, "SETTINGS invalid number of concurrent streams");
             return false;
         }
@@ -1369,6 +1387,8 @@ void QHttp2ProtocolHandler::initReplyFromPushPromise(const HttpMessagePair &mess
 {
     Q_ASSERT(promisedData.contains(cacheKey));
     auto promise = promisedData.take(cacheKey);
+    Q_ASSERT(message.second);
+    message.second->setSpdyWasUsed(true);
 
     qCDebug(QT_HTTP2) << "found cached/promised response on stream" << promise.reservedID;
 

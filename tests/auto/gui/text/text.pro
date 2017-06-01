@@ -23,7 +23,8 @@ SUBDIRS=\
    qtextscriptengine \
    qtexttable \
    qzip \
-   qtextodfwriter
+   qtextodfwriter \
+   qinputcontrol
 
 win32:SUBDIRS -= qtextpiecetable
 
@@ -34,3 +35,7 @@ win32:SUBDIRS -= qtextpiecetable
            qtextpiecetable \
            qzip \
            qtextodfwriter
+
+!qtHaveModule(xml): SUBDIRS -= \
+           qcssparser \
+           qtextdocument

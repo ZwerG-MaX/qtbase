@@ -134,11 +134,12 @@ public:
 
 #if QT_CONFIG(timezone)
     static qint64 zoneMSecsToEpochMSecs(qint64 msecs, const QTimeZone &zone,
+                                        DaylightStatus hint = UnknownDaylightTime,
                                         QDate *localDate = 0, QTime *localTime = 0);
-#endif // timezone
 
-    static inline qint64 minJd() { return QDate::minJd(); }
-    static inline qint64 maxJd() { return QDate::maxJd(); }
+    // Inlined for its one caller in qdatetime.cpp
+    inline void setUtcOffsetByTZ(qint64 atMSecsSinceEpoch);
+#endif // timezone
 };
 
 QT_END_NAMESPACE

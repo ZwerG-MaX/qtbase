@@ -355,7 +355,7 @@ void QWellArray::paintCell(QPainter* p, int row, int col, const QRect &rect)
     paintCellContents(p, row, col, opt.rect.adjusted(dfw, dfw, -dfw, -dfw));
 }
 
-/*!
+/*
   Reimplement this function to change the contents of the well array.
  */
 void QWellArray::paintCellContents(QPainter *p, int row, int col, const QRect &r)
@@ -441,16 +441,12 @@ void QWellArray::focusInEvent(QFocusEvent*)
     emit currentChanged(curRow, curCol);
 }
 
-/*!\reimp
-*/
 
 void QWellArray::focusOutEvent(QFocusEvent*)
 {
     updateCell(curRow, curCol);
 }
 
-/*\reimp
-*/
 void QWellArray::keyPressEvent(QKeyEvent* e)
 {
     switch(e->key()) {                        // Look at the key code
@@ -2250,10 +2246,13 @@ bool QColorDialogPrivate::handleColorPickingMouseButtonRelease(QMouseEvent *e)
 bool QColorDialogPrivate::handleColorPickingKeyPress(QKeyEvent *e)
 {
     Q_Q(QColorDialog);
+#if QT_CONFIG(shortcut)
     if (e->matches(QKeySequence::Cancel)) {
         releaseColorPicking();
         q->setCurrentColor(beforeScreenColorPicking);
-    } else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+    } else
+#endif
+      if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
         q->setCurrentColor(grabScreenColor(QCursor::pos()));
         releaseColorPicking();
     }

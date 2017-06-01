@@ -472,6 +472,8 @@ public:
 
         WA_AlwaysStackOnTop = 128,
 
+        WA_TabletTracking = 129,
+
         // Add new attributes before this line
         WA_AttributeCount
     };
@@ -505,6 +507,7 @@ public:
         AA_SynthesizeMouseForUnhandledTabletEvents = 24,
         AA_CompressHighFrequencyEvents = 25,
         AA_DontCheckOpenGLContextThreadAffinity = 26,
+        AA_DisableShaderDiskCache = 27,
 
         // Add new attributes before this line
         AA_AttributeCount
@@ -1655,6 +1658,11 @@ public:
     };
     Q_DECLARE_FLAGS(MouseEventFlags, MouseEventFlag)
 
+    enum ChecksumType {
+        ChecksumIso3309,
+        ChecksumItuV41
+    };
+
 #ifndef Q_QDOC
     // NOTE: Generally, do not add QT_Q_ENUM if a corresponding Q_Q_FLAG exists.
     QT_Q_ENUM(ScrollBarPolicy)
@@ -1739,6 +1747,7 @@ public:
     QT_Q_ENUM(ScrollPhase)
     QT_Q_ENUM(MouseEventSource)
     QT_Q_FLAG(MouseEventFlag)
+    QT_Q_ENUM(ChecksumType)
     QT_Q_ENUM(TabFocusBehavior)
 #endif // Q_DOC
 

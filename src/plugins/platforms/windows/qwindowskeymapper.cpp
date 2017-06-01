@@ -144,13 +144,11 @@ struct KeyRecord {
 static const int QT_MAX_KEY_RECORDINGS = 64; // User has LOTS of fingers...
 struct KeyRecorder
 {
-    KeyRecorder() : nrecs(0) {}
-
     inline KeyRecord *findKey(int code, bool remove);
     inline void storeKey(int code, int ascii, int state, const QString& text);
     inline void clearKeys();
 
-    int nrecs;
+    int nrecs = 0;
     KeyRecord deleted_record; // A copy of last entry removed from records[]
     KeyRecord records[QT_MAX_KEY_RECORDINGS];
 };
@@ -703,7 +701,8 @@ void QWindowsKeyMapper::updatePossibleKeyCodes(unsigned char *kbdBuffer, quint32
     quint32 fallbackKey = winceKeyBend(vk_key);
     if (!fallbackKey || fallbackKey == Qt::Key_unknown) {
         fallbackKey = 0;
-        if (vk_key != keyLayout[vk_key].qtKey[0] && vk_key < 0x5B && vk_key > 0x2F)
+        if (vk_key != keyLayout[vk_key].qtKey[0] && vk_key != keyLayout[vk_key].qtKey[1]
+            && vk_key < 0x5B && vk_key > 0x2F)
             fallbackKey = vk_key;
     }
     keyLayout[vk_key].qtKey[8] = fallbackKey;
@@ -972,7 +971,8 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         state = state ^ Qt::ShiftModifier;
     else if (code == Qt::Key_Alt)
         state = state ^ Qt::AltModifier;
-
+    else if (code == 0 && modifiersIndex != 0)
+        code = keyLayout[vk_key].qtKey[0];
     // If the bit 24 of lParm is set you received a enter,
     // otherwise a Return. (This is the extended key bit)
     if ((code == Qt::Key_Return) && (msg.lParam & 0x1000000))

@@ -41,12 +41,13 @@
 #define QPRINTDIALOG_H
 
 #include <QtPrintSupport/qtprintsupportglobal.h>
+
+#ifndef QT_NO_PRINTDIALOG
+
 #include <QtPrintSupport/qabstractprintdialog.h>
 
 QT_BEGIN_NAMESPACE
 
-
-#ifndef QT_NO_PRINTDIALOG
 
 class QPrintDialogPrivate;
 class QPushButton;
@@ -56,7 +57,6 @@ class Q_PRINTSUPPORT_EXPORT QPrintDialog : public QAbstractPrintDialog
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QPrintDialog)
-    Q_ENUMS(PrintDialogOption)
     Q_PROPERTY(PrintDialogOptions options READ options WRITE setOptions)
 
 public:
@@ -102,8 +102,8 @@ private:
 # endif // Q_OS_UNIX
 };
 
-#endif // QT_NO_PRINTDIALOG
-
 QT_END_NAMESPACE
+
+#endif // QT_NO_PRINTDIALOG
 
 #endif // QPRINTDIALOG_H

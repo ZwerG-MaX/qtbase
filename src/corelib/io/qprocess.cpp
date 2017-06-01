@@ -99,8 +99,6 @@ QT_END_NAMESPACE
 #include <private/qcore_unix_p.h>
 #endif
 
-#ifndef QT_NO_PROCESS
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -430,6 +428,8 @@ void QProcessEnvironment::insert(const QProcessEnvironment &e)
     d->insert(*e.d);
 }
 
+#if QT_CONFIG(process)
+
 void QProcessPrivate::Channel::clear()
 {
     switch (type) {
@@ -508,6 +508,9 @@ void QProcessPrivate::Channel::clear()
     any point in time, QProcess will emit the errorOccurred() signal.
     You can also call error() to find the type of error that occurred
     last, and state() to find the current process state.
+
+    \note QProcess is not supported on VxWorks, iOS, tvOS, watchOS,
+    or the Universal Windows Platform.
 
     \section1 Communicating via Channels
 
@@ -1526,7 +1529,7 @@ void QProcess::setStandardOutputProcess(QProcess *destination)
     dto->stdinChannel.pipeFrom(dfrom);
 }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
 
 /*!
     \since 4.7
@@ -2598,9 +2601,8 @@ QString QProcess::nullDevice()
     \sa QProcess::pid()
 */
 
+#endif // QT_CONFIG(process)
+
 QT_END_NAMESPACE
 
 #include "moc_qprocess.cpp"
-
-#endif // QT_NO_PROCESS
-

@@ -82,11 +82,10 @@ public:
     void reset();
     bool waitForDone(int msecs);
     void clear();
-    bool stealRunnable(QRunnable *runnable);
     void stealAndRunRunnable(QRunnable *runnable);
 
     mutable QMutex mutex;
-    QSet<QThreadPoolThread *> allThreads;
+    QList<QThreadPoolThread *> allThreads;
     QQueue<QThreadPoolThread *> waitingThreads;
     QQueue<QThreadPoolThread *> expiredThreads;
     QVector<QPair<QRunnable *, int> > queue;

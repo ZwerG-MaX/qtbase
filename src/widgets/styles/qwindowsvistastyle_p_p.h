@@ -54,19 +54,19 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qwindowsvistastyle_p.h"
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 #include <private/qwindowsxpstyle_p_p.h>
 #include <private/qstyleanimation_p.h>
 #include <private/qpaintengine_raster_p.h>
-#include <qlibrary.h>
 #include <qpaintengine.h>
 #include <qwidget.h>
 #include <qapplication.h>
 #include <qpixmapcache.h>
 #include <qstyleoption.h>
+#if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
+#endif
 #include <qradiobutton.h>
-#include <qcheckbox.h>
 #include <qlineedit.h>
 #include <qgroupbox.h>
 #include <qtoolbutton.h>
@@ -80,7 +80,9 @@
 #include <qtreeview.h>
 #include <qtextedit.h>
 #include <qmessagebox.h>
+#if QT_CONFIG(dialogbuttonbox)
 #include <qdialogbuttonbox.h>
+#endif
 #include <qinputdialog.h>
 #include <qtableview.h>
 #include <qdatetime.h>
@@ -177,6 +179,6 @@ public:
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_STYLE_WINDOWSVISTA
+#endif // style_windowsvista
 
 #endif // QWINDOWSVISTASTYLE_P_P_H

@@ -336,8 +336,10 @@ void QMessageBoxPrivate::setupLayout()
 #else
     grid->addWidget(buttonBox, grid->rowCount(), 0, 1, grid->columnCount());
 #endif
+#if QT_CONFIG(textedit)
     if (detailsText)
         grid->addWidget(detailsText, grid->rowCount(), 0, 1, grid->columnCount());
+#endif
     grid->setSizeConstraint(QLayout::SetNoConstraint);
     q->setLayout(grid);
 
@@ -1402,8 +1404,8 @@ void QMessageBox::changeEvent(QEvent *ev)
 */
 void QMessageBox::keyPressEvent(QKeyEvent *e)
 {
-    Q_D(QMessageBox);
-
+#if QT_CONFIG(shortcut)
+        Q_D(QMessageBox);
         if (e->matches(QKeySequence::Cancel)) {
             if (d->detectedEscapeButton) {
 #ifdef Q_OS_MAC
@@ -1414,7 +1416,7 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
             }
             return;
         }
-
+#endif // QT_CONFIG(shortcut)
 
 #if !defined(QT_NO_CLIPBOARD) && !defined(QT_NO_SHORTCUT)
 
@@ -1832,7 +1834,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
         "<p>Qt and the Qt logo are trademarks of The Qt Company Ltd.</p>"
         "<p>Qt is The Qt Company Ltd product developed as an open source "
         "project. See <a href=\"http://%3/\">%3</a> for more information.</p>"
-        ).arg(QStringLiteral("2016"),
+        ).arg(QStringLiteral("2017"),
               QStringLiteral("qt.io/licensing"),
               QStringLiteral("qt.io"));
     QMessageBox *msgBox = new QMessageBox(parent);
@@ -2654,7 +2656,9 @@ void QMessageBoxPrivate::helperPrepareShow(QPlatformDialogHelper *)
     options->setWindowTitle(q->windowTitle());
     options->setText(q->text());
     options->setInformativeText(q->informativeText());
+#if QT_CONFIG(textedit)
     options->setDetailedText(q->detailedText());
+#endif
     options->setIcon(helperIcon(q->icon()));
     options->setStandardButtons(helperStandardButtons(q));
 }

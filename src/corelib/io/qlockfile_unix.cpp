@@ -81,15 +81,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static QByteArray localHostName() // from QHostInfo::localHostName(), modified to return a QByteArray
-{
-    QByteArray hostName(512, Qt::Uninitialized);
-    if (gethostname(hostName.data(), hostName.size()) == -1)
-        return QByteArray();
-    hostName.truncate(strlen(hostName.data()));
-    return hostName;
-}
-
 // ### merge into qt_safe_write?
 static qint64 qt_write_loop(int fd, const char *data, qint64 len)
 {
@@ -124,6 +115,7 @@ int QLockFilePrivate::checkFcntlWorksAfterFlock(const QString &fn)
         return 0;
     return 1;
 #else
+    Q_UNUSED(fn);
     return 0;
 #endif
 }
@@ -185,7 +177,7 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
     // Use operator% from the fast builder to avoid multiple memory allocations.
     QByteArray fileData = QByteArray::number(QCoreApplication::applicationPid()) % '\n'
                           % QCoreApplication::applicationName().toUtf8() % '\n'
-                          % localHostName() % '\n';
+                          % QSysInfo::machineHostName().toUtf8() % '\n';
 
     const QByteArray lockFileName = QFile::encodeName(fileName);
     const int fd = qt_safe_open(lockFileName.constData(), O_WRONLY | O_CREAT | O_EXCL, 0666);
@@ -242,7 +234,7 @@ bool QLockFilePrivate::isApparentlyStale() const
     qint64 pid;
     QString hostname, appname;
     if (getLockInfo(&pid, &hostname, &appname)) {
-        if (hostname.isEmpty() || hostname == QString::fromLocal8Bit(localHostName())) {
+        if (hostname.isEmpty() || hostname == QSysInfo::machineHostName()) {
             if (::kill(pid, 0) == -1 && errno == ESRCH)
                 return true; // PID doesn't exist anymore
             const QString processName = processNameByPid(pid);
@@ -256,7 +248,7 @@ bool QLockFilePrivate::isApparentlyStale() const
         }
     }
     const qint64 age = QFileInfo(fileName).lastModified().msecsTo(QDateTime::currentDateTime());
-    return staleLockTime > 0 && age > staleLockTime;
+    return staleLockTime > 0 && qAbs(age) > staleLockTime;
 }
 
 QString QLockFilePrivate::processNameByPid(qint64 pid)

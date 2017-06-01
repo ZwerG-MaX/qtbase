@@ -39,11 +39,28 @@
 
 #include <private/qdrawhelper_p.h>
 #include <private/qguiapplication_p.h>
+#include <private/qcolorprofile_p.h>
 #include <private/qsimd_p.h>
 #include <private/qimage_p.h>
 #include <qendian.h>
 
 QT_BEGIN_NAMESPACE
+
+struct QDefaultColorTables
+{
+    QDefaultColorTables()
+        : gray(256), alpha(256)
+    {
+        for (int i = 0; i < 256; ++i) {
+            gray[i] = qRgb(i, i, i);
+            alpha[i] = qRgba(0, 0, 0, i);
+        }
+    }
+
+    QVector<QRgb> gray, alpha;
+};
+
+Q_GLOBAL_STATIC(QDefaultColorTables, defaultColorTables);
 
 // table to flip bits
 static const uchar bitflip[256] = {
@@ -82,23 +99,17 @@ const uchar *qt_get_bitflip_array()
 
 void qGamma_correct_back_to_linear_cs(QImage *image)
 {
-    const QDrawHelperGammaTables *tables = QGuiApplicationPrivate::instance()->gammaTables();
-    if (!tables)
+    const QColorProfile *cp = QGuiApplicationPrivate::instance()->colorProfileForA32Text();
+    if (!cp)
         return;
-    const uchar *gamma = tables->qt_pow_rgb_gamma;
     // gamma correct the pixels back to linear color space...
     int h = image->height();
     int w = image->width();
 
     for (int y=0; y<h; ++y) {
-        uint *pixels = (uint *) image->scanLine(y);
-        for (int x=0; x<w; ++x) {
-            uint p = pixels[x];
-            uint r = gamma[qRed(p)];
-            uint g = gamma[qGreen(p)];
-            uint b = gamma[qBlue(p)];
-            pixels[x] = (r << 16) | (g << 8) | b | 0xff000000;
-        }
+        QRgb *pixels = reinterpret_cast<QRgb *>(image->scanLine(y));
+        for (int x=0; x<w; ++x)
+            pixels[x] = cp->toLinear(pixels[x]);
     }
 }
 
@@ -1957,11 +1968,7 @@ static void convert_Alpha8_to_Indexed8(QImageData *dest, const QImageData *src, 
 
     memcpy(dest->data, src->data, src->bytes_per_line * src->height);
 
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-
-    dest->colortable = colors;
+    dest->colortable = defaultColorTables->alpha;
 }
 
 static void convert_Grayscale8_to_Indexed8(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
@@ -1971,22 +1978,15 @@ static void convert_Grayscale8_to_Indexed8(QImageData *dest, const QImageData *s
 
     memcpy(dest->data, src->data, src->bytes_per_line * src->height);
 
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgb(i, i, i);
 
-    dest->colortable = colors;
+    dest->colortable = defaultColorTables->gray;
 }
 
 static bool convert_Alpha8_to_Indexed8_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Alpha8);
 
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-
-    data->colortable = colors;
+    data->colortable = defaultColorTables->alpha;
     data->format = QImage::Format_Indexed8;
 
     return true;
@@ -1996,11 +1996,7 @@ static bool convert_Grayscale8_to_Indexed8_inplace(QImageData *data, Qt::ImageCo
 {
     Q_ASSERT(data->format == QImage::Format_Grayscale8);
 
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgb(i, i, i);
-
-    data->colortable = colors;
+    data->colortable = defaultColorTables->gray;
     data->format = QImage::Format_Indexed8;
 
     return true;
@@ -2984,16 +2980,14 @@ static void qInitImageConversions()
     qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32_Premultiplied] = convert_RGB888_to_RGB32_neon;
 #endif
 
-#ifdef QT_COMPILER_SUPPORTS_MIPS_DSPR2
-    if (qCpuHasFeature(DSPR2)) {
-        extern bool convert_ARGB_to_ARGB_PM_inplace_mips_dspr2(QImageData *data, Qt::ImageConversionFlags);
-        qimage_inplace_converter_map[QImage::Format_ARGB32][QImage::Format_ARGB32_Premultiplied] = convert_ARGB_to_ARGB_PM_inplace_mips_dspr2;
+#if defined(__MIPS_DSPR2__)
+    extern bool convert_ARGB_to_ARGB_PM_inplace_mips_dspr2(QImageData *data, Qt::ImageConversionFlags);
+    qimage_inplace_converter_map[QImage::Format_ARGB32][QImage::Format_ARGB32_Premultiplied] = convert_ARGB_to_ARGB_PM_inplace_mips_dspr2;
 
-        extern void convert_RGB888_to_RGB32_mips_dspr2(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags);
-        qimage_converter_map[QImage::Format_RGB888][QImage::Format_RGB32] = convert_RGB888_to_RGB32_mips_dspr2;
-        qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32] = convert_RGB888_to_RGB32_mips_dspr2;
-        qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32_Premultiplied] = convert_RGB888_to_RGB32_mips_dspr2;
-    }
+    extern void convert_RGB888_to_RGB32_mips_dspr2(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags);
+    qimage_converter_map[QImage::Format_RGB888][QImage::Format_RGB32] = convert_RGB888_to_RGB32_mips_dspr2;
+    qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32] = convert_RGB888_to_RGB32_mips_dspr2;
+    qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32_Premultiplied] = convert_RGB888_to_RGB32_mips_dspr2;
 #endif
 }
 

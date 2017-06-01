@@ -107,7 +107,7 @@ public:
 // QDBusConnectionPrivate holds the DBusConnection and
 // can have many QDBusConnection objects referring to it
 
-class QDBusConnectionPrivate: public QObject
+class Q_AUTOTEST_EXPORT QDBusConnectionPrivate: public QObject
 {
     Q_OBJECT
 public:
@@ -348,9 +348,6 @@ public:
                             QObject *receiver, const char *signal, int minMIdx,
                             bool buildSignature);
     static DBusHandlerResult messageFilter(DBusConnection *, DBusMessage *, void *);
-    static bool checkReplyForDelivery(QDBusConnectionPrivate *target, QObject *object,
-                                      int idx, const QList<int> &metaTypes,
-                                      const QDBusMessage &msg);
     static QDBusCallDeliveryEvent *prepareReply(QDBusConnectionPrivate *target, QObject *object,
                                                 int idx, const QVector<int> &metaTypes,
                                                 const QDBusMessage &msg);

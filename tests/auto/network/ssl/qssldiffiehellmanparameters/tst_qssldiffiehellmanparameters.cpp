@@ -1,11 +1,11 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 Mikkel Krautz <mikkel@krautz.dk>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the QtNetwork module of the Qt Toolkit.
+** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
@@ -14,24 +14,13 @@
 ** and conditions see https://www.qt.io/terms-conditions. For further
 ** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
 ** included in the packaging of this file. Please review the following
 ** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +30,13 @@
 #include <QSslDiffieHellmanParameters>
 #include <QSslSocket>
 #include <QByteArray>
+
+// Default DH parameters, exported by qssldiffiehellmanparameters.cpp.
+QT_BEGIN_NAMESPACE
+extern Q_AUTOTEST_EXPORT const char *qssl_dhparams_default_base64;
+QT_END_NAMESPACE
+
+QT_USE_NAMESPACE
 
 class tst_QSslDiffieHellmanParameters : public QObject
 {
@@ -54,6 +50,7 @@ private Q_SLOTS:
     void constructionPEM();
     void unsafe512Bits();
     void unsafeNonPrime();
+    void defaultIsValid();
 #endif
 };
 
@@ -154,6 +151,33 @@ void tst_QSslDiffieHellmanParameters::unsafeNonPrime()
 #ifndef QT_NO_OPENSSL
     QCOMPARE(dh.isValid(), false);
     QCOMPARE(dh.error(), QSslDiffieHellmanParameters::UnsafeParametersError);
+#endif
+}
+
+void tst_QSslDiffieHellmanParameters::defaultIsValid()
+{
+    // The QSslDiffieHellmanParameters::defaultParameters() method takes a shortcut,
+    // by not verifying the passed-in parameters. Instead, it simply assigns the default
+    // DH parameters to the derData field of QSslDiffieHellmanParametersPrivate.
+    //
+    // This test ensures that our default parameters pass the internal verification tests
+    // by constructing, using fromEncoded(), a QSslDiffieHellmanParameters instance that
+    // we expect to be equivalent to the one returned by defaultParameters(). By using
+    // fromEncoded() we go through the internal verification mechanisms. Finally, to ensure
+    // the two instances are equivalent, we compare them.
+
+    const auto dh = QSslDiffieHellmanParameters::fromEncoded(
+        QByteArray::fromBase64(QByteArray(qssl_dhparams_default_base64)),
+        QSsl::Der
+    );
+
+    const auto defaultdh = QSslDiffieHellmanParameters::defaultParameters();
+
+#ifndef QT_NO_OPENSSL
+    QCOMPARE(dh.isEmpty(), false);
+    QCOMPARE(dh.isValid(), true);
+    QCOMPARE(dh.error(), QSslDiffieHellmanParameters::NoError);
+    QCOMPARE(dh, defaultdh);
 #endif
 }
 

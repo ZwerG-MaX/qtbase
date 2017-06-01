@@ -54,7 +54,6 @@ QT_BEGIN_NAMESPACE
 
 QWindowsDirect2DWindow::QWindowsDirect2DWindow(QWindow *window, const QWindowsWindowData &data)
     : QWindowsWindow(window, data)
-    , m_needsFullFlush(true)
     , m_directRendering(!(data.flags & Qt::FramelessWindowHint && window->format().hasAlpha()))
 {
     if (window->type() == Qt::Desktop)
@@ -67,7 +66,7 @@ QWindowsDirect2DWindow::QWindowsDirect2DWindow(QWindow *window, const QWindowsWi
                 D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
                 m_deviceContext.GetAddressOf());
     if (FAILED(hr))
-        qWarning("%s: Couldn't create Direct2D Device context: %#x", __FUNCTION__, hr);
+        qWarning("%s: Couldn't create Direct2D Device context: %#lx", __FUNCTION__, hr);
 }
 
 QWindowsDirect2DWindow::~QWindowsDirect2DWindow()
@@ -100,12 +99,12 @@ void QWindowsDirect2DWindow::flush(QWindowsDirect2DBitmap *bitmap, const QRegion
         HRESULT hr = m_swapChain->GetDesc1(&desc);
         QRect geom = geometry();
 
-        if ((FAILED(hr) || (desc.Width != geom.width()) || (desc.Height != geom.height()))) {
+        if (FAILED(hr) || (desc.Width != UINT(geom.width()) || (desc.Height != UINT(geom.height())))) {
             resizeSwapChain(geom.size());
             m_swapChain->GetDesc1(&desc);
         }
-        size.setWidth(desc.Width);
-        size.setHeight(desc.Height);
+        size.setWidth(int(desc.Width));
+        size.setHeight(int(desc.Height));
     } else {
         size = geometry().size();
     }
@@ -175,7 +174,7 @@ void QWindowsDirect2DWindow::present(const QRegion &region)
     UPDATELAYEREDWINDOWINFO info = { sizeof(UPDATELAYEREDWINDOWINFO), NULL,
                                      &ptDst, &size, hdc, &ptSrc, 0, &blend, ULW_ALPHA, &dirty };
     if (!UpdateLayeredWindowIndirect(handle(), &info))
-        qErrnoWarning(GetLastError(), "Failed to update the layered window");
+        qErrnoWarning(int(GetLastError()), "Failed to update the layered window");
 
     hr = dxgiSurface->ReleaseDC(NULL);
     if (FAILED(hr))
@@ -201,7 +200,7 @@ void QWindowsDirect2DWindow::setupSwapChain()
                 m_swapChain.ReleaseAndGetAddressOf());            // [out]  IDXGISwapChain1 **ppSwapChain
 
     if (FAILED(hr))
-        qWarning("%s: Could not create swap chain: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create swap chain: %#lx", __FUNCTION__, hr);
 
     m_needsFullFlush = true;
 }
@@ -217,11 +216,11 @@ void QWindowsDirect2DWindow::resizeSwapChain(const QSize &size)
         return;
 
     HRESULT hr = m_swapChain->ResizeBuffers(0,
-                                            size.width(), size.height(),
+                                            UINT(size.width()), UINT(size.height()),
                                             DXGI_FORMAT_UNKNOWN,
                                             0);
     if (FAILED(hr))
-        qWarning("%s: Could not resize swap chain: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not resize swap chain: %#lx", __FUNCTION__, hr);
 }
 
 QSharedPointer<QWindowsDirect2DBitmap> QWindowsDirect2DWindow::copyBackBuffer() const
@@ -248,13 +247,13 @@ QSharedPointer<QWindowsDirect2DBitmap> QWindowsDirect2DWindow::copyBackBuffer() 
     HRESULT hr = m_deviceContext.Get()->CreateBitmap(size, NULL, 0, properties, &copy);
 
     if (FAILED(hr)) {
-        qWarning("%s: Could not create staging bitmap: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create staging bitmap: %#lx", __FUNCTION__, hr);
         return null_result;
     }
 
     hr = copy.Get()->CopyFromBitmap(NULL, m_bitmap->bitmap(), NULL);
     if (FAILED(hr)) {
-        qWarning("%s: Could not copy from bitmap! %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not copy from bitmap! %#lx", __FUNCTION__, hr);
         return null_result;
     }
 
@@ -277,12 +276,12 @@ void QWindowsDirect2DWindow::setupBitmap()
     if (m_directRendering) {
         hr = m_swapChain->GetBuffer(0, IID_PPV_ARGS(&backBufferSurface));
         if (FAILED(hr)) {
-            qWarning("%s: Could not query backbuffer for DXGI Surface: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not query backbuffer for DXGI Surface: %#lx", __FUNCTION__, hr);
             return;
         }
     } else {
         const QRect rect = geometry();
-        CD3D11_TEXTURE2D_DESC backBufferDesc(DXGI_FORMAT_B8G8R8A8_UNORM, rect.width(), rect.height(), 1, 1);
+        CD3D11_TEXTURE2D_DESC backBufferDesc(DXGI_FORMAT_B8G8R8A8_UNORM, UINT(rect.width()), UINT(rect.height()), 1, 1);
         backBufferDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
         backBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
         ComPtr<ID3D11Texture2D> backBufferTexture;
@@ -302,7 +301,7 @@ void QWindowsDirect2DWindow::setupBitmap()
     ComPtr<ID2D1Bitmap1> backBufferBitmap;
     hr = m_deviceContext->CreateBitmapFromDxgiSurface(backBufferSurface.Get(), NULL, backBufferBitmap.GetAddressOf());
     if (FAILED(hr)) {
-        qWarning("%s: Could not create Direct2D Bitmap from DXGI Surface: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create Direct2D Bitmap from DXGI Surface: %#lx", __FUNCTION__, hr);
         return;
     }
 

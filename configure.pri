@@ -1,3 +1,7 @@
+# this must be done outside any function
+QT_SOURCE_TREE = $$PWD
+QT_BUILD_TREE = $$shadowed($$PWD)
+
 # custom command line handling
 
 defineTest(qtConfCommandline_qmakeArgs) {
@@ -63,7 +67,185 @@ defineReplace(qtConfFunc_crossCompile) {
     return(false)
 }
 
+defineReplace(qtConfFunc_licenseCheck) {
+    exists($$QT_SOURCE_TREE/LICENSE.LGPL3)|exists($$QT_SOURCE_TREE/LICENSE.GPL2): \
+        hasOpenSource = true
+    else: \
+        hasOpenSource = false
+    exists($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL)|exists($$QT_SOURCE_TREE/bin/licheck*): \
+        hasCommercial = true
+    else: \
+        hasCommercial = false
+
+    commercial = $$config.input.commercial
+    isEmpty(commercial) {
+        $$hasOpenSource {
+            $$hasCommercial {
+                logn()
+                logn("Selecting Qt Edition.")
+                logn()
+                logn("Type 'c' if you want to use the Commercial Edition.")
+                logn("Type 'o' if you want to use the Open Source Edition.")
+                logn()
+                for(ever) {
+                    val = $$lower($$prompt("Which edition of Qt do you want to use? ", false))
+                    equals(val, c) {
+                        commercial = yes
+                        QMAKE_SAVED_ARGS += -commercial
+                    } else: equals(val, o) {
+                        commercial = no
+                        QMAKE_SAVED_ARGS += -opensource
+                    } else {
+                        next()
+                    }
+                    export(QMAKE_SAVED_ARGS)
+                    break()
+                }
+            } else {
+                commercial = no
+            }
+        } else {
+            !$$hasCommercial: \
+                qtConfFatalError("No license files and no licheck executables found." \
+                                 "Cannot proceed. Try re-installing Qt.")
+            commercial = yes
+        }
+    }
+
+    equals(commercial, no) {
+        !$$hasOpenSource: \
+            qtConfFatalError("This is the Qt Commercial Edition." \
+                             "Cannot proceed with -opensource.")
+
+        logn()
+        logn("This is the Qt Open Source Edition.")
+
+        EditionString = "Open Source"
+        config.input.qt_edition = OpenSource
+        export(config.input.qt_edition)
+    } else {
+        !$$hasCommercial: \
+            qtConfFatalError("This is the Qt Open Source Edition." \
+                             "Cannot proceed with -commercial.")
+
+        exists($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL) {
+            logn()
+            logn("This is the Qt Technology Preview Edition.")
+
+            EditionString = "Technology Preview"
+            config.input.qt_edition = Preview
+            export(config.input.qt_edition)
+        } else {
+            equals(QMAKE_HOST.os, Linux) {
+                equals(QMAKE_HOST.arch, x86): \
+                    Licheck = licheck32
+                else: \
+                    Licheck = licheck64
+            } else: equals(QMAKE_HOST.os, Darwin) {
+                Licheck = licheck_mac
+            } else: equals(QMAKE_HOST.os, Windows) {
+                Licheck = licheck.exe
+            } else {
+                qtConfFatalError("Host operating system not supported by this edition of Qt.")
+            }
+
+            !qtRunLoggedCommand("$$system_quote($$QT_SOURCE_TREE/bin/$$Licheck) \
+                                    $$eval(config.input.confirm-license) \
+                                    $$system_quote($$QT_SOURCE_TREE) $$system_quote($$QT_BUILD_TREE) \
+                                    $$[QMAKE_SPEC] $$[QMAKE_XSPEC]", \
+                                LicheckOutput): \
+                return(false)
+            logn()
+            for (o, LicheckOutput) {
+                contains(o, "\\w+=.*"): \
+                    eval($$o)
+                else: \
+                    logn($$o)
+            }
+            config.input.qt_edition = $$Edition
+            config.input.qt_licheck = $$Licheck
+            config.input.qt_release_date = $$ReleaseDate
+            export(config.input.qt_edition)
+            export(config.input.qt_licheck)
+            export(config.input.qt_release_date)
+            return(true)
+        }
+    }
+
+    !isEmpty(config.input.confirm-license) {
+        logn()
+        logn("You have already accepted the terms of the $$EditionString license.")
+        return(true)
+    }
+
+    affix = the
+    equals(commercial, no) {
+        theLicense = "GNU Lesser General Public License (LGPL) version 3"
+        showWhat = "Type 'L' to view the GNU Lesser General Public License version 3 (LGPLv3)."
+        gpl2Ok = false
+        winrt {
+            notTheLicense = "Note: GPL version 2 is not available on WinRT."
+        } else: $$qtConfEvaluate("features.android-style-assets") {
+            notTheLicense = "Note: GPL version 2 is not available due to using Android style assets."
+        } else {
+            theLicense += "or the GNU General Public License (GPL) version 2"
+            showWhat += "Type 'G' to view the GNU General Public License version 2 (GPLv2)."
+            gpl2Ok = true
+            affix = either
+        }
+    } else {
+        theLicense = $$cat($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL, lines)
+        theLicense = $$first(theLicense)
+        showWhat = "Type '?' to view the $${theLicense}."
+    }
+    msg = \
+        " " \
+        "You are licensed to use this software under the terms of" \
+        "the "$$theLicense"." \
+        $$notTheLicense \
+        " " \
+        $$showWhat \
+        "Type 'y' to accept this license offer." \
+        "Type 'n' to decline this license offer." \
+        " "
+
+    for(ever) {
+        logn($$join(msg, $$escape_expand(\\n)))
+        for(ever) {
+            val = $$lower($$prompt("Do you accept the terms of $$affix license? ", false))
+            equals(val, y)|equals(val, yes) {
+                logn()
+                QMAKE_SAVED_ARGS += -confirm-license
+                export(QMAKE_SAVED_ARGS)
+                return(true)
+            } else: equals(val, n)|equals(val, no) {
+                return(false)
+            } else: equals(commercial, yes):equals(val, ?) {
+                licenseFile = $$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL
+            } else: equals(commercial, no):equals(val, l) {
+                licenseFile = $$QT_SOURCE_TREE/LICENSE.LGPL3
+            } else: equals(commercial, no):equals(val, g):$$gpl2Ok {
+                licenseFile = $$QT_SOURCE_TREE/LICENSE.GPL2
+            } else {
+                next()
+            }
+            break()
+        }
+        system("more $$system_quote($$system_path($$licenseFile))")
+        logn()
+        logn()
+    }
+}
+
 # custom tests
+
+# this is meant for linux device specs only
+defineTest(qtConfTest_machineTuple) {
+    qtRunLoggedCommand("$$QMAKE_CXX -dumpmachine", $${1}.tuple)|return(false)
+    $${1}.cache += tuple
+    export($${1}.cache)
+    return(true)
+}
 
 defineTest(qtConfTest_architecture) {
     !qtConfTest_compile($${1}): \
@@ -82,32 +264,23 @@ defineTest(qtConfTest_architecture) {
 
     arch_magic = ".*==Qt=magic=Qt== Architecture:([^\\0]*).*"
     subarch_magic = ".*==Qt=magic=Qt== Sub-architecture:([^\\0]*).*"
+    buildabi_magic = ".*==Qt=magic=Qt== Build-ABI:([^\\0]*).*"
 
-    !contains(content, $$arch_magic)|!contains(content, $$subarch_magic): \
+    !contains(content, $$arch_magic)|!contains(content, $$subarch_magic)|!contains(content, $$buildabi_magic): \
         error("$$eval($${1}.label) detection binary does not contain expected data.")
 
     $${1}.arch = $$replace(content, $$arch_magic, "\\1")
     $${1}.subarch = $$replace(content, $$subarch_magic, "\\1")
     $${1}.subarch = $$split($${1}.subarch, " ")
+    $${1}.buildabi = $$replace(content, $$buildabi_magic, "\\1")
     export($${1}.arch)
     export($${1}.subarch)
+    export($${1}.buildabi)
     qtLog("Detected architecture: $$eval($${1}.arch) ($$eval($${1}.subarch))")
 
-    $${1}.cache += arch subarch
+    $${1}.cache += arch subarch buildabi
     export($${1}.cache)
     return(true)
-}
-
-defineTest(qtConfTest_avx_test_apple_clang) {
-    !*g++*:!*-clang*: return(true)
-
-    qtRunLoggedCommand("$$QMAKE_CXX --version", compiler)|return(false)
-    contains(compiler, "Apple clang version [23]") {
-        # Some clang versions produce internal compiler errors compiling Qt AVX code
-        return(false)
-    } else {
-        return(true)
-    }
 }
 
 defineTest(qtConfTest_gnumake) {
@@ -160,11 +333,9 @@ defineTest(qtConfTest_detectPkgConfig) {
             }
 
             pkgConfigLibdir = $$sysroot/usr/lib/pkgconfig:$$sysroot/usr/share/pkgconfig
-            gcc {
-                qtRunLoggedCommand("$$QMAKE_CXX -dumpmachine", gccMachineDump): \
-                        !isEmpty(gccMachineDump): \
-                    pkgConfigLibdir = "$$pkgConfigLibdir:$$sysroot/usr/lib/$$gccMachineDump/pkgconfig"
-            }
+            machineTuple = $$eval($${currentConfig}.tests.machineTuple.tuple)
+            !isEmpty(machineTuple): \
+                pkgConfigLibdir = "$$pkgConfigLibdir:$$sysroot/usr/lib/$$machineTuple/pkgconfig"
 
             qtConfAddNote("PKG_CONFIG_LIBDIR automatically set to $$pkgConfigLibdir")
         }
@@ -195,8 +366,9 @@ defineTest(qtConfTest_detectPkgConfig) {
     return(true)
 }
 
-defineTest(qtConfTest_neon) {
-    contains($${currentConfig}.tests.architecture.subarch, "neon"): return(true)
+defineTest(qtConfTest_subarch) {
+    subarch = $$eval($${1}.subarch)
+    contains($${currentConfig}.tests.architecture.subarch, $${subarch}): return(true)
     return(false)
 }
 
@@ -223,51 +395,478 @@ defineTest(qtConfTest_buildParts) {
     return(true)
 }
 
-defineTest(qtConfTest_checkCompiler) {
-    contains(QMAKE_CXX, ".*clang.*") {
-        qtRunLoggedCommand("$$QMAKE_CXX -v 2>&1", versionstr)|return(false)
-        versionstr = "$$versionstr"
-        contains(versionstr, "^Apple (clang|LLVM) version .*") {
-            $${1}.compilerDescription = "Apple Clang"
-            $${1}.compilerId = "apple_clang"
-            $${1}.compilerVersion = $$replace(versionstr, "^Apple (clang|LLVM) version ([0-9.]+).*$", "\\2")
-        } else: contains(versionstr, ".*clang version.*") {
-            $${1}.compilerDescription = "Clang"
-            $${1}.compilerId = "clang"
-            $${1}.compilerVersion = $$replace(versionstr, "^.*clang version ([0-9.]+).*", "\\1")
-        } else {
-            return(false)
+# custom outputs
+
+# this reloads the qmakespec as completely as reasonably possible.
+defineTest(reloadSpec) {
+    bypassNesting() {
+        for (f, QMAKE_INTERNAL_INCLUDED_FILES) {
+            contains(f, .*/mkspecs/.*):\
+                    !contains(f, .*/(qt_build_config|qt_parts|qt_configure|configure_base)\\.prf): \
+                discard_from($$f)
         }
-    } else: contains(QMAKE_CXX, ".*g\\+\\+.*") {
-        qtRunLoggedCommand("$$QMAKE_CXX -dumpversion", version)|return(false)
-        $${1}.compilerDescription = "GCC"
-        $${1}.compilerId = "gcc"
-        $${1}.compilerVersion = $$version
-    } else: contains(QMAKE_CXX, ".*icpc") {
-        qtRunLoggedCommand("$$QMAKE_CXX -dumpversion", version)|return(false)
-        $${1}.compilerDescription = "ICC"
-        $${1}.compilerId = "icc"
-        $${1}.compilerVersion = $$version
-    } else: msvc {
-        command = $$QMAKE_CXX /EP /nologo $$source $$system_quote($$QMAKE_CONFIG_TESTS_DIR/win/msvc_version.cpp)
-        qtRunLoggedCommand("$$command", version)|return(false)
-        version = "$$version"
-        $${1}.compilerDescription = "MSVC"
-        $${1}.compilerId = "cl"
-        $${1}.compilerVersion = $$replace(version, "^.*([0-9]{2})([0-9]{2})([0-9]{5}).*$", "\\1.\\2.\\3")
-    } else {
-        return(false)
+        # nobody's going to try to re-load the features above,
+        # so don't bother with being selective.
+        QMAKE_INTERNAL_INCLUDED_FEATURES = \
+            # loading it gets simulated below.
+            $$[QT_HOST_DATA/src]/mkspecs/features/device_config.prf \
+            # must be delayed until qdevice.pri is ready.
+            $$[QT_HOST_DATA/src]/mkspecs/features/mac/toolchain.prf \
+            $$[QT_HOST_DATA/src]/mkspecs/features/toolchain.prf
+
+        _SAVED_CONFIG = $$CONFIG
+        load(spec_pre)
+        # qdevice.pri gets written too late (and we can't write it early
+        # enough, as it's populated in stages, with later ones depending
+        # on earlier ones). so inject its variables manually.
+        for (l, $${currentConfig}.output.devicePro): \
+            eval($$l)
+        include($$QMAKESPEC/qmake.conf)
+        load(spec_post)
+        load(default_pre)
+        CONFIG += $$_SAVED_CONFIG
+
+        # ensure pristine environment for configuration. again.
+        discard_from($$[QT_HOST_DATA/get]/mkspecs/qconfig.pri)
+        discard_from($$[QT_HOST_DATA/get]/mkspecs/qmodule.pri)
     }
-    $${1}.compilerDescription += $$eval($${1}.compilerVersion)
-    export($${1}.compilerDescription)
-    export($${1}.compilerId)
-    export($${1}.compilerVersion)
-    $${1}.cache += compilerDescription compilerId compilerVersion
-    export($${1}.cache)
-    return(true)
 }
 
-# custom outputs
+defineTest(qtConfOutput_prepareSpec) {
+    device = $$eval(config.input.device)
+    !isEmpty(device) {
+        devices = $$files($$[QT_HOST_DATA/src]/mkspecs/devices/*$$device*)
+        isEmpty(devices): \
+            qtConfFatalError("No device matching '$$device'.")
+        !count(devices, 1) {
+            err = "Multiple matches for device '$$device'. Candidates are:"
+            for (d, devices): \
+                err += "    $$basename(d)"
+            qtConfFatalError($$err)
+        }
+        XSPEC = $$relative_path($$devices, $$[QT_HOST_DATA/src]/mkspecs)
+    }
+    xspec = $$eval(config.input.xplatform)
+    !isEmpty(xspec) {
+        !exists($$[QT_HOST_DATA/src]/mkspecs/$$xspec/qmake.conf): \
+            qtConfFatalError("Invalid target platform '$$xspec'.")
+        XSPEC = $$xspec
+    }
+    isEmpty(XSPEC): \
+        XSPEC = $$[QMAKE_SPEC]
+    export(XSPEC)
+    QMAKESPEC = $$[QT_HOST_DATA/src]/mkspecs/$$XSPEC
+    export(QMAKESPEC)
+
+    notes = $$cat($$OUT_PWD/.config.notes, lines)
+    !isEmpty(notes): \
+        qtConfAddNote("Also available for $$notes")
+
+    # deviceOptions() below contains conditionals coming form the spec,
+    # so this cannot be delayed for a batch reload.
+    reloadSpec()
+}
+
+defineTest(qtConfOutput_prepareOptions) {
+    $${currentConfig}.output.devicePro += \
+        $$replace(config.input.device-option, "^([^=]+) *= *(.*)$", "\\1 = \\2")
+    darwin:!isEmpty(config.input.sdk) {
+        $${currentConfig}.output.devicePro += \
+            "QMAKE_MAC_SDK = $$val_escape(config.input.sdk)"
+    }
+    android {
+        sdk_root = $$eval(config.input.android-sdk)
+        isEmpty(sdk_root): \
+            sdk_root = $$getenv(ANDROID_SDK_ROOT)
+        isEmpty(sdk_root) {
+            for(ever) {
+                equals(QMAKE_HOST.os, Linux): \
+                    sdk_root = $$(HOME)/Android/Sdk
+                else: equals(QMAKE_HOST.os, Darwin): \
+                    sdk_root = $$(HOME)/Library/Android/sdk
+                else: \
+                    break()
+                !exists($$sdk_root): \
+                    sdk_root =
+                break()
+            }
+        }
+        isEmpty(sdk_root): \
+            qtConfFatalError("Cannot find Android SDK." \
+                             "Please use -android-sdk option to specify one.")
+
+        ndk_root = $$eval(config.input.android-ndk)
+        isEmpty(ndk_root): \
+            ndk_root = $$getenv(ANDROID_NDK_ROOT)
+        isEmpty(ndk_root) {
+            for(ever) {
+                exists($$sdk_root/ndk-bundle) {
+                    ndk_root = $$sdk_root/ndk-bundle
+                    break()
+                }
+                equals(QMAKE_HOST.os, Linux): \
+                    ndk_root = $$(HOME)/Android/Sdk/ndk-bundle
+                else: equals(QMAKE_HOST.os, Darwin): \
+                    ndk_root = $$(HOME)/Library/Android/sdk/ndk-bundle
+                else: \
+                    break()
+                !exists($$ndk_root): \
+                    ndk_root =
+                break()
+            }
+        }
+        isEmpty(ndk_root): \
+            qtConfFatalError("Cannot find Android NDK." \
+                             "Please use -android-ndk option to specify one.")
+
+        ndk_tc_ver = $$eval(config.input.android-toolchain-version)
+        isEmpty(ndk_tc_ver): \
+            ndk_tc_ver = 4.9
+        !exists($$ndk_root/toolchains/arm-linux-androideabi-$$ndk_tc_ver/prebuilt/*): \
+            qtConfFatalError("Cannot detect Android NDK toolchain." \
+                             "Please use -android-toolchain-version to specify it.")
+
+        ndk_tc_pfx = $$ndk_root/toolchains/arm-linux-androideabi-$$ndk_tc_ver/prebuilt
+        ndk_host = $$eval(config.input.android-ndk-host)
+        isEmpty(ndk_host): \
+            ndk_host = $$getenv(ANDROID_NDK_HOST)
+        isEmpty(ndk_host) {
+            equals(QMAKE_HOST.os, Linux) {
+                ndk_host_64 = linux-x86_64
+                ndk_host_32 = linux-x86
+            } else: equals(QMAKE_HOST.os, Darwin) {
+                ndk_host_64 = darwin-x86_64
+                ndk_host_32 = darwin-x86
+            } else: equals(QMAKE_HOST.os, Windows) {
+                ndk_host_64 = windows-x86_64
+                ndk_host_32 = windows
+            } else {
+                qtConfFatalError("Host operating system not supported by Android.")
+            }
+            !exists($$ndk_tc_pfx/$$ndk_host_64/*): ndk_host_64 =
+            !exists($$ndk_tc_pfx/$$ndk_host_32/*): ndk_host_32 =
+            equals(QMAKE_HOST.arch, x86_64):!isEmpty(ndk_host_64) {
+                ndk_host = $$ndk_host_64
+            } else: equals(QMAKE_HOST.arch, x86):!isEmpty(ndk_host_32) {
+                ndk_host = $$ndk_host_32
+            } else {
+                !isEmpty(ndk_host_64): \
+                    ndk_host = $$ndk_host_64
+                else: !isEmpty(ndk_host_32): \
+                    ndk_host = $$ndk_host_32
+                else: \
+                    qtConfFatalError("Cannot detect the Android host." \
+                                     "Please use -android-ndk-host option to specify one.")
+                qtConfAddNotice("Available Android host does not match host architecture.")
+            }
+        } else {
+            !exists($$ndk_tc_pfx/$$ndk_host/*): \
+                qtConfFatalError("Specified Android NDK host is invalid.")
+        }
+
+        target_arch = $$eval(config.input.android-arch)
+        isEmpty(target_arch): \
+            target_arch = armeabi-v7a
+
+        platform = $$eval(config.input.android-ndk-platform)
+        isEmpty(platform): \
+            platform = android-16  ### the windows configure disagrees ...
+
+        $${currentConfig}.output.devicePro += \
+            "DEFAULT_ANDROID_SDK_ROOT = $$val_escape(sdk_root)" \
+            "DEFAULT_ANDROID_NDK_ROOT = $$val_escape(ndk_root)" \
+            "DEFAULT_ANDROID_PLATFORM = $$platform" \
+            "DEFAULT_ANDROID_NDK_HOST = $$ndk_host" \
+            "DEFAULT_ANDROID_TARGET_ARCH = $$target_arch" \
+            "DEFAULT_ANDROID_NDK_TOOLCHAIN_VERSION = $$ndk_tc_ver"
+    }
+
+    export($${currentConfig}.output.devicePro)
+
+    # if any settings were made, the spec will be reloaded later
+    # to make them take effect.
+}
+
+defineTest(qtConfOutput_machineTuple) {
+    $${currentConfig}.output.devicePro += \
+        "GCC_MACHINE_DUMP = $$eval($${currentConfig}.tests.machineTuple.tuple)"
+    export($${currentConfig}.output.devicePro)
+
+    # for completeness, one could reload the spec here,
+    # but no downstream users actually need that.
+}
+
+defineTest(qtConfOutput_commitOptions) {
+    # qdevice.pri needs to be written early, because the compile tests require it.
+    write_file($$QT_BUILD_TREE/mkspecs/qdevice.pri, $${currentConfig}.output.devicePro)|error()
+}
+
+# type (empty or 'host'), option name, default value
+defineTest(processQtPath) {
+    out_var = config.rel_input.$${2}
+    path = $$eval(config.input.$${2})
+    isEmpty(path) {
+        $$out_var = $$3
+    } else {
+        path = $$absolute_path($$path, $$OUT_PWD)
+        rel = $$relative_path($$path, $$eval(config.input.$${1}prefix))
+        isEmpty(rel) {
+            $$out_var = .
+        } else: contains(rel, \.\..*) {
+            !equals(2, sysconfdir) {
+                PREFIX_COMPLAINTS += "-$$2 is not a subdirectory of -$${1}prefix."
+                export(PREFIX_COMPLAINTS)
+                !$$eval(have_$${1}prefix) {
+                    PREFIX_REMINDER = true
+                    export(PREFIX_REMINDER)
+                }
+            }
+            $$out_var = $$path
+        } else {
+            $$out_var = $$rel
+        }
+    }
+    export($$out_var)
+}
+
+defineTest(addConfStr) {
+    QT_CONFIGURE_STR_OFFSETS += "    $$QT_CONFIGURE_STR_OFF,"
+    QT_CONFIGURE_STRS += "    \"$$1\\0\""
+    QT_CONFIGURE_STR_OFF = $$num_add($$QT_CONFIGURE_STR_OFF, $$str_size($$1), 1)
+    export(QT_CONFIGURE_STR_OFFSETS)
+    export(QT_CONFIGURE_STRS)
+    export(QT_CONFIGURE_STR_OFF)
+}
+
+defineReplace(printInstallPath) {
+    val = $$eval(config.rel_input.$$2)
+    equals(val, $$3): return()
+    return("$$1=$$val")
+}
+
+defineReplace(printInstallPaths) {
+    ret = \
+        $$printInstallPath(Documentation, docdir, doc) \
+        $$printInstallPath(Headers, headerdir, include) \
+        $$printInstallPath(Libraries, libdir, lib) \
+        $$printInstallPath(LibraryExecutables, libexecdir, $$DEFAULT_LIBEXEC) \
+        $$printInstallPath(Binaries, bindir, bin) \
+        $$printInstallPath(Plugins, plugindir, plugins) \
+        $$printInstallPath(Imports, importdir, imports) \
+        $$printInstallPath(Qml2Imports, qmldir, qml) \
+        $$printInstallPath(ArchData, archdatadir, .) \
+        $$printInstallPath(Data, datadir, .) \
+        $$printInstallPath(Translations, translationdir, translations) \
+        $$printInstallPath(Examples, examplesdir, examples) \
+        $$printInstallPath(Tests, testsdir, tests)
+    return($$ret)
+}
+
+defineReplace(printHostPaths) {
+    ret = \
+        "HostPrefix=$$config.input.hostprefix" \
+        $$printInstallPath(HostBinaries, hostbindir, bin) \
+        $$printInstallPath(HostLibraries, hostlibdir, lib) \
+        $$printInstallPath(HostData, hostdatadir, .) \
+        "Sysroot=$$config.input.sysroot" \
+        "SysrootifyPrefix=$$qmake_sysrootify" \
+        "TargetSpec=$$XSPEC" \
+        "HostSpec=$$[QMAKE_SPEC]"
+    return($$ret)
+}
+
+defineTest(qtConfOutput_preparePaths) {
+    isEmpty(config.input.prefix) {
+        $$qtConfEvaluate("features.developer-build"): \
+            config.input.prefix = $$QT_BUILD_TREE  # In Development, we use sandboxed builds by default
+        else: \
+            config.input.prefix = /usr/local/Qt-$$[QT_VERSION]
+        have_prefix = false
+    } else {
+        config.input.prefix = $$absolute_path($$config.input.prefix, $$OUT_PWD)
+        have_prefix = true
+    }
+
+    isEmpty(config.input.extprefix) {
+        config.input.extprefix = $$config.input.prefix
+        !isEmpty(config.input.sysroot): \
+            qmake_sysrootify = true
+        else: \
+            qmake_sysrootify = false
+    } else {
+        config.input.extprefix = $$absolute_path($$config.input.extprefix, $$OUT_PWD)
+        qmake_sysrootify = false
+    }
+
+    isEmpty(config.input.hostprefix) {
+        $$qmake_sysrootify: \
+            config.input.hostprefix = $$config.input.sysroot$$config.input.extprefix
+        else: \
+            config.input.hostprefix = $$config.input.extprefix
+        have_hostprefix = false
+    } else {
+        isEqual(config.input.hostprefix, yes): \
+            config.input.hostprefix = $$QT_BUILD_TREE
+        else: \
+            config.input.hostprefix = $$absolute_path($$config.input.hostprefix, $$OUT_PWD)
+        have_hostprefix = true
+    }
+
+    PREFIX_COMPLAINTS =
+    PREFIX_REMINDER = false
+    win32: \
+        DEFAULT_LIBEXEC = bin
+    else: \
+        DEFAULT_LIBEXEC = libexec
+    darwin: \
+        DEFAULT_SYSCONFDIR = /Library/Preferences/Qt
+    else: \
+        DEFAULT_SYSCONFDIR = etc/xdg
+
+    processQtPath("", headerdir, include)
+    processQtPath("", libdir, lib)
+    processQtPath("", bindir, bin)
+    processQtPath("", datadir, .)
+    !equals(config.rel_input.datadir, .): \
+        data_pfx = $$config.rel_input.datadir/
+    processQtPath("", docdir, $${data_pfx}doc)
+    processQtPath("", translationdir, $${data_pfx}translations)
+    processQtPath("", examplesdir, $${data_pfx}examples)
+    processQtPath("", testsdir, tests)
+    processQtPath("", archdatadir, .)
+    !equals(config.rel_input.archdatadir, .): \
+        archdata_pfx = $$config.rel_input.archdatadir/
+    processQtPath("", libexecdir, $${archdata_pfx}$$DEFAULT_LIBEXEC)
+    processQtPath("", plugindir, $${archdata_pfx}plugins)
+    processQtPath("", importdir, $${archdata_pfx}imports)
+    processQtPath("", qmldir, $${archdata_pfx}qml)
+    processQtPath("", sysconfdir, $$DEFAULT_SYSCONFDIR)
+    $$have_hostprefix {
+        processQtPath(host, hostbindir, bin)
+        processQtPath(host, hostlibdir, lib)
+        processQtPath(host, hostdatadir, .)
+    } else {
+        processQtPath(host, hostbindir, $$config.rel_input.bindir)
+        processQtPath(host, hostlibdir, $$config.rel_input.libdir)
+        processQtPath(host, hostdatadir, $$config.rel_input.archdatadir)
+    }
+
+    !isEmpty(PREFIX_COMPLAINTS) {
+        PREFIX_COMPLAINTS = "$$join(PREFIX_COMPLAINTS, "$$escape_expand(\\n)Note: ")"
+        $$PREFIX_REMINDER: \
+            PREFIX_COMPLAINTS += "Maybe you forgot to specify -prefix/-hostprefix?"
+        qtConfAddNote($$PREFIX_COMPLAINTS)
+    }
+
+    # populate qconfig.cpp (for qtcore)
+
+    QT_CONFIGURE_STR_OFF = 0
+    QT_CONFIGURE_STR_OFFSETS =
+    QT_CONFIGURE_STRS =
+
+    addConfStr($$config.rel_input.docdir)
+    addConfStr($$config.rel_input.headerdir)
+    addConfStr($$config.rel_input.libdir)
+    addConfStr($$config.rel_input.libexecdir)
+    addConfStr($$config.rel_input.bindir)
+    addConfStr($$config.rel_input.plugindir)
+    addConfStr($$config.rel_input.importdir)
+    addConfStr($$config.rel_input.qmldir)
+    addConfStr($$config.rel_input.archdatadir)
+    addConfStr($$config.rel_input.datadir)
+    addConfStr($$config.rel_input.translationdir)
+    addConfStr($$config.rel_input.examplesdir)
+    addConfStr($$config.rel_input.testsdir)
+
+    QT_CONFIGURE_STR_OFFSETS_ALL = $$QT_CONFIGURE_STR_OFFSETS
+    QT_CONFIGURE_STRS_ALL = $$QT_CONFIGURE_STRS
+    QT_CONFIGURE_STR_OFFSETS =
+    QT_CONFIGURE_STRS =
+
+    addConfStr($$config.input.sysroot)
+    addConfStr($$qmake_sysrootify)
+    addConfStr($$config.rel_input.hostbindir)
+    addConfStr($$config.rel_input.hostlibdir)
+    addConfStr($$config.rel_input.hostdatadir)
+    addConfStr($$XSPEC)
+    addConfStr($$[QMAKE_SPEC])
+
+    $${currentConfig}.output.qconfigSource = \
+        "/* Installation date */" \
+        "static const char qt_configure_installation     [12+11]  = \"qt_instdate=2012-12-20\";" \
+        "" \
+        "/* Installation Info */" \
+        "static const char qt_configure_prefix_path_str  [12+256] = \"qt_prfxpath=$$config.input.prefix\";" \
+        "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
+        "static const char qt_configure_ext_prefix_path_str   [12+256] = \"qt_epfxpath=$$config.input.extprefix\";" \
+        "static const char qt_configure_host_prefix_path_str  [12+256] = \"qt_hpfxpath=$$config.input.hostprefix\";" \
+        "$${LITERAL_HASH}endif" \
+        "" \
+        "static const short qt_configure_str_offsets[] = {" \
+        $$QT_CONFIGURE_STR_OFFSETS_ALL \
+        "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
+        $$QT_CONFIGURE_STR_OFFSETS \
+        "$${LITERAL_HASH}endif" \
+        "};" \
+        "static const char qt_configure_strs[] =" \
+        $$QT_CONFIGURE_STRS_ALL \
+        "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
+        $$QT_CONFIGURE_STRS \
+        "$${LITERAL_HASH}endif" \
+        ";" \
+        "" \
+        "$${LITERAL_HASH}define QT_CONFIGURE_SETTINGS_PATH \"$$config.rel_input.sysconfdir\"" \
+        "" \
+        "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
+        "$${LITERAL_HASH} define QT_CONFIGURE_SYSROOTIFY_PREFIX $$qmake_sysrootify" \
+        "$${LITERAL_HASH}endif" \
+        "" \
+        "$${LITERAL_HASH}define QT_CONFIGURE_PREFIX_PATH qt_configure_prefix_path_str + 12" \
+        "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
+        "$${LITERAL_HASH} define QT_CONFIGURE_EXT_PREFIX_PATH qt_configure_ext_prefix_path_str + 12" \
+        "$${LITERAL_HASH} define QT_CONFIGURE_HOST_PREFIX_PATH qt_configure_host_prefix_path_str + 12" \
+        "$${LITERAL_HASH}endif"
+    export($${currentConfig}.output.qconfigSource)
+
+    # create bin/qt.conf. this doesn't use the regular file output
+    # mechanism, as the file is relied upon by configure tests.
+
+    cont = \
+        "[EffectivePaths]" \
+        "Prefix=.." \
+        "[DevicePaths]" \
+        "Prefix=$$config.input.prefix" \
+        $$printInstallPaths() \
+        "[Paths]" \
+        "Prefix=$$config.input.extprefix" \
+        $$printInstallPaths() \
+        $$printHostPaths()
+    !equals(QT_SOURCE_TREE, $$QT_BUILD_TREE): \
+        cont += \
+            "[EffectiveSourcePaths]" \
+            "Prefix=$$[QT_INSTALL_PREFIX/src]"
+    write_file($$QT_BUILD_TREE/bin/qt.conf, cont)|error()
+    reload_properties()
+
+    # if a sysroot was configured, the spec will be reloaded later,
+    # as some specs contain $$[SYSROOT] references.
+}
+
+defineTest(qtConfOutput_reloadSpec) {
+    !isEmpty($${currentConfig}.output.devicePro)| \
+            !isEmpty(config.input.sysroot): \
+        reloadSpec()
+
+    # toolchain.prf uses this.
+    dummy = $$qtConfEvaluate("features.cross_compile")
+
+    bypassNesting() {
+        QMAKE_INTERNAL_INCLUDED_FEATURES -= \
+            $$[QT_HOST_DATA/src]/mkspecs/features/mac/toolchain.prf \
+            $$[QT_HOST_DATA/src]/mkspecs/features/toolchain.prf
+        load(toolchain)
+    }
+}
 
 defineTest(qtConfOutput_shared) {
     !$${2}: return()
@@ -279,9 +878,11 @@ defineTest(qtConfOutput_shared) {
 
 defineTest(qtConfOutput_architecture) {
     arch = $$qtConfEvaluate("tests.architecture.arch")
+    buildabi = $$qtConfEvaluate("tests.architecture.buildabi")
 
     $$qtConfEvaluate("features.cross_compile") {
         host_arch = $$qtConfEvaluate("tests.host_architecture.arch")
+        host_buildabi = $$qtConfEvaluate("tests.host_architecture.buildabi")
 
         privatePro = \
             "host_build {" \
@@ -292,16 +893,20 @@ defineTest(qtConfOutput_architecture) {
         publicPro = \
             "host_build {" \
             "    QT_ARCH = $$host_arch" \
+            "    QT_BUILDABI = $$host_buildabi" \
             "    QT_TARGET_ARCH = $$arch" \
+            "    QT_TARGET_BUILDABI = $$buildabi" \
             "} else {" \
             "    QT_ARCH = $$arch" \
+            "    QT_BUILDABI = $$buildabi" \
             "}"
 
     } else {
         privatePro = \
             "QT_CPU_FEATURES.$$arch = $$qtConfEvaluate('tests.architecture.subarch')"
         publicPro = \
-            "QT_ARCH = $$arch"
+            "QT_ARCH = $$arch" \
+            "QT_BUILDABI = $$buildabi"
     }
 
     $${currentConfig}.output.publicPro += $$publicPro
@@ -344,6 +949,14 @@ defineTest(qtConfOutput_pkgConfig) {
     }
 }
 
+defineTest(qtConfOutput_crossCompile) {
+    !$${2}: return()
+
+    # We need to preempt the output here, as subsequent tests rely on it
+    CONFIG += cross_compile
+    export(CONFIG)
+}
+
 defineTest(qtConfOutput_useGoldLinker) {
     !$${2}: return()
 
@@ -362,25 +975,6 @@ defineTest(qtConfOutput_debugAndRelease) {
         $${2}: qtConfOutputVar(append, "publicPro", "QT_CONFIG", "debug")
         qtConfOutputVar(append, "publicPro", "QT_CONFIG", "release")
     }
-}
-
-defineTest(qtConfOutput_compilerVersion) {
-    !$${2}: return()
-
-    name = $$upper($$eval($${currentConfig}.tests.compiler.compilerId))
-    version = $$eval($${currentConfig}.tests.compiler.compilerVersion)
-    major = $$section(version, '.', 0, 0)
-    minor = $$section(version, '.', 1, 1)
-    patch = $$section(version, '.', 2, 2)
-    isEmpty(minor): minor = 0
-    isEmpty(patch): patch = 0
-
-    $${currentConfig}.output.publicPro += \
-        "QT_$${name}_MAJOR_VERSION = $$major" \
-        "QT_$${name}_MINOR_VERSION = $$minor" \
-        "QT_$${name}_PATCH_VERSION = $$patch"
-
-    export($${currentConfig}.output.publicPro)
 }
 
 defineTest(qtConfOutput_compilerFlags) {
@@ -447,7 +1041,7 @@ defineTest(qtConfOutput_gccSysroot) {
 defineTest(qtConfOutput_qmakeArgs) {
     !$${2}: return()
 
-    $${currentConfig}.output.privatePro = "!host_build {"
+    $${currentConfig}.output.privatePro = "!host_build|!cross_compile {"
     for (a, config.input.qmakeArgs) {
         $${currentConfig}.output.privatePro += "    $$a"
         EXTRA_QMAKE_ARGS += $$system_quote($$a)
@@ -476,6 +1070,15 @@ defineReplace(qtConfOutputPostProcess_publicPro) {
             "QT_LICHECK = $$config.input.qt_licheck" \
             "QT_RELEASE_DATE = $$config.input.qt_release_date"
     }
+
+    return($$output)
+}
+
+defineReplace(qtConfOutputPostProcess_privatePro) {
+    output = $$1
+
+    !isEmpty(config.input.external-hostbindir): \
+        output += "HOST_QT_TOOLS = $$val_escape(config.input.external-hostbindir)"
 
     return($$output)
 }
@@ -510,12 +1113,19 @@ defineTest(qtConfReport_buildParts) {
     qtConfReportPadded($${1}, $$qtConfEvaluate("tests.build_parts.value"))
 }
 
+defineReplace(qtConfReportArch) {
+    arch = $$qtConfEvaluate('tests.$${1}.arch')
+    subarch = $$qtConfEvaluate('tests.$${1}.subarch')
+    isEmpty(subarch): subarch = <none>
+    return("$$arch, CPU features: $$subarch")
+}
+
 defineTest(qtConfReport_buildTypeAndConfig) {
     !$$qtConfEvaluate("features.cross_compile") {
-        qtConfAddReport("Build type: $$qtConfEvaluate('tests.architecture.arch')")
+        qtConfAddReport("Build type: $$[QMAKE_SPEC] ($$qtConfReportArch(architecture))")
     } else {
-        qtConfAddReport("Building on:  $$qtConfEvaluate('tests.host_architecture.arch')")
-        qtConfAddReport("Building for: $$qtConfEvaluate('tests.architecture.arch')")
+        qtConfAddReport("Building on: $$[QMAKE_SPEC] ($$qtConfReportArch(host_architecture))")
+        qtConfAddReport("Building for: $$[QMAKE_XSPEC] ($$qtConfReportArch(architecture))")
     }
     qtConfAddReport()
     qtConfAddReport("Configuration: $$eval($${currentConfig}.output.privatePro.append.CONFIG) $$eval($${currentConfig}.output.publicPro.append.QT_CONFIG)")
@@ -553,5 +1163,21 @@ QMAKE_POST_CONFIGURE += \
     "include(\$\$[QT_HOST_DATA/get]/mkspecs/qconfig.pri)" \
     "include(\$\$[QT_HOST_DATA/get]/mkspecs/qmodule.pri)"
 
-# load and process input from configure.sh/.exe
-include($$shadowed($$PWD)/config.tests/configure.cfg)
+defineTest(createConfigStatus) {
+    $$QMAKE_REDO_CONFIG: return()
+    cfg = $$relative_path($$_PRO_FILE_PWD_/configure, $$OUT_PWD)
+    ext =
+    equals(QMAKE_HOST.os, Windows) {
+        ext = .bat
+        cont = \
+            "$$system_quote($$system_path($$cfg)$$ext) -redo %*"
+    } else {
+        cont = \
+            "$${LITERAL_HASH}!/bin/sh" \
+            "exec $$system_quote($$cfg) -redo \"$@\""
+    }
+    write_file($$OUT_PWD/config.status$$ext, cont, exe)|error()
+}
+
+QMAKE_POST_CONFIGURE += \
+    "createConfigStatus()"

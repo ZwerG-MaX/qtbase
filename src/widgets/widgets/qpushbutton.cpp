@@ -40,8 +40,9 @@
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qdesktopwidget.h"
-#include "qdialog.h"
+#if QT_CONFIG(dialog)
 #include <private/qdialog_p.h>
+#endif
 #include "qdrawutil.h"
 #include "qevent.h"
 #include "qfontmetrics.h"
@@ -55,7 +56,9 @@
 #include "qtoolbar.h"
 #include "qdebug.h"
 #include "qlayoutitem.h"
+#if QT_CONFIG(dialogbuttonbox)
 #include "qdialogbuttonbox.h"
+#endif
 #if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include "private/qmacstyle_mac_p.h"
 #include "private/qmacstyle_mac_p_p.h"
@@ -290,6 +293,7 @@ QPushButton::~QPushButton()
 {
 }
 
+#if QT_CONFIG(dialog)
 QDialog *QPushButtonPrivate::dialogParent() const
 {
     Q_Q(const QPushButton);
@@ -301,6 +305,7 @@ QDialog *QPushButtonPrivate::dialogParent() const
     }
     return 0;
 }
+#endif
 
 /*!
     Initialize \a option with the values from this QPushButton. This method is useful
@@ -364,10 +369,12 @@ void QPushButton::setDefault(bool enable)
     if (d->defaultButton == enable)
         return;
     d->defaultButton = enable;
+#if QT_CONFIG(dialog)
     if (d->defaultButton) {
         if (QDialog *dlg = d->dialogParent())
             dlg->d_func()->setMainDefault(this);
     }
+#endif
     update();
 #ifndef QT_NO_ACCESSIBILITY
     QAccessible::State s;
@@ -400,8 +407,7 @@ QSize QPushButton::sizeHint() const
     initStyleOption(&opt);
 
     // calculate contents size...
-#ifndef QT_NO_ICON
-
+#if !defined(QT_NO_ICON) && QT_CONFIG(dialogbuttonbox)
     bool showButtonBoxIcons = qobject_cast<QDialogButtonBox*>(parentWidget())
                           && style()->styleHint(QStyle::SH_DialogButtonBox_ButtonsHaveIcons);
 
@@ -477,9 +483,11 @@ void QPushButton::focusInEvent(QFocusEvent *e)
     Q_D(QPushButton);
     if (e->reason() != Qt::PopupFocusReason && autoDefault() && !d->defaultButton) {
         d->defaultButton = true;
+#if QT_CONFIG(dialog)
         QDialog *dlg = qobject_cast<QDialog*>(window());
         if (dlg)
             dlg->d_func()->setDefault(this);
+#endif
     }
     QAbstractButton::focusInEvent(e);
 }
@@ -491,11 +499,13 @@ void QPushButton::focusOutEvent(QFocusEvent *e)
 {
     Q_D(QPushButton);
     if (e->reason() != Qt::PopupFocusReason && autoDefault() && d->defaultButton) {
+#if QT_CONFIG(dialog)
         QDialog *dlg = qobject_cast<QDialog*>(window());
         if (dlg)
             dlg->d_func()->setDefault(0);
         else
             d->defaultButton = false;
+#endif
     }
 
     QAbstractButton::focusOutEvent(e);
@@ -607,19 +617,21 @@ QPoint QPushButtonPrivate::adjustedMenuPosition()
     QPoint globalPos = q->mapToGlobal(rect.topLeft());
     int x = globalPos.x();
     int y = globalPos.y();
+    const QRect availableGeometry = QApplication::desktop()->availableGeometry(q);
     if (horizontal) {
-        if (globalPos.y() + rect.height() + menuSize.height() <= QApplication::desktop()->availableGeometry(q).height()) {
+        if (globalPos.y() + rect.height() + menuSize.height() <= availableGeometry.bottom()) {
             y += rect.height();
-        } else {
+        } else if (globalPos.y() - menuSize.height() >= availableGeometry.y()) {
             y -= menuSize.height();
         }
         if (q->layoutDirection() == Qt::RightToLeft)
             x += rect.width() - menuSize.width();
     } else {
-        if (globalPos.x() + rect.width() + menu->sizeHint().width() <= QApplication::desktop()->availableGeometry(q).width())
+        if (globalPos.x() + rect.width() + menu->sizeHint().width() <= availableGeometry.right()) {
             x += rect.width();
-        else
+        } else if (globalPos.x() - menuSize.width() >= availableGeometry.x()) {
             x -= menuSize.width();
+        }
     }
 
     return QPoint(x,y);
@@ -658,10 +670,12 @@ bool QPushButton::event(QEvent *e)
 {
     Q_D(QPushButton);
     if (e->type() == QEvent::ParentChange) {
+#if QT_CONFIG(dialog)
         if (QDialog *dialog = d->dialogParent()) {
             if (d->defaultButton)
                 dialog->d_func()->setMainDefault(this);
         }
+#endif
     } else if (e->type() == QEvent::StyleChange
 #ifdef Q_OS_MAC
                || e->type() == QEvent::MacSizeChange
@@ -676,7 +690,7 @@ bool QPushButton::event(QEvent *e)
 }
 
 #if 0 // Used to be included in Qt4 for Q_WS_MAC
-/*! \reimp */
+/* \reimp */
 bool QPushButton::hitButton(const QPoint &pos) const
 {
     QStyleOptionButton opt;

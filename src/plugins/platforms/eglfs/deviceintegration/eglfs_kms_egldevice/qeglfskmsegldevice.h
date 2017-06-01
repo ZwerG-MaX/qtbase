@@ -45,25 +45,25 @@
 QT_BEGIN_NAMESPACE
 
 class QPlatformCursor;
+class QEglFSKmsEglDeviceIntegration;
 
 class QEglFSKmsEglDevice: public QEglFSKmsDevice
 {
 public:
-    QEglFSKmsEglDevice(QEglFSKmsIntegration *integration, const QString &path);
+    QEglFSKmsEglDevice(QEglFSKmsEglDeviceIntegration *devInt, QKmsScreenConfig *screenConfig, const QString &path);
 
-    virtual bool open() Q_DECL_OVERRIDE;
-    virtual void close() Q_DECL_OVERRIDE;
+    bool open() override;
+    void close() override;
 
-    virtual EGLNativeDisplayType nativeDisplay() const Q_DECL_OVERRIDE;
+    void *nativeDisplay() const override;
 
-    virtual QEglFSKmsScreen *createScreen(QEglFSKmsIntegration *integration,
-                                          QEglFSKmsDevice *device,
-                                          QEglFSKmsOutput output) Q_DECL_OVERRIDE;
+    QPlatformScreen *createScreen(const QKmsOutput &output) override;
 
     QPlatformCursor *globalCursor() { return m_globalCursor; }
     void destroyGlobalCursor();
 
 private:
+    QEglFSKmsEglDeviceIntegration *m_devInt;
     QPlatformCursor *m_globalCursor;
 };
 

@@ -43,13 +43,13 @@
 #include "qcoreapplication.h"
 #include "qpluginloader.h"
 #include <qfileinfo.h>
-#include "qlibrary_p.h"
+#include "qfactoryloader_p.h"
 #include "qdebug.h"
 #include "qdir.h"
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
 
 /*!
     \class QPluginLoader
@@ -417,7 +417,7 @@ QLibrary::LoadHints QPluginLoader::loadHints() const
     return d ? d->loadHints() : QLibrary::LoadHints();
 }
 
-#endif // QT_NO_LIBRARY
+#endif // QT_CONFIG(library)
 
 typedef QVector<QStaticPlugin> StaticPluginList;
 Q_GLOBAL_STATIC(StaticPluginList, staticPluginList)

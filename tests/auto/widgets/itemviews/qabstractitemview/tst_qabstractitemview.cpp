@@ -45,6 +45,7 @@
 #include <qpushbutton.h>
 #include <qscrollbar.h>
 #include <qboxlayout.h>
+#include <qitemdelegate.h>
 #include <qlineedit.h>
 #include <qscreen.h>
 #include <qscopedpointer.h>
@@ -52,6 +53,7 @@
 #include <qstringlistmodel.h>
 #include <qsortfilterproxymodel.h>
 #include <qproxystyle.h>
+#include <qdialog.h>
 
 static inline void setFrameless(QWidget *w)
 {
@@ -149,6 +151,8 @@ private slots:
     void QTBUG50535_update_on_new_selection_model();
     void testSelectionModelInSyncWithView();
     void testClickToSelect();
+    void testDialogAsEditor();
+    void QTBUG46785_mouseout_hover_state();
 };
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -171,6 +175,29 @@ public:
     mutable bool calledVirtualDtor;
     mutable QWidget *openedEditor;
     QSize size;
+};
+
+class DialogItemDelegate : public QStyledItemDelegate
+{
+public:
+    DialogItemDelegate() : QStyledItemDelegate() { }
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &) const
+    {
+        openedEditor = new QDialog(parent);
+        return openedEditor;
+    }
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
+    {
+        Q_UNUSED(model)
+        Q_UNUSED(index)
+
+        QDialog *dialog = qobject_cast<QDialog *>(editor);
+        result = static_cast<QDialog::DialogCode>(dialog->result());
+    }
+
+    mutable QDialog::DialogCode result;
+    mutable QDialog *openedEditor;
 };
 
 // Testing get/set functions
@@ -558,7 +585,7 @@ void tst_QAbstractItemView::noModel()
     view.setModel(0);
     // Due to the model is removed, this will generate a valueChanged signal on both scrollbars. (value to 0)
     QApplication::processEvents();
-    QCOMPARE(view.model(), (QAbstractItemModel*)0);
+    QCOMPARE(view.model(), nullptr);
 }
 
 void tst_QAbstractItemView::dragSelect()
@@ -1567,7 +1594,7 @@ void tst_QAbstractItemView::testChangeEditorState()
 
     QTableView view;
     view.setEditTriggers(QAbstractItemView::CurrentChanged);
-    view.setItemDelegate(new StateChangeDelegate);
+    view.setItemDelegate(new StateChangeDelegate(&view));
     view.setModel(&model);
     centerOnScreen(&view);
     moveCursorAway(&view);
@@ -1941,7 +1968,8 @@ void tst_QAbstractItemView::QTBUG50102_SH_ItemView_ScrollMode()
     QCOMPARE(view.horizontalScrollMode(), styleScrollMode);
 
     // Change style, get new value
-    view.setStyle(new ScrollModeProxyStyle(styleScrollMode));
+    ScrollModeProxyStyle proxyStyle1(styleScrollMode);
+    view.setStyle(&proxyStyle1);
     auto proxyScrollMode = static_cast<QAbstractItemView::ScrollMode>(view.style()->styleHint(QStyle::SH_ItemView_ScrollMode, 0, &view, 0));
     QVERIFY(styleScrollMode != proxyScrollMode);
     QCOMPARE(view.verticalScrollMode(), proxyScrollMode);
@@ -1953,7 +1981,8 @@ void tst_QAbstractItemView::QTBUG50102_SH_ItemView_ScrollMode()
     QCOMPARE(view.horizontalScrollMode(), proxyScrollMode);
 
     // Change style, won't change value for vertical, will change for horizontal
-    view.setStyle(new ScrollModeProxyStyle(proxyScrollMode));
+    ScrollModeProxyStyle proxyStyle2(proxyScrollMode);
+    view.setStyle(&proxyStyle2);
     QCOMPARE(view.verticalScrollMode(), proxyScrollMode);
     QCOMPARE(view.horizontalScrollMode(), styleScrollMode);
 }
@@ -2152,6 +2181,89 @@ void tst_QAbstractItemView::testClickToSelect()
     QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, nearCenterA);
     QCOMPARE(spy.count(), 2);
     QCOMPARE(spy.back().front().value<QRect>(), QRect(nearCenterA, QSize(1, 1)));
+}
+
+void tst_QAbstractItemView::testDialogAsEditor()
+{
+    DialogItemDelegate delegate;
+
+    QStandardItemModel model;
+    model.appendRow(new QStandardItem(QStringLiteral("editme")));
+
+    QListView view;
+    view.setItemDelegate(&delegate);
+    view.setModel(&model);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    view.edit(model.index(0,0));
+
+    QVERIFY(QTest::qWaitForWindowExposed(delegate.openedEditor));
+
+    delegate.openedEditor->reject();
+    QApplication::processEvents();
+
+    QCOMPARE(delegate.result, QDialog::Rejected);
+
+    view.edit(model.index(0,0));
+
+    QVERIFY(QTest::qWaitForWindowExposed(delegate.openedEditor));
+
+    delegate.openedEditor->accept();
+    QApplication::processEvents();
+
+    QCOMPARE(delegate.result, QDialog::Accepted);
+}
+
+class HoverItemDelegate : public QItemDelegate
+{
+public:
+    HoverItemDelegate()
+        : QItemDelegate()
+        , m_paintedWithoutHover(false)
+    { }
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &opt, const QModelIndex &index) const override
+    {
+        Q_UNUSED(painter);
+
+        if (!(opt.state & QStyle::State_MouseOver)) {
+
+            // We don't want to set m_paintedWithoutHover for any item so check for the item at 0,0
+            if (index.row() == 0 && index.column() == 0) {
+                m_paintedWithoutHover = true;
+            }
+        }
+    }
+
+    mutable bool m_paintedWithoutHover;
+};
+
+void tst_QAbstractItemView::QTBUG46785_mouseout_hover_state()
+{
+    HoverItemDelegate delegate;
+
+    QTableWidget table(5, 5);
+    table.verticalHeader()->hide();
+    table.horizontalHeader()->hide();
+    table.setMouseTracking(true);
+    table.setItemDelegate(&delegate);
+    centerOnScreen(&table);
+    table.show();
+    QVERIFY(QTest::qWaitForWindowActive(&table));
+
+    QModelIndex item = table.model()->index(0, 0);
+    QRect itemRect = table.visualRect(item);
+
+    // Move the mouse into the center of the item at 0,0 to cause a paint event to occur
+    QTest::mouseMove(table.viewport(), itemRect.center());
+    QTest::mouseClick(table.viewport(), Qt::LeftButton, 0, itemRect.center());
+
+    delegate.m_paintedWithoutHover = false;
+
+    QTest::mouseMove(table.viewport(), QPoint(-50, 0));
+
+    QTRY_VERIFY(delegate.m_paintedWithoutHover);
 }
 
 QTEST_MAIN(tst_QAbstractItemView)

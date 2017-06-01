@@ -42,6 +42,7 @@
 #include "qxcbscreen.h"
 #include "qxcbwindow.h"
 #include "qtouchdevice.h"
+#include "QtCore/qmetaobject.h"
 #include <qpa/qwindowsysteminterface_p.h>
 #include <QDebug>
 #include <cmath>
@@ -52,22 +53,16 @@
 #include <X11/extensions/XI2proto.h>
 
 struct XInput2TouchDeviceData {
-    XInput2TouchDeviceData()
-    : xiDeviceInfo(0)
-    , qtTouchDevice(0)
-    , providesTouchOrientation(false)
-    {
-    }
-    XIDeviceInfo *xiDeviceInfo;
-    QTouchDevice *qtTouchDevice;
+    XIDeviceInfo *xiDeviceInfo = nullptr;
+    QTouchDevice *qtTouchDevice = nullptr;
     QHash<int, QWindowSystemInterface::TouchPoint> touchPoints;
+    QHash<int, QPointF> pointPressedPosition; // in screen coordinates where each point was pressed
 
     // Stuff that is relevant only for touchpads
-    QHash<int, QPointF> pointPressedPosition; // in screen coordinates where each point was pressed
     QPointF firstPressedPosition;        // in screen coordinates where the first point was pressed
     QPointF firstPressedNormalPosition;  // device coordinates (0 to 1, 0 to 1) where the first point was pressed
     QSizeF size;                         // device size in mm
-    bool providesTouchOrientation;
+    bool providesTouchOrientation = false;
 };
 
 void QXcbConnection::initializeXInput2()
@@ -80,7 +75,7 @@ void QXcbConnection::initializeXInput2()
     Display *xDisplay = static_cast<Display *>(m_xlib_display);
     if (XQueryExtension(xDisplay, "XInputExtension", &m_xiOpCode, &m_xiEventBase, &m_xiErrorBase)) {
         int xiMajor = 2;
-        m_xi2Minor = 2; // try 2.2 first, needed for TouchBegin/Update/End
+        // try 2.2 first, needed for TouchBegin/Update/End
         if (XIQueryVersion(xDisplay, &xiMajor, &m_xi2Minor) == BadRequest) {
             m_xi2Minor = 1; // for smooth scrolling 2.1 is enough
             if (XIQueryVersion(xDisplay, &xiMajor, &m_xi2Minor) == BadRequest) {
@@ -93,6 +88,7 @@ void QXcbConnection::initializeXInput2()
         if (m_xi2Enabled) {
 #ifdef XCB_USE_XINPUT22
             qCDebug(lcQpaXInputDevices, "XInput version %d.%d is available and Qt supports 2.2 or greater", xiMajor, m_xi2Minor);
+            m_startSystemResizeInfo.window = XCB_NONE;
 #else
             qCDebug(lcQpaXInputDevices, "XInput version %d.%d is available and Qt supports 2.0", xiMajor, m_xi2Minor);
 #endif
@@ -213,6 +209,8 @@ void QXcbConnection::xi2SetupDevices()
             isTablet = true;
             tabletData.pointerType = QTabletEvent::Cursor;
             dbgType = QLatin1String("cursor");
+        } else if (name.contains("wacom") && name.contains("finger touch")) {
+            isTablet = false;
         } else if ((name.contains("pen") || name.contains("stylus")) && isTablet) {
             tabletData.pointerType = QTabletEvent::Pen;
             dbgType = QLatin1String("pen");
@@ -229,6 +227,9 @@ void QXcbConnection::xi2SetupDevices()
             // other "Genius" tablets
             // WALTOP International Corp. Slim Tablet
             isTablet = true;
+            tabletData.pointerType = QTabletEvent::Pen;
+            dbgType = QLatin1String("pen");
+        } else if (name.contains("uc-logic") && isTablet) {
             tabletData.pointerType = QTabletEvent::Pen;
             dbgType = QLatin1String("pen");
         } else {
@@ -443,10 +444,10 @@ XInput2TouchDeviceData *QXcbConnection::touchDeviceForId(int id)
                     dev->size.setHeight((vci->max - vci->min) * 1000.0 / vciResolution);
                 } else if (vci->label == atom(QXcbAtom::AbsX)) {
                     caps |= QTouchDevice::Position;
-                    dev->size.setHeight((vci->max - vci->min) * 1000.0 / vciResolution);
+                    dev->size.setWidth((vci->max - vci->min) * 1000.0 / vciResolution);
                 } else if (vci->label == atom(QXcbAtom::AbsY)) {
                     caps |= QTouchDevice::Position;
-                    dev->size.setWidth((vci->max - vci->min) * 1000.0 / vciResolution);
+                    dev->size.setHeight((vci->max - vci->min) * 1000.0 / vciResolution);
                 }
                 break;
             }
@@ -714,7 +715,21 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
             touchPoint.state = Qt::TouchPointMoved;
         } else if (touchPoint.area.center() != QPoint(x, y)) {
             touchPoint.state = Qt::TouchPointMoved;
-            dev->pointPressedPosition[touchPoint.id] = QPointF(x, y);
+            if (dev->qtTouchDevice->type() == QTouchDevice::TouchPad)
+                dev->pointPressedPosition[touchPoint.id] = QPointF(x, y);
+        }
+
+        if (dev->qtTouchDevice->type() == QTouchDevice::TouchScreen &&
+            xiDeviceEvent->event == m_startSystemResizeInfo.window &&
+            xiDeviceEvent->sourceid == m_startSystemResizeInfo.deviceid &&
+            xiDeviceEvent->detail == m_startSystemResizeInfo.pointid) {
+            QXcbWindow *window = platformWindowFromId(m_startSystemResizeInfo.window);
+            if (window) {
+                XIAllowTouchEvents(static_cast<Display *>(m_xlib_display), xiDeviceEvent->deviceid,
+                                   xiDeviceEvent->detail, xiDeviceEvent->event, XIRejectTouch);
+                window->doStartSystemResize(QPoint(x, y), m_startSystemResizeInfo.corner);
+                m_startSystemResizeInfo.window = XCB_NONE;
+            }
         }
         break;
     case XI_TouchEnd:
@@ -735,7 +750,8 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
     if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
         qCDebug(lcQpaXInputEvents) << "   touchpoint "  << touchPoint.id << " state " << touchPoint.state << " pos norm " << touchPoint.normalPosition <<
             " area " << touchPoint.area << " pressure " << touchPoint.pressure;
-    QWindowSystemInterface::handleTouchEvent(platformWindow->window(), xiDeviceEvent->time, dev->qtTouchDevice, dev->touchPoints.values());
+    Qt::KeyboardModifiers modifiers = keyboard()->translateModifiers(xiDeviceEvent->mods.effective_mods);
+    QWindowSystemInterface::handleTouchEvent(platformWindow->window(), xiDeviceEvent->time, dev->qtTouchDevice, dev->touchPoints.values(), modifiers);
     if (touchPoint.state == Qt::TouchPointReleased)
         // If a touchpoint was released, we can forget it, because the ID won't be reused.
         dev->touchPoints.remove(touchPoint.id);
@@ -743,6 +759,27 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
         // Make sure that we don't send TouchPointPressed/Moved in more than one QTouchEvent
         // with this touch point if the next XI2 event is about a different touch point.
         touchPoint.state = Qt::TouchPointStationary;
+}
+
+bool QXcbConnection::startSystemResizeForTouchBegin(xcb_window_t window, const QPoint &point, Qt::Corner corner)
+{
+    QHash<int, XInput2TouchDeviceData*>::const_iterator devIt = m_touchDevices.constBegin();
+    for (; devIt != m_touchDevices.constEnd(); ++devIt) {
+        XInput2TouchDeviceData *deviceData = devIt.value();
+        if (deviceData->qtTouchDevice->type() == QTouchDevice::TouchScreen) {
+            QHash<int, QPointF>::const_iterator pointIt = deviceData->pointPressedPosition.constBegin();
+            for (; pointIt != deviceData->pointPressedPosition.constEnd(); ++pointIt) {
+                if (pointIt.value().toPoint() == point) {
+                    m_startSystemResizeInfo.window = window;
+                    m_startSystemResizeInfo.deviceid = devIt.key();
+                    m_startSystemResizeInfo.pointid = pointIt.key();
+                    m_startSystemResizeInfo.corner = corner;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
@@ -989,6 +1026,14 @@ Qt::MouseButton QXcbConnection::xiToQtMouseButton(uint32_t b)
     return Qt::NoButton;
 }
 
+bool QXcbConnection::isTouchScreen(int id) const
+{
+    auto device = m_touchDevices.value(id);
+    return device && device->qtTouchDevice
+        && device->qtTouchDevice->type() == QTouchDevice::TouchScreen;
+}
+
+#if QT_CONFIG(tabletevent)
 static QTabletEvent::TabletDevice toolIdToTabletDevice(quint32 toolId) {
     // keep in sync with wacom_intuos_inout() in Linux kernel driver wacom_wac.c
     switch (toolId) {
@@ -1022,7 +1067,18 @@ static QTabletEvent::TabletDevice toolIdToTabletDevice(quint32 toolId) {
     return QTabletEvent::Stylus;  // Safe default assumption if nonzero
 }
 
-#ifndef QT_NO_TABLETEVENT
+static const char *toolName(QTabletEvent::TabletDevice tool) {
+    static const QMetaObject *metaObject = qt_getEnumMetaObject(tool);
+    static const QMetaEnum me = metaObject->enumerator(metaObject->indexOfEnumerator(qt_getEnumName(tool)));
+    return me.valueToKey(tool);
+}
+
+static const char *pointerTypeName(QTabletEvent::PointerType ptype) {
+    static const QMetaObject *metaObject = qt_getEnumMetaObject(ptype);
+    static const QMetaEnum me = metaObject->enumerator(metaObject->indexOfEnumerator(qt_getEnumName(ptype)));
+    return me.valueToKey(ptype);
+}
+
 bool QXcbConnection::xi2HandleTabletEvent(const void *event, TabletData *tabletData)
 {
     bool handled = true;
@@ -1044,10 +1100,7 @@ bool QXcbConnection::xi2HandleTabletEvent(const void *event, TabletData *tabletD
         break;
     }
     case XI_Motion:
-        // Report TabletMove only when the stylus is touching the tablet or any button is pressed.
-        // TODO: report proximity (hover) motion (no suitable Qt event exists yet).
-        if (tabletData->buttons != Qt::NoButton)
-            xi2ReportTabletEvent(xiEvent, tabletData);
+        xi2ReportTabletEvent(xiEvent, tabletData);
         break;
     case XI_PropertyEvent: {
         // This is the wacom driver's way of reporting tool proximity.
@@ -1099,9 +1152,9 @@ bool QXcbConnection::xi2HandleTabletEvent(const void *event, TabletData *tabletD
                         // TODO maybe have a hash of tabletData->deviceId to device data so we can
                         // look up the tablet name here, and distinguish multiple tablets
                         if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
-                            qCDebug(lcQpaXInputEvents, "XI2 proximity change on tablet %d (USB %x): last tool: %x id %x current tool: %x id %x TabletDevice %d",
+                            qCDebug(lcQpaXInputEvents, "XI2 proximity change on tablet %d (USB %x): last tool: %x id %x current tool: %x id %x %s",
                                     tabletData->deviceId, ptr[_WACSER_USB_ID], ptr[_WACSER_LAST_TOOL_SERIAL], ptr[_WACSER_LAST_TOOL_ID],
-                                    ptr[_WACSER_TOOL_SERIAL], ptr[_WACSER_TOOL_ID], tabletData->tool);
+                                    ptr[_WACSER_TOOL_SERIAL], ptr[_WACSER_TOOL_ID], toolName(tabletData->tool));
                     }
                     XFree(data);
                 }
@@ -1124,9 +1177,9 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
     if (!xcbWindow)
         return;
     QWindow *window = xcbWindow->window();
-    const double scale = 65536.0;
-    QPointF local(ev->event_x / scale, ev->event_y / scale);
-    QPointF global(ev->root_x / scale, ev->root_y / scale);
+    const Qt::KeyboardModifiers modifiers = keyboard()->translateModifiers(ev->mods.effective_mods);
+    QPointF local(fixed1616ToReal(ev->event_x), fixed1616ToReal(ev->event_y));
+    QPointF global(fixed1616ToReal(ev->root_x), fixed1616ToReal(ev->root_y));
     double pressure = 0, rotation = 0, tangentialPressure = 0;
     int xTilt = 0, yTilt = 0;
 
@@ -1164,18 +1217,18 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
     }
 
     if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
-        qCDebug(lcQpaXInputEvents, "XI2 event on tablet %d with tool %d type %d seq %d detail %d time %d "
-            "pos %6.1f, %6.1f root pos %6.1f, %6.1f buttons 0x%x pressure %4.2lf tilt %d, %d rotation %6.2lf",
-            tabletData->deviceId, tabletData->tool, ev->evtype, ev->sequenceNumber, ev->detail, ev->time,
-            fixed1616ToReal(ev->event_x), fixed1616ToReal(ev->event_y),
-            fixed1616ToReal(ev->root_x), fixed1616ToReal(ev->root_y),
-            (int)tabletData->buttons, pressure, xTilt, yTilt, rotation);
+        qCDebug(lcQpaXInputEvents, "XI2 event on tablet %d with tool %s type %s seq %d detail %d time %d "
+            "pos %6.1f, %6.1f root pos %6.1f, %6.1f buttons 0x%x pressure %4.2lf tilt %d, %d rotation %6.2lf modifiers 0x%x",
+            tabletData->deviceId, toolName(tabletData->tool), pointerTypeName(tabletData->pointerType),
+            ev->sequenceNumber, ev->detail, ev->time,
+            local.x(), local.y(), global.x(), global.y(),
+            (int)tabletData->buttons, pressure, xTilt, yTilt, rotation, (int)modifiers);
 
     QWindowSystemInterface::handleTabletEvent(window, ev->time, local, global,
                                               tabletData->tool, tabletData->pointerType,
                                               tabletData->buttons, pressure,
                                               xTilt, yTilt, tangentialPressure,
-                                              rotation, 0, tabletData->serialId);
+                                              rotation, 0, tabletData->serialId, modifiers);
 }
 
 QXcbConnection::TabletData *QXcbConnection::tabletDataForDevice(int id)

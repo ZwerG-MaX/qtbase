@@ -1,11 +1,13 @@
 CONFIG += testcase
-CONFIG -= app_bundle debug_and_release_target
+CONFIG -= debug_and_release_target
 QT = core-private core testlib
 qtHaveModule(network): QT += network
 else: DEFINES += QT_NO_NETWORK
 
 TARGET = ../tst_qfile
 SOURCES = ../tst_qfile.cpp
+INCLUDEPATH += ../../../../../shared/
+HEADERS += ../../../../../shared/emulationdetector.h
 
 RESOURCES += ../qfile.qrc ../rename-fallback.qrc ../copy-fallback.qrc
 

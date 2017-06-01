@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtFontDatabaseSupport/private/qbasicfontdatabase_p.h>
+#include <QtFontDatabaseSupport/private/qfreetypefontdatabase_p.h>
 #include <QtCore/QLoggingCategory>
 
 struct IDWriteFontFile;
@@ -67,19 +67,19 @@ struct FontDescription
     QByteArray uuid;
 };
 
-class QWinRTFontDatabase : public QBasicFontDatabase
+class QWinRTFontDatabase : public QFreeTypeFontDatabase
 {
 public:
-    QString fontDir() const;
     ~QWinRTFontDatabase();
-    QFont defaultFont() const Q_DECL_OVERRIDE;
-    bool fontsAlwaysScalable() const Q_DECL_OVERRIDE;
-    void populateFontDatabase() Q_DECL_OVERRIDE;
-    void populateFamily(const QString &familyName) Q_DECL_OVERRIDE;
-    QFontEngine *fontEngine(const QFontDef &fontDef, void *handle) Q_DECL_OVERRIDE;
+    QString fontDir() const override;
+    QFont defaultFont() const override;
+    bool fontsAlwaysScalable() const override;
+    void populateFontDatabase() override;
+    void populateFamily(const QString &familyName) override;
+    QFontEngine *fontEngine(const QFontDef &fontDef, void *handle) override;
     QStringList fallbacksForFamily(const QString &family, QFont::Style style,
-                                   QFont::StyleHint styleHint, QChar::Script script) const Q_DECL_OVERRIDE;
-    void releaseHandle(void *handle) Q_DECL_OVERRIDE;
+                                   QFont::StyleHint styleHint, QChar::Script script) const override;
+    void releaseHandle(void *handle) override;
 private:
     QHash<IDWriteFontFile *, FontDescription> m_fonts;
     QHash<QString, IDWriteFontFamily *> m_fontFamilies;

@@ -1157,6 +1157,7 @@ QModelIndex QListView::moveCursor(CursorAction cursorAction, Qt::KeyboardModifie
         rect.moveTop(rect.top() - d->viewport->height() + 2 * rect.height());
         if (rect.top() < rect.height())
             rect.moveTop(rect.height());
+        Q_FALLTHROUGH();
     case MovePrevious:
     case MoveUp:
         while (intersectVector.isEmpty()) {
@@ -1185,6 +1186,7 @@ QModelIndex QListView::moveCursor(CursorAction cursorAction, Qt::KeyboardModifie
         rect.moveTop(rect.top() + d->viewport->height() - 2 * rect.height());
         if (rect.bottom() > contents.height() - rect.height())
             rect.moveBottom(contents.height() - rect.height());
+        Q_FALLTHROUGH();
     case MoveNext:
     case MoveDown:
         while (intersectVector.isEmpty()) {
@@ -1992,7 +1994,9 @@ int QCommonListViewBase::horizontalScrollToValue(const int /*index*/, QListView:
 QListModeViewBase::QListModeViewBase(QListView *q, QListViewPrivate *d)
     : QCommonListViewBase(q, d)
 {
+#if QT_CONFIG(draganddrop)
     dd->defaultDropAction = Qt::CopyAction;
+#endif
 }
 
 #ifndef QT_NO_DRAGANDDROP
@@ -2335,20 +2339,14 @@ void QListModeViewBase::scrollContentsBy(int dx, int dy, bool scrollElasticBand)
 bool QListModeViewBase::doBatchedItemLayout(const QListViewLayoutInfo &info, int max)
 {
     doStaticLayout(info);
-    if (batchStartRow > max) { // stop items layout
-        flowPositions.resize(flowPositions.count());
-        segmentPositions.resize(segmentPositions.count());
-        segmentStartRows.resize(segmentStartRows.count());
-        return true; // done
-    }
-    return false; // not done
+    return batchStartRow > max; // returning true stops items layout
 }
 
 QListViewItem QListModeViewBase::indexToListViewItem(const QModelIndex &index) const
 {
     if (flowPositions.isEmpty()
         || segmentPositions.isEmpty()
-        || index.row() >= flowPositions.count())
+        || index.row() >= flowPositions.count() - 1)
         return QListViewItem();
 
     const int segment = qBinarySearch<int>(segmentStartRows, index.row(),
@@ -2475,9 +2473,7 @@ void QListModeViewBase::doStaticLayout(const QListViewLayoutInfo &info)
             if (info.wrap && (flowPosition + deltaFlowPosition >= segEndPosition)) {
                 segmentExtents.append(flowPosition);
                 flowPosition = info.spacing + segStartPosition;
-                segPosition += deltaSegPosition;
-                if (info.wrap)
-                    segPosition += info.spacing;
+                segPosition += info.spacing + deltaSegPosition;
                 segmentPositions.append(segPosition);
                 segmentStartRows.append(row);
                 deltaSegPosition = 0;

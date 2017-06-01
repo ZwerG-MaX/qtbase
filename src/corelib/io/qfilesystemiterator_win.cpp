@@ -39,6 +39,7 @@
 
 #include "qfilesystemiterator_p.h"
 #include "qfilesystemengine_p.h"
+#include "qoperatingsystemversion.h"
 #include "qplatformdefs.h"
 #include "qvector.h"
 
@@ -68,10 +69,6 @@ QFileSystemIterator::QFileSystemIterator(const QFileSystemEntry &entry, QDir::Fi
         nativePath.append(QLatin1Char('\\'));
     nativePath.append(QLatin1Char('*'));
     // In MSVC2015+ case we prepend //?/ for longer file-name support
-#if defined(Q_OS_WINRT) && _MSC_VER < 1900
-    if (nativePath.startsWith(QLatin1Char('\\')))
-        nativePath.remove(0, 1);
-#endif
     if (!dirPath.endsWith(QLatin1Char('/')))
         dirPath.append(QLatin1Char('/'));
     if ((filters & (QDir::Dirs|QDir::Drives)) && (!(filters & (QDir::Files))))
@@ -93,7 +90,7 @@ bool QFileSystemIterator::advance(QFileSystemEntry &fileEntry, QFileSystemMetaDa
         haveData = true;
         int infoLevel = 0 ;         // FindExInfoStandard;
         DWORD dwAdditionalFlags  = 0;
-        if (QSysInfo::windowsVersion() >= QSysInfo::WV_WINDOWS7) {
+        if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows7) {
             dwAdditionalFlags = 2;  // FIND_FIRST_EX_LARGE_FETCH
             infoLevel = 1 ;         // FindExInfoBasic;
         }

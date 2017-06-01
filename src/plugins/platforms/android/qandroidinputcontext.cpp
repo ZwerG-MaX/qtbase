@@ -354,10 +354,10 @@ static QRect inputItemRectangle()
         ? QHighDpiScaling::factor(window)
         : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
     if (pixelDensity != 1.0) {
-        rect.moveLeft(rect.x() * pixelDensity);
-        rect.moveTop(rect.y() * pixelDensity);
-        rect.setWidth(rect.width() * pixelDensity);
-        rect.setHeight(rect.height() * pixelDensity);
+        rect.setRect(rect.x() * pixelDensity,
+                     rect.y() * pixelDensity,
+                     rect.width() * pixelDensity,
+                     rect.height() * pixelDensity);
     }
     return rect;
 }

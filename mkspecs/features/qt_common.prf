@@ -12,12 +12,14 @@
 QMAKE_DIR_REPLACE_SANE += DESTDIR
 CONFIG -= debug_and_release_target
 
+DEFINES *= QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+
 qtConfig(c++11): CONFIG += c++11 strict_c++
 qtConfig(c++14): CONFIG += c++14
 qtConfig(c++1z): CONFIG += c++1z
 contains(TEMPLATE, .*lib) {
     # module and plugins
-    !host_build:qtConfig(reduce_exports): CONFIG += hide_symbols
+    if(!host_build|!cross_compile):qtConfig(reduce_exports): CONFIG += hide_symbols
     unix:qtConfig(reduce_relocations): CONFIG += bsymbolic_functions
     qtConfig(separate_debug_info): CONFIG += separate_debug_info
 
@@ -70,10 +72,10 @@ warnings_are_errors:warning_clean {
     # compiler.
     clang {
         # Apple clang 4.0-4.2,5.0-5.1,6.0-6.4,7.0-7.3
-        # Regular clang 3.3-3.9
+        # Regular clang 3.3-3.9, 4.0
         apple_ver = $${QT_APPLE_CLANG_MAJOR_VERSION}.$${QT_APPLE_CLANG_MINOR_VERSION}
         reg_ver = $${QT_CLANG_MAJOR_VERSION}.$${QT_CLANG_MINOR_VERSION}
-        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]")|contains(reg_ver, "3\\.[3-9]") {
+        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]")|contains(reg_ver, "3\\.[3-9]|4\\.0") {
             QMAKE_CXXFLAGS_WARN_ON += -Werror -Wno-error=\\$${LITERAL_HASH}warnings -Wno-error=deprecated-declarations $$WERROR
         }
     } else:intel_icc:linux {
@@ -88,7 +90,7 @@ warnings_are_errors:warning_clean {
             #      (NULL in C++ is usually a literal 0)
             QMAKE_CXXFLAGS_WARN_ON += -Werror -ww177,1224,1478,1881 $$WERROR
         }
-    } else:gcc:!clang:!intel_icc {
+    } else:gcc:!clang:!intel_icc:!rim_qcc {
         # GCC 4.6-4.9, 5.x, ...
         ver = $${QT_GCC_MAJOR_VERSION}.$${QT_GCC_MINOR_VERSION}
         contains(ver, "(4\\.[6789]|[5-9]\\..)") {
@@ -97,6 +99,9 @@ warnings_are_errors:warning_clean {
             # GCC prints this bogus warning, after it has inlined a lot of code
             # error: assuming signed overflow does not occur when assuming that (X + c) < X is always false
             QMAKE_CXXFLAGS_WARN_ON += -Wno-error=strict-overflow
+
+            # GCC 7 includes -Wimplicit-fallthrough in -Wextra, but Qt is not yet free of implicit fallthroughs.
+            greaterThan(QT_GCC_MAJOR_VERSION, 6): QMAKE_CXXFLAGS_WARN_ON += -Wno-error=implicit-fallthrough
 
             # Work-around for bug https://code.google.com/p/android/issues/detail?id=58135
             android: QMAKE_CXXFLAGS_WARN_ON += -Wno-error=literal-suffix

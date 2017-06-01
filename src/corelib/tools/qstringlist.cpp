@@ -143,8 +143,8 @@ QT_BEGIN_NAMESPACE
 
     \snippet qstringlist/main.cpp 6
 
-    The argument to split can be a single character, a string, or a
-    QRegExp.
+    The argument to split can be a single character, a string, a
+    QRegularExpression or a (deprecated) QRegExp.
 
     In addition, the \l {QStringList::operator+()}{operator+()}
     function allows you to concatenate two string lists into one. To
@@ -716,7 +716,7 @@ int QtPrivate::QStringList_lastIndexOf(const QStringList *that, const QRegularEx
 /*!
     \fn int QStringList::removeDuplicates()
 
-    \since  4.5
+    \since 4.5
 
     This function removes duplicate entries from a list.
     The entries do not have to be sorted. They will retain their

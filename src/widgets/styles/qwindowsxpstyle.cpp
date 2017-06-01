@@ -39,7 +39,7 @@
 #include "qwindowsxpstyle_p.h"
 #include "qwindowsxpstyle_p_p.h"
 
-#if !defined(QT_NO_STYLE_WINDOWSXP) || defined(QT_PLUGIN)
+#if QT_CONFIG(style_windowsxp) || defined(QT_PLUGIN)
 
 #include <private/qobject_p.h>
 #include <private/qpaintengine_raster_p.h>
@@ -65,7 +65,9 @@
 #include <qspinbox.h>
 #include <qlistview.h>
 #include <qstackedwidget.h>
+#if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
+#endif
 #include <qtoolbar.h>
 #include <qlabel.h>
 #include <qvarlengtharray.h>
@@ -397,13 +399,7 @@ HWND QWindowsXPStylePrivate::winId(const QWidget *widget)
                 return topLevelHwnd;
     }
 
-    if (QDesktopWidget *desktop = qApp->desktop())
-        if (const HWND desktopHwnd = QApplicationPrivate::getHWNDForWidget(desktop))
-            return desktopHwnd;
-
-    Q_ASSERT(false);
-
-    return 0;
+    return GetDesktopWindow();
 }
 
 /*! \internal
@@ -1143,7 +1139,10 @@ void QWindowsXPStyle::polish(QWidget *widget)
     if (!QWindowsXPStylePrivate::useXP())
         return;
 
-    if (qobject_cast<QAbstractButton*>(widget)
+    if (false
+#if QT_CONFIG(abstractbutton)
+        || qobject_cast<QAbstractButton*>(widget)
+#endif
         || qobject_cast<QToolButton*>(widget)
         || qobject_cast<QTabBar*>(widget)
 #ifndef QT_NO_COMBOBOX
@@ -1215,7 +1214,10 @@ void QWindowsXPStyle::unpolish(QWidget *widget)
         // already in the map might be old (other style).
         d->cleanupHandleMap();
     }
-    if (qobject_cast<QAbstractButton*>(widget)
+    if (false
+#if QT_CONFIG(abstractbutton)
+        || qobject_cast<QAbstractButton*>(widget)
+#endif
         || qobject_cast<QToolButton*>(widget)
         || qobject_cast<QTabBar*>(widget)
 #ifndef QT_NO_COMBOBOX

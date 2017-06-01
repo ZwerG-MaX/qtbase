@@ -110,7 +110,6 @@ SOURCES += \
         tools/qtextboundaryfinder.cpp \
         tools/qtimeline.cpp \
         tools/qunicodetools.cpp \
-        tools/qvector.cpp \
         tools/qvsnprintf.cpp \
         tools/qversionnumber.cpp
 
@@ -126,7 +125,6 @@ else:unix {
 }
 else:win32 {
     SOURCES += tools/qlocale_win.cpp
-    winphone: LIBS_PRIVATE += -lWindowsPhoneGlobalizationUtil
     winrt-*-msvc2013: LIBS += advapi32.lib
 } else:integrity {
     SOURCES += tools/qlocale_unix.cpp
@@ -144,7 +142,6 @@ qtConfig(icu) {
 
     SOURCES += tools/qlocale_icu.cpp \
                tools/qcollator_icu.cpp
-    DEFINES += QT_USE_ICU
 } else: win32 {
     SOURCES += tools/qcollator_win.cpp
 } else: macx {
@@ -174,7 +171,7 @@ qtConfig(timezone) {
 }
 
 qtConfig(regularexpression) {
-    QMAKE_USE_PRIVATE += pcre
+    QMAKE_USE_PRIVATE += pcre2
 
     HEADERS += tools/qregularexpression.h
     SOURCES += tools/qregularexpression.cpp

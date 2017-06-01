@@ -41,10 +41,17 @@ host_build {
     }
 }
 
-CONFIG(shared, static|shared):qtConfig(framework): \
-    CONFIG += lib_bundle
+qtConfig(framework) {
+    minimal_syncqt: \
+        CONFIG += module_frameworks
+    else: CONFIG(shared, static|shared): \
+        CONFIG += module_frameworks lib_bundle
+}
 
 CONFIG += relative_qt_rpath  # Qt libraries should be relocatable
+
+# Qt libraries should only use Application Extension safe APIs
+darwin:!no_app_extension_api_only: CONFIG += app_extension_api_only
 
 ucmodule = $$upper($$MODULE)
 
@@ -64,13 +71,18 @@ else: \
     MODULE_DEFINE = QT_$${ucmodule}_LIB
 MODULE_DEFINES = $$MODULE_DEFINE $$MODULE_DEFINES
 
+# Make sure that the supporting runtime is linked into the application when
+# the module is built with exceptions enabled.
+integrity:CONFIG(exceptions, exceptions|exceptions_off): \
+    MODULE_CONFIG += exceptions
+
 load(qt_build_paths)
 
 header_module {
     TEMPLATE     = aux
-    CONFIG      += \
-        force_qt \  # Needed for the headers_clean tests.
-        qt_no_install_library
+    CONFIG      += force_qt  # Needed for the headers_clean tests.
+    !lib_bundle: \
+        CONFIG  += qt_no_install_library
 } else {
     TEMPLATE     = lib
 }
@@ -206,7 +218,10 @@ android: CONFIG += qt_android_deps no_linker_version_script
     } else {
         verscript_content = "Qt_$${QT_MAJOR_VERSION}_PRIVATE_API {" \
                             "    qt_private_api_tag*;"
-        for(header, SYNCQT.PRIVATE_HEADER_FILES): \
+
+        private_api_headers = $$SYNCQT.PRIVATE_HEADER_FILES $$SYNCQT.QPA_HEADER_FILES
+
+        for(header, private_api_headers): \
             verscript_content += "    @FILE:$${_PRO_FILE_PWD_}/$$header@"
         verscript_content += "};"
 
@@ -227,7 +242,7 @@ android: CONFIG += qt_android_deps no_linker_version_script
         verscriptprocess.name = linker version script ${QMAKE_FILE_BASE}
         verscriptprocess.input = verscript_in
         verscriptprocess.CONFIG += no_link target_predeps
-        for(header, SYNCQT.PRIVATE_HEADER_FILES): \
+        for(header, private_api_headers): \
             verscriptprocess.depends += $${_PRO_FILE_PWD_}/$$header
         verscriptprocess.output = $$verscript
         verscriptprocess.commands = perl $${PWD}/data/unix/findclasslist.pl < ${QMAKE_FILE_IN} > $@
@@ -261,7 +276,7 @@ load(qt_targets)
     QMAKE_PKGCONFIG_NAME = $$replace(TARGET, ^Qt, "Qt$$QT_MAJOR_VERSION ")
     QMAKE_PKGCONFIG_FILE = $$replace(TARGET, ^Qt, Qt$$QT_MAJOR_VERSION)
     for(i, MODULE_DEPENDS): \
-        QMAKE_PKGCONFIG_REQUIRES += $$replace(QT.$${i}.name, ^Qt, Qt$$eval(QT.$${i}.MAJOR_VERSION))
+        QMAKE_PKGCONFIG_REQUIRES += $$replace(QT.$${i}.name, ^Qt, Qt$$section(QT.$${i}.VERSION, ., 0, 0))
     isEmpty(QMAKE_PKGCONFIG_DESCRIPTION): \
         QMAKE_PKGCONFIG_DESCRIPTION = $$replace(TARGET, ^Qt, "Qt ") module
     pclib_replace.match = $$lib_replace.match

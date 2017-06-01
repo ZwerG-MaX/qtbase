@@ -521,6 +521,12 @@ bool QPngHandlerPrivate::readPngHeader()
 
     png_set_error_fn(png_ptr, 0, 0, qt_png_warning);
 
+#if defined(PNG_SET_OPTION_SUPPORTED) && defined(PNG_MAXIMUM_INFLATE_WINDOW)
+    // Trade off a little bit of memory for better compatibility with existing images
+    // Ref. "invalid distance too far back" explanation in libpng-manual.txt
+    png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON);
+#endif
+
     info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
         png_destroy_read_struct(&png_ptr, 0, 0);
@@ -739,7 +745,7 @@ static void set_text(const QImage &image, png_structp png_ptr, png_infop info_pt
 
 #ifdef PNG_iTXt_SUPPORTED
         bool needsItxt = false;
-        foreach(const QChar c, it.value()) {
+        for (const QChar c : it.value()) {
             uchar ch = c.cell();
             if (c.row() || (ch < 0x20 && ch != '\n') || (ch > 0x7e && ch < 0xa0)) {
                 needsItxt = true;
@@ -824,7 +830,7 @@ bool QPNGImageWriter::writeImage(const QImage& image, volatile int quality_in, c
 
 
     int color_type = 0;
-    if (image.colorCount()) {
+    if (image.format() <= QImage::Format_Indexed8) {
         if (image.isGrayscale())
             color_type = PNG_COLOR_TYPE_GRAY;
         else

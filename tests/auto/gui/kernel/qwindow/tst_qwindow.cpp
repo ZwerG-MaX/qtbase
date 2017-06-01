@@ -56,6 +56,7 @@ private slots:
     void create();
     void setParent();
     void setVisible();
+    void setVisibleFalseDoesNotCreateWindow();
     void eventOrderOnShow();
     void resizeEventAfterResize();
     void exposeEventOnShrink_QTBUG54040();
@@ -65,6 +66,7 @@ private slots:
     void positioningDuringMinimized();
     void childWindowPositioning_data();
     void childWindowPositioning();
+    void childWindowLevel();
     void platformSurface();
     void isExposed();
     void isActive();
@@ -101,6 +103,7 @@ private slots:
     void initTestCase();
     void stateChange_data();
     void stateChange();
+    void flags();
     void cleanup();
 
 private:
@@ -230,6 +233,16 @@ void tst_QWindow::setVisible()
     i.setParent(&h);
     QVERIFY2(i.handle(), "Making a visible but not created child window child of a created window should create it");
     QVERIFY(QTest::qWaitForWindowExposed(&i));
+}
+
+void tst_QWindow::setVisibleFalseDoesNotCreateWindow()
+{
+    QWindow w;
+    QVERIFY(!w.handle());
+    w.setVisible(false);
+    QVERIFY2(!w.handle(), "Hiding a non-created window doesn't create it");
+    w.setVisible(true);
+    QVERIFY2(w.handle(), "Showing a non-created window creates it");
 }
 
 void tst_QWindow::mapGlobal()
@@ -594,6 +607,29 @@ void tst_QWindow::childWindowPositioning()
     // Creation order shouldn't affect the child ending up at 0,0
     QCOMPARE(childWindowFirst.framePosition(), topLeftOrigin);
     QCOMPARE(childWindowAfter.framePosition(), topLeftOrigin);
+}
+
+void tst_QWindow::childWindowLevel()
+{
+    ColoredWindow topLevel(Qt::green);
+    topLevel.setObjectName("topLevel");
+    ColoredWindow yellowChild(Qt::yellow, &topLevel);
+    yellowChild.setObjectName("yellowChild");
+    ColoredWindow redChild(Qt::red, &topLevel);
+    redChild.setObjectName("redChild");
+    ColoredWindow blueChild(Qt::blue, &topLevel);
+    blueChild.setObjectName("blueChild");
+
+    const QObjectList &siblings = topLevel.children();
+
+    QCOMPARE(siblings.constFirst(), &yellowChild);
+    QCOMPARE(siblings.constLast(), &blueChild);
+
+    yellowChild.raise();
+    QCOMPARE(siblings.constLast(), &yellowChild);
+
+    blueChild.lower();
+    QCOMPARE(siblings.constFirst(), &blueChild);
 }
 
 // QTBUG-49709: Verify that the normal geometry is correctly restored
@@ -1816,6 +1852,14 @@ void tst_QWindow::modalDialog()
 
     QGuiApplication::sync();
     QGuiApplication::processEvents();
+
+    if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {
+        QWARN("Focus stays in normalWindow on offscreen/minimal platforms");
+        QTRY_COMPARE(QGuiApplication::focusWindow(), &normalWindow);
+        return;
+    }
+
     QTRY_COMPARE(QGuiApplication::focusWindow(), &dialog);
 }
 
@@ -1854,6 +1898,14 @@ void tst_QWindow::modalDialogClosingOneOfTwoModal()
 
     QGuiApplication::sync();
     QGuiApplication::processEvents();
+
+    if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {
+        QWARN("Focus is lost when closing modal dialog on offscreen/minimal platforms");
+        QTRY_COMPARE(QGuiApplication::focusWindow(), nullptr);
+        return;
+    }
+
     QTRY_COMPARE(QGuiApplication::focusWindow(), &first_dialog);
 }
 
@@ -2168,6 +2220,18 @@ void tst_QWindow::requestUpdate()
 
     window.requestUpdate();
     QTRY_COMPARE(window.received(QEvent::UpdateRequest), 2);
+}
+
+void tst_QWindow::flags()
+{
+    Window window;
+    const auto baseFlags = window.flags();
+    window.setFlags(window.flags() | Qt::FramelessWindowHint);
+    QCOMPARE(window.flags(), baseFlags | Qt::FramelessWindowHint);
+    window.setFlag(Qt::WindowStaysOnTopHint, true);
+    QCOMPARE(window.flags(), baseFlags | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    window.setFlag(Qt::FramelessWindowHint, false);
+    QCOMPARE(window.flags(), baseFlags | Qt::WindowStaysOnTopHint);
 }
 
 #include <tst_qwindow.moc>

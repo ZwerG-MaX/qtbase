@@ -54,7 +54,9 @@
 #include <QHostInfo>
 #include <QMap>
 #include <QPointer>
-#include <QProcess>
+#if QT_CONFIG(process)
+# include <QProcess>
+#endif
 #include <QStringList>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -603,7 +605,7 @@ void tst_QTcpSocket::bind()
         if (port)
             QCOMPARE(int(boundPort), port);
         fd = socket->socketDescriptor();
-        QVERIFY(fd != INVALID_SOCKET);
+        QVERIFY(fd != qintptr(INVALID_SOCKET));
     } else {
         QVERIFY(!socket->bind(addr, port));
         QCOMPARE(socket->localPort(), quint16(0));
@@ -667,7 +669,7 @@ void tst_QTcpSocket::bindThenResolveHost()
     QCOMPARE(socket->state(), QAbstractSocket::BoundState);
     quint16 boundPort = socket->localPort();
     qintptr fd = socket->socketDescriptor();
-    QVERIFY(fd != INVALID_SOCKET);
+    QVERIFY(fd != quint16(INVALID_SOCKET));
 
     dummySocket.close();
 
@@ -2403,7 +2405,7 @@ void tst_QTcpSocket::suddenRemoteDisconnect_data()
 
 void tst_QTcpSocket::suddenRemoteDisconnect()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
     QFETCH(QString, client);
@@ -2459,7 +2461,7 @@ void tst_QTcpSocket::suddenRemoteDisconnect()
 #endif
     QCOMPARE(clientProcess.readAll().constData(), "SUCCESS\n");
     QCOMPARE(serverProcess.readAll().constData(), "SUCCESS\n");
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 //----------------------------------------------------------------------------------

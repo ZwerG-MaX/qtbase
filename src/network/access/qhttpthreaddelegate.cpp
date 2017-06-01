@@ -67,7 +67,7 @@ static QNetworkReply::NetworkError statusCodeFromHttp(int httpStatusCode, const 
         break;
 
     case 403:               // Access denied
-        code = QNetworkReply::ContentOperationNotPermittedError;
+        code = QNetworkReply::ContentAccessDenied;
         break;
 
     case 404:               // Not Found
@@ -169,7 +169,7 @@ static QByteArray makeCacheKey(QUrl &url, QNetworkProxy *proxy)
     Q_UNUSED(proxy)
 #endif
 
-    return "http-connection:" + result.toLatin1();
+    return "http-connection:" + std::move(result).toLatin1();
 }
 
 class QNetworkAccessCachedHttpConnection: public QHttpNetworkConnection,
@@ -234,6 +234,7 @@ QHttpThreadDelegate::QHttpThreadDelegate(QObject *parent) :
     , isPipeliningUsed(false)
     , isSpdyUsed(false)
     , incomingContentLength(-1)
+    , removedContentLength(-1)
     , incomingErrorCode(QNetworkReply::NoError)
     , downloadBuffer()
     , httpConnection(0)
@@ -623,6 +624,7 @@ void QHttpThreadDelegate::headerChangedSlot()
     incomingReasonPhrase = httpReply->reasonPhrase();
     isPipeliningUsed = httpReply->isPipeliningUsed();
     incomingContentLength = httpReply->contentLength();
+    removedContentLength = httpReply->removedContentLength();
     isSpdyUsed = httpReply->isSpdyUsed();
 
     emit downloadMetaData(incomingHeaders,
@@ -631,6 +633,7 @@ void QHttpThreadDelegate::headerChangedSlot()
                           isPipeliningUsed,
                           downloadBuffer,
                           incomingContentLength,
+                          removedContentLength,
                           isSpdyUsed);
 }
 

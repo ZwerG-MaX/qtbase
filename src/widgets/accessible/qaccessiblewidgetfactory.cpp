@@ -45,7 +45,6 @@
 #include "complexwidgets_p.h"
 #include "itemviews_p.h"
 
-#include <qpushbutton.h>
 #include <qtoolbutton.h>
 #include <qtreeview.h>
 #include <qvariant.h>
@@ -94,9 +93,9 @@ QAccessibleInterface *qAccessibleFactory(const QString &classname, QObject *obje
     } else if (classname == QLatin1String("QScrollBar")) {
         iface = new QAccessibleScrollBar(widget);
 #endif
+#ifndef QT_NO_SLIDER
     } else if (classname == QLatin1String("QAbstractSlider")) {
         iface = new QAccessibleAbstractSlider(widget);
-#ifndef QT_NO_SLIDER
     } else if (classname == QLatin1String("QSlider")) {
         iface = new QAccessibleSlider(widget);
 #endif
@@ -104,11 +103,13 @@ QAccessibleInterface *qAccessibleFactory(const QString &classname, QObject *obje
     } else if (classname == QLatin1String("QToolButton")) {
         iface = new QAccessibleToolButton(widget);
 #endif // QT_NO_TOOLBUTTON
+#if QT_CONFIG(abstractbutton)
     } else if (classname == QLatin1String("QCheckBox")
             || classname == QLatin1String("QRadioButton")
             || classname == QLatin1String("QPushButton")
             || classname == QLatin1String("QAbstractButton")) {
         iface = new QAccessibleButton(widget);
+#endif
     } else if (classname == QLatin1String("QDialog")) {
         iface = new QAccessibleWidget(widget, QAccessible::Dialog);
     } else if (classname == QLatin1String("QMessageBox")) {
@@ -184,8 +185,10 @@ QAccessibleInterface *qAccessibleFactory(const QString &classname, QObject *obje
     } else if (classname == QLatin1String("QMdiSubWindow")) {
         iface = new QAccessibleMdiSubWindow(widget);
 #endif
+#if QT_CONFIG(dialogbuttonbox)
     } else if (classname == QLatin1String("QDialogButtonBox")) {
         iface = new QAccessibleDialogButtonBox(widget);
+#endif
 #ifndef QT_NO_DIAL
     } else if (classname == QLatin1String("QDial")) {
         iface = new QAccessibleDial(widget);

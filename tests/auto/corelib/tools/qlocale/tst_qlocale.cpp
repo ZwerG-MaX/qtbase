@@ -35,7 +35,9 @@
 #include <QScopedArrayPointer>
 #include <qtextcodec.h>
 #include <qdatetime.h>
-#include <qprocess.h>
+#if QT_CONFIG(process)
+# include <qprocess.h>
+#endif
 #include <float.h>
 #include <locale.h>
 
@@ -78,6 +80,7 @@ private slots:
     void ctor();
     void emptyCtor();
     void legacyNames();
+    void consistentC();
     void unixLocaleName();
     void matchingLocales();
     void stringToDouble_data();
@@ -152,7 +155,7 @@ tst_QLocale::tst_QLocale()
 
 void tst_QLocale::initTestCase()
 {
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
     const QString syslocaleapp_dir = QFINDTESTDATA("syslocaleapp");
     QVERIFY2(!syslocaleapp_dir.isEmpty(),
             qPrintable(QStringLiteral("Cannot find 'syslocaleapp' starting from ")
@@ -165,7 +168,7 @@ void tst_QLocale::initTestCase()
     QVERIFY2(fi.exists() && fi.isExecutable(),
              qPrintable(QDir::toNativeSeparators(m_sysapp)
                         + QStringLiteral(" does not exist or is not executable.")));
-#endif // QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 void tst_QLocale::cleanupTestCase()
@@ -186,12 +189,50 @@ void tst_QLocale::ctor()
         QVERIFY(l.country() == default_country);
     }
 
+#define TEST_CTOR(req_lang, req_script, req_country, exp_lang, exp_script, exp_country) \
+    { \
+        QLocale l(QLocale::req_lang, QLocale::req_script, QLocale::req_country); \
+        QCOMPARE((int)l.language(), (int)exp_lang); \
+        QCOMPARE((int)l.script(), (int)exp_script); \
+        QCOMPARE((int)l.country(), (int)exp_country); \
+    }
+
+    // Exact matches
+    TEST_CTOR(Chinese, SimplifiedHanScript, China, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, TraditionalHanScript, Taiwan, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+    TEST_CTOR(Chinese, TraditionalHanScript, HongKong, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::HongKong);
+
+    // Best match for AnyCountry
+    TEST_CTOR(Chinese, SimplifiedHanScript, AnyCountry, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, TraditionalHanScript, AnyCountry, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+
+    // Best match for AnyScript (and change country to supported one, if necessary)
+    TEST_CTOR(Chinese, AnyScript, China, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, AnyScript, Taiwan, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+    TEST_CTOR(Chinese, AnyScript, HongKong, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::HongKong);
+    TEST_CTOR(Chinese, AnyScript, UnitedStates, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+
+    // Fully-specified not found; find best alternate country
+    TEST_CTOR(Chinese, SimplifiedHanScript, Taiwan, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, SimplifiedHanScript, UnitedStates, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, TraditionalHanScript, China, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+    TEST_CTOR(Chinese, TraditionalHanScript, UnitedStates, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+
+    // Fully-specified not found; find best alternate script
+    TEST_CTOR(Chinese, LatinScript, China, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+    TEST_CTOR(Chinese, LatinScript, Taiwan, QLocale::Chinese, QLocale::TraditionalHanScript, QLocale::Taiwan);
+
+    // Fully-specified not found; find best alternate country and script
+    TEST_CTOR(Chinese, LatinScript, UnitedStates, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
+
+#undef TEST_CTOR
 #define TEST_CTOR(req_lang, req_country, exp_lang, exp_country) \
     { \
         QLocale l(QLocale::req_lang, QLocale::req_country); \
         QCOMPARE((int)l.language(), (int)exp_lang); \
         QCOMPARE((int)l.country(), (int)exp_country); \
     }
+
     {
         QLocale l(QLocale::C, QLocale::AnyCountry);
         QCOMPARE(l.language(), QLocale::C);
@@ -295,7 +336,6 @@ void tst_QLocale::ctor()
     TEST_CTOR(Uzbek, AnyCountry, QLocale::Uzbek, QLocale::Uzbekistan)
 
 #undef TEST_CTOR
-
 #define TEST_CTOR(req_lc, exp_lang, exp_country) \
     { \
         QLocale l(req_lc); \
@@ -383,7 +423,7 @@ void tst_QLocale::ctor()
 #undef TEST_CTOR
 }
 
-#if !defined(QT_NO_PROCESS)
+#if QT_CONFIG(process)
 static inline bool runSysApp(const QString &binary,
                              const QStringList &env,
                              QString *output,
@@ -435,7 +475,7 @@ static inline bool runSysAppTest(const QString &binary,
 
 void tst_QLocale::emptyCtor()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
 #define TEST_CTOR(req_lc, exp_str) \
@@ -538,6 +578,15 @@ void tst_QLocale::legacyNames()
     TEST_CTOR("iw", Hebrew, Israel)
     TEST_CTOR("in", Indonesian, Indonesia)
 #undef TEST_CTOR
+}
+
+void tst_QLocale::consistentC()
+{
+    const QLocale c(QLocale::C);
+    QCOMPARE(c, QLocale::c());
+    QCOMPARE(c, QLocale(QLocale::C, QLocale::AnyScript, QLocale::AnyCountry));
+    QVERIFY(QLocale::matchingLocales(QLocale::AnyLanguage, QLocale::AnyScript,
+                                     QLocale::AnyCountry).contains(c));
 }
 
 void tst_QLocale::matchingLocales()
@@ -1552,9 +1601,7 @@ void tst_QLocale::macDefaultLocale()
     // To run this test make sure "Curreny" is US Dollar in System Preferences->Language & Region->Advanced.
     if (locale.currencySymbol() == QString("$")) {
         QCOMPARE(locale.toCurrencyString(qulonglong(1234)), systemLocaleFormatNumber(QString("$1,234.00")));
-        QCOMPARE(locale.toCurrencyString(qlonglong(-1234)), systemLocaleFormatNumber(QString("($1,234.00)")));
         QCOMPARE(locale.toCurrencyString(double(1234.56)), systemLocaleFormatNumber(QString("$1,234.56")));
-        QCOMPARE(locale.toCurrencyString(double(-1234.56)), systemLocaleFormatNumber(QString("($1,234.56)")));
     }
 
     // Depending on the configured time zone, the time string might not
@@ -1753,6 +1800,30 @@ void tst_QLocale::numberOptions()
     locale.toDouble(QString("1.24e+1"), &ok);
     QVERIFY(ok);
     locale.toDouble(QString("1.24e+01"), &ok);
+    QVERIFY(!ok);
+
+    QCOMPARE(locale.toString(12.4, 'g', 5), QString("12.4"));
+    locale.setNumberOptions(QLocale::IncludeTrailingZeroesAfterDot);
+    QCOMPARE(locale.numberOptions(), QLocale::IncludeTrailingZeroesAfterDot);
+    QCOMPARE(locale.toString(12.4, 'g', 5), QString("12.400"));
+
+    locale.toDouble(QString("1.24e+01"), &ok);
+    QVERIFY(ok);
+    locale.toDouble(QString("1.2400e+01"), &ok);
+    QVERIFY(ok);
+    locale.toDouble(QString("12.4"), &ok);
+    QVERIFY(ok);
+    locale.toDouble(QString("12.400"), &ok);
+    QVERIFY(ok);
+    locale.setNumberOptions(QLocale::RejectTrailingZeroesAfterDot);
+    QCOMPARE(locale.numberOptions(), QLocale::RejectTrailingZeroesAfterDot);
+    locale.toDouble(QString("1.24e+01"), &ok);
+    QVERIFY(ok);
+    locale.toDouble(QString("1.2400e+01"), &ok);
+    QVERIFY(!ok);
+    locale.toDouble(QString("12.4"), &ok);
+    QVERIFY(ok);
+    locale.toDouble(QString("12.400"), &ok);
     QVERIFY(!ok);
 }
 

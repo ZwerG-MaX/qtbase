@@ -929,7 +929,7 @@ QString QDate::toString(Qt::DateFormat format) const
 */
 QString QDate::toString(const QString& format) const
 {
-    return QLocale::system().toString(*this, format);
+    return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
 #endif //QT_NO_DATESTRING
 
@@ -1333,6 +1333,7 @@ QDate QDate::fromString(const QString &string, const QString &format)
     QDate date;
 #if QT_CONFIG(timezone)
     QDateTimeParser dt(QVariant::Date, QDateTimeParser::FromString);
+    // dt.setDefaultLocale(QLocale::c()); ### Qt 6
     if (dt.parseFormat(format))
         dt.fromString(string, &date, 0);
 #else
@@ -1676,7 +1677,7 @@ QString QTime::toString(Qt::DateFormat format) const
 */
 QString QTime::toString(const QString& format) const
 {
-    return QLocale::system().toString(*this, format);
+    return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
 #endif //QT_NO_DATESTRING
 /*!
@@ -1970,7 +1971,7 @@ QTime QTime::fromString(const QString& string, Qt::DateFormat format)
     case Qt::ISODateWithMs:
     case Qt::TextDate:
     default:
-        return fromIsoTimeString(&string, format, 0);
+        return fromIsoTimeString(QStringRef(&string), format, 0);
     }
 }
 
@@ -2030,6 +2031,7 @@ QTime QTime::fromString(const QString &string, const QString &format)
     QTime time;
 #if QT_CONFIG(timezone)
     QDateTimeParser dt(QVariant::Time, QDateTimeParser::FromString);
+    // dt.setDefaultLocale(QLocale::c()); ### Qt 6
     if (dt.parseFormat(format))
         dt.fromString(string, 0, &time);
 #else
@@ -2285,10 +2287,11 @@ static bool qt_localtime(qint64 msecsSinceEpoch, QDate *localDate, QTime *localT
     tm local;
     bool valid = false;
 
-#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS)
     // localtime() is required to work as if tzset() was called before it.
     // localtime_r() does not have this requirement, so make an explicit call.
+    // The explicit call should also request the timezone info be re-parsed.
     qt_tzset();
+#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS)
     // Use the reentrant version of localtime() where available
     // as is thread-safe and doesn't use a shared static data area
     tm *res = 0;
@@ -2574,6 +2577,13 @@ static inline Qt::TimeSpec getSpec(const QDateTimeData &d)
     return extractSpec(getStatus(d));
 }
 
+#if QT_CONFIG(timezone)
+void QDateTimePrivate::setUtcOffsetByTZ(qint64 atMSecsSinceEpoch)
+{
+    m_offsetFromUtc = m_timeZone.d->offsetFromUtc(atMSecsSinceEpoch);
+}
+#endif
+
 // Refresh the LocalTime validity and offset
 static void refreshDateTime(QDateTimeData &d)
 {
@@ -2589,10 +2599,12 @@ static void refreshDateTime(QDateTimeData &d)
 #if QT_CONFIG(timezone)
     // If not valid time zone then is invalid
     if (spec == Qt::TimeZone) {
-        if (!d->m_timeZone.isValid())
+        if (!d->m_timeZone.isValid()) {
             status &= ~QDateTimePrivate::ValidDateTime;
-        else
-            epochMSecs = QDateTimePrivate::zoneMSecsToEpochMSecs(msecs, d->m_timeZone, &testDate, &testTime);
+        } else {
+            epochMSecs = QDateTimePrivate::zoneMSecsToEpochMSecs(msecs, d->m_timeZone, extractDaylightStatus(status), &testDate, &testTime);
+            d->setUtcOffsetByTZ(epochMSecs);
+        }
     }
 #endif // timezone
 
@@ -2842,6 +2854,9 @@ inline bool QDateTime::Data::isShort() const
 {
     bool b = quintptr(d) & QDateTimePrivate::ShortData;
 
+    // sanity check:
+    Q_ASSERT(b || (d->m_status & QDateTimePrivate::ShortData) == 0);
+
     // even if CanBeSmall = false, we have short data for a default-constructed
     // QDateTime object. But it's unlikely.
     if (CanBeSmall)
@@ -2913,11 +2928,13 @@ inline QDateTime::Data QDateTimePrivate::create(const QDate &toDate, const QTime
 }
 
 // Convert a TimeZone time expressed in zone msecs encoding into a UTC epoch msecs
+// DST transitions are disambiguated by hint.
 inline qint64 QDateTimePrivate::zoneMSecsToEpochMSecs(qint64 zoneMSecs, const QTimeZone &zone,
+                                                      DaylightStatus hint,
                                                       QDate *localDate, QTime *localTime)
 {
     // Get the effective data from QTimeZone
-    QTimeZonePrivate::Data data = zone.d->dataForLocalTime(zoneMSecs);
+    QTimeZonePrivate::Data data = zone.d->dataForLocalTime(zoneMSecs, int(hint));
     // Docs state any LocalTime before 1970-01-01 will *not* have any DST applied
     // but all affected times afterwards will have DST applied.
     if (data.atMSecsSinceEpoch >= 0) {
@@ -3530,7 +3547,8 @@ qint64 QDateTime::toMSecsSinceEpoch() const
 #if !QT_CONFIG(timezone)
         return 0;
 #else
-        return QDateTimePrivate::zoneMSecsToEpochMSecs(d->m_msecs, d->m_timeZone);
+        return QDateTimePrivate::zoneMSecsToEpochMSecs(d->m_msecs, d->m_timeZone,
+                                                       extractDaylightStatus(getStatus(d)));
 #endif
     }
     Q_UNREACHABLE();
@@ -3629,10 +3647,16 @@ void QDateTime::setMSecsSinceEpoch(qint64 msecs)
         // Docs state any LocalTime before 1970-01-01 will *not* have any DST applied
         // but all affected times afterwards will have DST applied.
         d.detach();
-        if (msecs >= 0)
+        if (msecs >= 0) {
+            status = mergeDaylightStatus(status,
+                                         d->m_timeZone.d->isDaylightTime(msecs)
+                                         ? QDateTimePrivate::DaylightTime
+                                         : QDateTimePrivate::StandardTime);
             d->m_offsetFromUtc = d->m_timeZone.d->offsetFromUtc(msecs);
-        else
+        } else {
+            status = mergeDaylightStatus(status, QDateTimePrivate::StandardTime);
             d->m_offsetFromUtc = d->m_timeZone.d->standardTimeOffset(msecs);
+        }
         msecs = msecs + (d->m_offsetFromUtc * 1000);
         status = status
                     | QDateTimePrivate::ValidDate
@@ -3658,7 +3682,7 @@ void QDateTime::setMSecsSinceEpoch(qint64 msecs)
         d.data.status = status;
     } else {
         d.detach();
-        d->m_status = status;
+        d->m_status = status & ~QDateTimePrivate::ShortData;
         d->m_msecs = msecs;
     }
 
@@ -3780,15 +3804,20 @@ QString QDateTime::toString(Qt::DateFormat format) const
 #ifndef QT_NO_TEXTDATE
     case Qt::TextDate: {
         const QPair<QDate, QTime> p = getDateTime(d);
-        const QDate &dt = p.first;
-        const QTime &tm = p.second;
-        //We cant use date.toString(Qt::TextDate) as we need to insert the time before the year
-        buf = QString::fromLatin1("%1 %2 %3 %4 %5").arg(dt.shortDayName(dt.dayOfWeek()))
-                                                   .arg(dt.shortMonthName(dt.month()))
-                                                   .arg(dt.day())
-                                                   .arg(tm.toString(Qt::TextDate))
-                                                   .arg(dt.year());
-        if (timeSpec() != Qt::LocalTime) {
+        buf = p.first.toString(Qt::TextDate);
+        // Insert time between date's day and year:
+        buf.insert(buf.lastIndexOf(QLatin1Char(' ')),
+                   QLatin1Char(' ') + p.second.toString(Qt::TextDate));
+        // Append zone/offset indicator, as appropriate:
+        switch (timeSpec()) {
+        case Qt::LocalTime:
+            break;
+# if QT_CONFIG(timezone)
+        case Qt::TimeZone:
+            buf += QLatin1Char(' ') + d->m_timeZone.abbreviation(*this);
+            break;
+# endif
+        default:
             buf += QLatin1String(" GMT");
             if (getSpec(d) == Qt::OffsetFromUTC)
                 buf += toOffsetString(Qt::TextDate, offsetFromUtc());
@@ -3811,6 +3840,9 @@ QString QDateTime::toString(Qt::DateFormat format) const
             buf += QLatin1Char('Z');
             break;
         case Qt::OffsetFromUTC:
+#if QT_CONFIG(timezone)
+        case Qt::TimeZone:
+#endif
             buf += toOffsetString(Qt::ISODate, offsetFromUtc());
             break;
         default:
@@ -3896,7 +3928,7 @@ QString QDateTime::toString(Qt::DateFormat format) const
 */
 QString QDateTime::toString(const QString& format) const
 {
-    return QLocale::system().toString(*this, format);
+    return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
 #endif //QT_NO_DATESTRING
 
@@ -3920,7 +3952,10 @@ static inline void massageAdjustedDateTime(const QDateTimeData &d, QDate *date, 
         localMSecsToEpochMSecs(timeToMSecs(*date, *time), &status, date, time);
 #if QT_CONFIG(timezone)
     } else if (spec == Qt::TimeZone) {
-        QDateTimePrivate::zoneMSecsToEpochMSecs(timeToMSecs(*date, *time), d->m_timeZone, date, time);
+        QDateTimePrivate::zoneMSecsToEpochMSecs(timeToMSecs(*date, *time),
+                                                d->m_timeZone,
+                                                QDateTimePrivate::UnknownDaylightTime,
+                                                date, time);
 #endif // timezone
     }
 }
@@ -4950,6 +4985,7 @@ QDateTime QDateTime::fromString(const QString &string, const QString &format)
     QDate date;
 
     QDateTimeParser dt(QVariant::DateTime, QDateTimeParser::FromString);
+    // dt.setDefaultLocale(QLocale::c()); ### Qt 6
     if (dt.parseFormat(format) && dt.fromString(string, &date, &time))
         return QDateTime(date, time);
 #else

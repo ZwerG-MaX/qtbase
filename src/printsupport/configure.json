@@ -28,14 +28,27 @@
             "label": "CUPS",
             "purpose": "Provides support for the Common Unix Printing System.",
             "section": "Painting",
-            "condition": "libs.cups",
+            "condition": "libs.cups && features.printer && features.datestring",
+            "output": [ "privateFeature", "feature" ]
+        },
+        "cupsjobwidget": {
+            "label": "CUPS job control widget",
+            "section": "Widgets",
+            "condition": [
+                "features.calendarwidget",
+                "features.checkbox",
+                "features.combobox",
+                "features.cups",
+                "features.datetimeedit",
+                "features.groupbox"
+            ],
             "output": [ "privateFeature", "feature" ]
         },
         "printer": {
             "label": "QPrinter",
             "purpose": "Provides a printer backend of QPainter.",
             "section": "Painting",
-            "condition": "!config.android && !config.uikit && !config.winrt && features.picture && features.temporaryfile && features.pdf",
+            "condition": "!config.uikit && !config.winrt && features.picture && features.temporaryfile && features.pdf",
             "output": [ "publicFeature", "feature" ]
         },
         "printpreviewwidget": {
@@ -49,14 +62,26 @@
             "label": "QPrintDialog",
             "purpose": "Provides a dialog widget for specifying printer configuration.",
             "section": "Dialogs",
-            "condition": "features.printer && features.combobox && features.buttongroup && features.spinbox && features.treeview && features.tabwidget",
+            "condition": [
+                "features.buttongroup",
+                "features.checkbox",
+                "features.combobox",
+                "features.dialog",
+                "features.datetimeedit",
+                "features.dialogbuttonbox",
+                "features.printer",
+                "features.radiobutton",
+                "features.spinbox",
+                "features.tabwidget",
+                "features.treeview"
+            ],
             "output": [ "publicFeature", "feature" ]
         },
         "printpreviewdialog": {
             "label": "QPrintPreviewDialog",
             "purpose": "Provides a dialog for previewing and configuring page layouts for printer output.",
             "section": "Dialogs",
-            "condition": "features.printpreviewwidget && features.printdialog && features.toolbar",
+            "condition": "features.printpreviewwidget && features.printdialog && features.toolbar && features.formlayout",
             "output": [ "publicFeature", "feature" ]
         }
     },

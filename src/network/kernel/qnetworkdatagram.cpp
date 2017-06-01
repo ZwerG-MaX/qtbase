@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -46,7 +46,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \class QNetworkDatagram
-    \brief The QNetworkDatagram class provides the data and matadata of a UDP datagram.
+    \brief The QNetworkDatagram class provides the data and metadata of a UDP datagram.
     \since 5.8
     \ingroup network
     \inmodule QtNetwork

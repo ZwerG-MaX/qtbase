@@ -49,7 +49,9 @@
 #include "qvariant.h"
 #include "qwidget_p.h"
 #include "qlayout_p.h"
+#if QT_CONFIG(formlayout)
 #include "qformlayout.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -320,8 +322,10 @@ int QLayout::spacing() const
         return boxlayout->spacing();
     } else if (const QGridLayout* gridlayout = qobject_cast<const QGridLayout*>(this)) {
         return gridlayout->spacing();
+#if QT_CONFIG(formlayout)
     } else if (const QFormLayout* formlayout = qobject_cast<const QFormLayout*>(this)) {
         return formlayout->spacing();
+#endif
     } else {
         Q_D(const QLayout);
         if (d->insideSpacing >=0) {
@@ -347,8 +351,10 @@ void QLayout::setSpacing(int spacing)
         boxlayout->setSpacing(spacing);
     } else if (QGridLayout* gridlayout = qobject_cast<QGridLayout*>(this)) {
         gridlayout->setSpacing(spacing);
+#if QT_CONFIG(formlayout)
     } else if (QFormLayout* formlayout = qobject_cast<QFormLayout*>(this)) {
         formlayout->setSpacing(spacing);
+#endif
     } else {
         Q_D(QLayout);
         d->insideSpacing = spacing;
@@ -575,7 +581,7 @@ void QLayoutPrivate::doResize(const QSize &r)
     QWidget *mw = q->parentWidget();
     QRect rect = mw->testAttribute(Qt::WA_LayoutOnEntireRect) ? mw->rect() : mw->contentsRect();
     const int mbTop = rect.top();
-    rect.setTop(rect.top() + mbh);
+    rect.setTop(mbTop + mbh);
     q->setGeometry(rect);
 #ifndef QT_NO_MENUBAR
     if (menubar)
@@ -635,21 +641,11 @@ void QLayout::childEvent(QChildEvent *e)
     if (!d->enabled)
         return;
 
-    if (e->type() == QEvent::ChildRemoved) {
-        QChildEvent *c = (QChildEvent*)e;
-        int i = 0;
+    if (e->type() != QEvent::ChildRemoved)
+        return;
 
-        QLayoutItem *item;
-        while ((item = itemAt(i))) {
-            if (item == static_cast<QLayout*>(c->child())) {
-                takeAt(i);
-                invalidate();
-                break;
-            } else {
-                ++i;
-            }
-        }
-    }
+    if (QLayout *childLayout = qobject_cast<QLayout *>(e->child()))
+        removeItem(childLayout);
 }
 
 /*!
@@ -760,13 +756,10 @@ QSize QLayout::totalMaximumSize() const
 QLayout::~QLayout()
 {
     Q_D(QLayout);
-    /*
-      This function may be called during the QObject destructor,
-      when the parent no longer is a QWidget.
-    */
-    if (d->topLevel && parent() && parent()->isWidgetType() &&
-         ((QWidget*)parent())->layout() == this)
-        ((QWidget*)parent())->d_func()->layout = 0;
+    if (d->topLevel && parent() && parent()->isWidgetType() && parentWidget()->layout() == this)
+        parentWidget()->d_func()->layout = 0;
+    else if (QLayout *parentLayout = qobject_cast<QLayout *>(parent()))
+        parentLayout->removeItem(this);
 }
 
 

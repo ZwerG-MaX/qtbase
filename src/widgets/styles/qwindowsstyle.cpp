@@ -40,7 +40,7 @@
 #include "qwindowsstyle_p.h"
 #include "qwindowsstyle_p_p.h"
 
-#if !defined(QT_NO_STYLE_WINDOWS) || defined(QT_PLUGIN)
+#if QT_CONFIG(style_windows) || defined(QT_PLUGIN)
 
 #include "qapplication.h"
 #include "qbitmap.h"
@@ -815,6 +815,7 @@ void QWindowsStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, 
             p->save();
             doRestore = true;
         }
+#if QT_CONFIG(itemviews)
         if (pe == PE_IndicatorViewItemCheck) {
             const QStyleOptionViewItem *itemViewOpt = qstyleoption_cast<const QStyleOptionViewItem *>(opt);
             p->setPen(itemViewOpt
@@ -826,6 +827,7 @@ void QWindowsStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, 
                 p->setBrush(opt->palette.brush(QPalette::Button));
             p->drawRect(opt->rect.x() + 1, opt->rect.y() + 1, 11, 11);
         }
+#endif // QT_CONFIG(itemviews)
         if (!(opt->state & State_Off)) {
             QLineF lines[7];
             int i, xx, yy;
@@ -1727,10 +1729,14 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
 
                 int step = 0;
                 int chunkCount = w / unit_width + 1;
+#if QT_CONFIG(animation)
                 if (QProgressStyleAnimation *animation = qobject_cast<QProgressStyleAnimation*>(d->animation(opt->styleObject)))
                     step = (animation->animationStep() / 3) % chunkCount;
                 else
                     d->startAnimation(new QProgressStyleAnimation(d->animationFps, opt->styleObject));
+#else
+                Q_UNUSED(d);
+#endif
                 int chunksInRow = 5;
                 int myY = pbBits.rect.y();
                 int myHeight = pbBits.rect.height();
@@ -1764,7 +1770,9 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
                 p->restore(); //restore state
             }
             else {
+#if QT_CONFIG(animation)
                 d->stopAnimation(opt->styleObject);
+#endif
                 QCommonStyle::drawControl(ce, opt, p, widget);
             }
         }
@@ -2407,4 +2415,4 @@ QT_END_NAMESPACE
 
 #include "moc_qwindowsstyle_p.cpp"
 
-#endif // QT_NO_STYLE_WINDOWS
+#endif // style_windows

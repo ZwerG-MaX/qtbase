@@ -43,6 +43,7 @@
 #include <QtFbSupport/private/qfbcursor_p.h>
 
 #include <QtGui/QPainter>
+#include <QtGui/QScreen>
 #include <QtCore/QRegularExpression>
 
 
@@ -57,8 +58,10 @@ QVncScreen::QVncScreen(const QStringList &args)
 
 QVncScreen::~QVncScreen()
 {
+#if QT_CONFIG(cursor)
     if (clientCursor)
         delete clientCursor;
+#endif
 }
 
 bool QVncScreen::initialize()
@@ -119,17 +122,23 @@ QRegion QVncScreen::doRedraw()
     return touched;
 }
 
+
 void QVncScreen::enableClientCursor(QVncClient *client)
 {
+#if QT_CONFIG(cursor)
     delete mCursor;
     mCursor = nullptr;
     if (!clientCursor)
         clientCursor = new QVncClientCursor();
     clientCursor->addClient(client);
+#else
+    Q_UNUSED(client)
+#endif
 }
 
 void QVncScreen::disableClientCursor(QVncClient *client)
 {
+#if QT_CONFIG(cursor)
     uint clientCount = clientCursor->removeClient(client);
     if (clientCount == 0) {
         delete clientCursor;
@@ -137,11 +146,18 @@ void QVncScreen::disableClientCursor(QVncClient *client)
     }
 
     mCursor = new QFbCursor(this);
+#else
+    Q_UNUSED(client)
+#endif
 }
 
 QPlatformCursor *QVncScreen::cursor() const
 {
+#if QT_CONFIG(cursor)
     return mCursor ? static_cast<QPlatformCursor *>(mCursor) : static_cast<QPlatformCursor *>(clientCursor);
+#else
+    return nullptr;
+#endif
 }
 
 // grabWindow() grabs "from the screen" not from the backingstores.
@@ -150,10 +166,10 @@ QPixmap QVncScreen::grabWindow(WId wid, int x, int y, int width, int height) con
 {
     if (!wid) {
         if (width < 0)
-            width = mScreenImage->width() - x;
+            width = mScreenImage.width() - x;
         if (height < 0)
-            height = mScreenImage->height() - y;
-        return QPixmap::fromImage(*mScreenImage).copy(x, y, width, height);
+            height = mScreenImage.height() - y;
+        return QPixmap::fromImage(mScreenImage).copy(x, y, width, height);
     }
 
     QFbWindow *window = windowForId(wid);
@@ -165,23 +181,32 @@ QPixmap QVncScreen::grabWindow(WId wid, int x, int y, int width, int height) con
             height = geom.height() - y;
         QRect rect(geom.topLeft() + QPoint(x, y), QSize(width, height));
         rect &= window->geometry();
-        return QPixmap::fromImage(*mScreenImage).copy(rect);
+        return QPixmap::fromImage(mScreenImage).copy(rect);
     }
 
     return QPixmap();
 }
 
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
-bool QVNCScreen::swapBytes() const
+bool QVncScreen::swapBytes() const
 {
+    return false;
+
+    /* TODO
     if (depth() != 16)
         return false;
 
     if (screen())
         return screen()->frameBufferLittleEndian();
     return frameBufferLittleEndian();
+    */
 }
 #endif
+
+QFbScreen::Flags QVncScreen::flags() const
+{
+    return QFbScreen::DontForceFirstWindowToFullScreen;
+}
 
 QT_END_NAMESPACE
 

@@ -591,12 +591,7 @@ namespace {
 */
 
 QWindowsFontEngineData::QWindowsFontEngineData()
-    : clearTypeEnabled(false)
-    , fontSmoothingGamma(QWindowsFontDatabase::fontSmoothingGamma())
-#if !defined(QT_NO_DIRECTWRITE)
-    , directWriteFactory(0)
-    , directWriteGdiInterop(0)
-#endif
+    : fontSmoothingGamma(QWindowsFontDatabase::fontSmoothingGamma())
 {
     // from qapplication_win.cpp
     UINT result = 0;
@@ -1221,8 +1216,6 @@ QWindowsFontEngineDataPtr sharedFontData()
 }
 #endif // QT_NO_THREAD
 
-extern Q_GUI_EXPORT bool qt_needs_a8_gamma_correction;
-
 QWindowsFontDatabase::QWindowsFontDatabase()
 {
     // Properties accessed by QWin32PrintEngine (Qt Print Support)
@@ -1236,7 +1229,6 @@ QWindowsFontDatabase::QWindowsFontDatabase()
         qCDebug(lcQpaFonts) << __FUNCTION__ << "Clear type: "
             << data->clearTypeEnabled << "gamma: " << data->fontSmoothingGamma;
     }
-    qt_needs_a8_gamma_correction = true;
 }
 
 QWindowsFontDatabase::~QWindowsFontDatabase()

@@ -166,7 +166,7 @@ QNetworkReplyPrivate::QNetworkReplyPrivate()
     any credentials offered (if any)
 
     \value ContentAccessDenied          the access to the remote
-    content was denied (similar to HTTP error 401)
+    content was denied (similar to HTTP error 403)
 
     \value ContentOperationNotPermittedError the operation requested
     on the remote content is not permitted
@@ -302,6 +302,18 @@ QNetworkReplyPrivate::QNetworkReplyPrivate()
     redirect url as returned by the server in the location header.
 
     \sa QNetworkRequest::FollowRedirectsAttribute
+*/
+
+/*!
+    \fn void QNetworkReply::redirectAllowed()
+    \since 5.9
+
+    When client code handling the redirected() signal has verified the new URL,
+    it emits this signal to allow the redirect to go ahead.  This protocol applies
+    to network requests whose redirects policy is set to
+    QNetworkRequest::UserVerifiedRedirectsPolicy.
+
+    \sa QNetworkRequest::UserVerifiedRedirectPolicy, QNetworkAccessManager::setRedirectPolicy(), QNetworkRequest::RedirectPolicyAttribute
 */
 
 /*!
@@ -718,7 +730,11 @@ void QNetworkReply::setSslConfiguration(const QSslConfiguration &config)
     You can clear the list of errors you want to ignore by calling this
     function with an empty list.
 
-    \sa sslConfiguration(), sslErrors(), QSslSocket::ignoreSslErrors()
+    \note If HTTP Strict Transport Security is enabled for QNetworkAccessManager,
+    this function has no effect.
+
+    \sa sslConfiguration(), sslErrors(), QSslSocket::ignoreSslErrors(),
+    QNetworkAccessManager::setStrictTransportSecurityEnabled()
 */
 void QNetworkReply::ignoreSslErrors(const QList<QSslError> &errors)
 {
@@ -784,6 +800,9 @@ void QNetworkReply::ignoreSslErrorsImplementation(const QList<QSslError> &)
     This function can be called from the slot connected to the
     sslErrors() signal, which indicates which errors were
     found.
+
+    \note If HTTP Strict Transport Security is enabled for QNetworkAccessManager,
+    this function has no effect.
 
     \sa sslConfiguration(), sslErrors(), QSslSocket::ignoreSslErrors()
 */

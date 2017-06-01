@@ -59,12 +59,13 @@
         # Provide the C-runtime dependency
         equals(TEMPLATE, "app") {
             VCLIBS = Microsoft.VCLibs.$$replace(MSVC_VER, \\., ).00
-            winphone: VCLIBS = $${VCLIBS}.Phone
             CONFIG(debug, debug|release): \
                 VCLIBS = $${VCLIBS}.Debug
             else: \
                 VCLIBS = $${VCLIBS}
-            contains(MSVC_VER, "14.0"): VCLIBS = "$${VCLIBS}\" MinVersion=\"14.0.0.0\" Publisher=\"CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+            # VS 2017 still uses vclibs 140
+            contains(MSVC_VER, "15.0"): VCLIBS = $$replace(VCLIBS, 150, 140)
+            VCLIBS = "$${VCLIBS}\" MinVersion=\"14.0.0.0\" Publisher=\"CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
             WINRT_MANIFEST.dependencies += $$VCLIBS
         }
 
@@ -94,7 +95,7 @@
         isEmpty(WINRT_MANIFEST.background): WINRT_MANIFEST.background = green
         isEmpty(WINRT_MANIFEST.foreground): WINRT_MANIFEST.foreground = light
         isEmpty(WINRT_MANIFEST.default_language): WINRT_MANIFEST.default_language = en
-        *-msvc2015 {
+        *-msvc2015|*-msvc2017 {
             isEmpty(WINRT_MANIFEST.minVersion): WINRT_MANIFEST.minVersion = $$(UCRTVersion)
             isEmpty(WINRT_MANIFEST.minVersion): error("No UCRTVersion found in environment."))
             isEmpty(WINRT_MANIFEST.maxVersionTested): WINRT_MANIFEST.maxVersionTested = $$WINRT_MANIFEST.minVersion
@@ -103,7 +104,6 @@
         INDENT = "$$escape_expand(\\r\\n)        "
 
         VS_XML_NAMESPACE = "m2"
-        winphone: VS_XML_NAMESPACE = "m3"
         WINRT_MANIFEST.rotation_preference = $$unique(WINRT_MANIFEST.rotation_preference)
         !isEmpty(WINRT_MANIFEST.rotation_preference) {
             MANIFEST_ROTATION += "<$${VS_XML_NAMESPACE}:InitialRotationPreference>"
@@ -118,7 +118,7 @@
 
         # All Windows 10 applications need to have internetClient. It is also not marked as additional
         # capability anymore and is assumed to be standard.
-        *-msvc2015: WINRT_MANIFEST.capabilities += internetClient
+        *-msvc2015|*-msvc2017: WINRT_MANIFEST.capabilities += internetClient
 
         contains(WINRT_MANIFEST.capabilities, defaults) {
             WINRT_MANIFEST.capabilities -= defaults
@@ -145,15 +145,13 @@
         }
 
         # Dependencies are given as a string list. The CRT dependency is added automatically above.
-        # For MSVC2015 the dependencies are added in conjunction with TargetDeviceFamily
+        # For MSVC2015/2017 the dependencies are added in conjunction with TargetDeviceFamily
         # Due to the hard coded dependency on "Windows.Universal" the <Dependencies> tag
         # is already inside the MSVC2015 manifest.
         WINRT_MANIFEST.dependencies = $$unique(WINRT_MANIFEST.dependencies)
         !isEmpty(WINRT_MANIFEST.dependencies) {
-            *-msvc2013: MANIFEST_DEPENDENCIES += "<Dependencies>"
             for(DEPENDENCY, WINRT_MANIFEST.dependencies): \
                 MANIFEST_DEPENDENCIES += "  <PackageDependency Name=\"$$DEPENDENCY\" />"
-            *-msvc2013: MANIFEST_DEPENDENCIES += "</Dependencies>"
 
             WINRT_MANIFEST.dependencies = $$join(MANIFEST_DEPENDENCIES, $$INDENT, $$INDENT)
         }

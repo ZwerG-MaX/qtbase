@@ -133,9 +133,9 @@ QFileSelectorPrivate::QFileSelectorPrivate()
     With those files available, you would select a different file on the android platform,
     but only if the locale was en_GB.
 
-    QFileSelector will not attempt to select if the base file does not exist. For error handling in
-    the case no valid selectors are present, it is recommended to have a default or error-handling
-    file in the base file location even if you expect selectors to be present for all deployments.
+    For error handling in the case no valid selectors are present, it is recommended to have a default or
+    error-handling file in the base file location even if you expect selectors to be present for all
+    deployments.
 
     In a future version, some may be marked as deploy-time static and be moved during the
     deployment step as an optimization. As selectors come with a performance cost, it is
@@ -298,9 +298,6 @@ QString QFileSelectorPrivate::select(const QString &filePath) const
 {
     Q_Q(const QFileSelector);
     QFileInfo fi(filePath);
-    // If file doesn't exist, don't select
-    if (!fi.exists())
-        return filePath;
 
     QString ret = selectionHelper(fi.path().isEmpty() ? QString() : fi.path() + QLatin1Char('/'),
             fi.fileName(), q->allSelectors());
@@ -366,16 +363,13 @@ void QFileSelectorPrivate::updateSelectors()
 QStringList QFileSelectorPrivate::platformSelectors()
 {
     // similar, but not identical to QSysInfo::osType
+    // ### Qt6: remove macOS fallbacks to "mac" and the future compatibility
     QStringList ret;
 #if defined(Q_OS_WIN)
-    // can't fall back to QSysInfo because we need both "winphone" and "winrt" for the Windows Phone case
     ret << QStringLiteral("windows");
     ret << QSysInfo::kernelType();  // "winnt"
 #  if defined(Q_OS_WINRT)
     ret << QStringLiteral("winrt");
-#    if defined(Q_OS_WINPHONE)
-    ret << QStringLiteral("winphone");
-#    endif
 #  endif
 #elif defined(Q_OS_UNIX)
     ret << QStringLiteral("unix");
@@ -387,12 +381,11 @@ QStringList QFileSelectorPrivate::platformSelectors()
 #     endif
 #  endif
     QString productName = QSysInfo::productType();
-#     ifdef Q_OS_MACOS
-    if (productName != QLatin1String("osx"))
-        ret << QStringLiteral("osx"); // compatibility
-#     endif
     if (productName != QLatin1String("unknown"))
-        ret << productName; // "opensuse", "fedora", "macos", "ios", "android"
+        ret << productName; // "opensuse", "fedora", "osx", "ios", "android"
+#  if defined(Q_OS_MACOS)
+    ret << QStringLiteral("macos"); // future compatibility
+#  endif
 #endif
     return ret;
 }

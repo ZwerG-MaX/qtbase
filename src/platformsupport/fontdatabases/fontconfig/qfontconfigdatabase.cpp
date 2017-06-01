@@ -40,6 +40,8 @@
 #include "qfontconfigdatabase_p.h"
 #include "qfontenginemultifontconfig_p.h"
 
+#include <QtFontDatabaseSupport/private/qfontengine_ft_p.h>
+
 #include <QtCore/QList>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
@@ -49,7 +51,6 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformservices.h>
 
-#include <QtGui/private/qfontengine_ft_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qhighdpiscaling_p.h>
 
@@ -676,6 +677,7 @@ QFontEngine *QFontconfigDatabase::fontEngine(const QFontDef &f, void *usrPtr)
     fid.filename = QFile::encodeName(fontfile->fileName);
     fid.index = fontfile->indexValue;
 
+    // FIXME: Unify with logic in QFontEngineFT::create()
     QFontEngineFT *engine = new QFontEngineFT(f);
     engine->face_id = fid;
 
@@ -691,7 +693,7 @@ QFontEngine *QFontconfigDatabase::fontEngine(const QFontDef &f, void *usrPtr)
 
 QFontEngine *QFontconfigDatabase::fontEngine(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference)
 {
-    QFontEngineFT *engine = static_cast<QFontEngineFT*>(QBasicFontDatabase::fontEngine(fontData, pixelSize, hintingPreference));
+    QFontEngineFT *engine = static_cast<QFontEngineFT*>(QFreeTypeFontDatabase::fontEngine(fontData, pixelSize, hintingPreference));
     if (engine == 0)
         return 0;
 
@@ -843,7 +845,7 @@ QStringList QFontconfigDatabase::addApplicationFont(const QByteArray &fontData, 
 
 QString QFontconfigDatabase::resolveFontFamilyAlias(const QString &family) const
 {
-    QString resolved = QBasicFontDatabase::resolveFontFamilyAlias(family);
+    QString resolved = QFreeTypeFontDatabase::resolveFontFamilyAlias(family);
     if (!resolved.isEmpty() && resolved != family)
         return resolved;
     FcPattern *pattern = FcPatternCreate();
@@ -899,7 +901,13 @@ void QFontconfigDatabase::setupFontEngine(QFontEngineFT *engine, const QFontDef 
     bool forcedAntialiasSetting = !antialias;
 
     const QPlatformServices *services = QGuiApplicationPrivate::platformIntegration()->services();
-    bool useXftConf = (services && (services->desktopEnvironment() == "GNOME" || services->desktopEnvironment() == "UNITY"));
+    bool useXftConf = false;
+
+    if (services) {
+        const QList<QByteArray> desktopEnv = services->desktopEnvironment().split(':');
+        useXftConf = desktopEnv.contains("GNOME") || desktopEnv.contains("UNITY");
+    }
+
     if (useXftConf && !forcedAntialiasSetting) {
         void *antialiasResource =
                 QGuiApplication::platformNativeInterface()->nativeResourceForScreen("antialiasingEnabled",

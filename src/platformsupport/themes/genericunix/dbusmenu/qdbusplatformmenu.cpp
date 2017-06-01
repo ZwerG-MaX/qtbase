@@ -39,6 +39,7 @@
 
 #include "qdbusplatformmenu_p.h"
 
+#include <QDateTime>
 #include <QDebug>
 #include <QWindow>
 
@@ -58,8 +59,8 @@ QDBusPlatformMenuItem::QDBusPlatformMenuItem(quintptr tag)
     , m_isSeparator(false)
     , m_isCheckable(false)
     , m_isChecked(false)
-    , m_dbusID(nextDBusID++)
     , m_hasExclusiveGroup(false)
+    , m_dbusID(nextDBusID++)
 {
     menuItemsByID.insert(m_dbusID, this);
 }
@@ -170,7 +171,6 @@ QDBusPlatformMenu::QDBusPlatformMenu(quintptr tag)
     : m_tag(tag ? tag : reinterpret_cast<quintptr>(this))
     , m_isEnabled(true)
     , m_isVisible(true)
-    , m_isSeparator(false)
     , m_revision(1)
     , m_containingMenuItem(Q_NULLPTR)
 {
@@ -210,6 +210,8 @@ void QDBusPlatformMenu::removeMenuItem(QPlatformMenuItem *menuItem)
                    this, &QDBusPlatformMenu::propertiesUpdated);
         disconnect(menu, &QDBusPlatformMenu::updated,
                    this, &QDBusPlatformMenu::updated);
+        disconnect(menu, &QDBusPlatformMenu::popupRequested,
+                   this, &QDBusPlatformMenu::popupRequested);
     }
     emitUpdated();
 }
@@ -222,6 +224,8 @@ void QDBusPlatformMenu::syncSubMenu(const QDBusPlatformMenu *menu)
             this, &QDBusPlatformMenu::propertiesUpdated, Qt::UniqueConnection);
     connect(menu, &QDBusPlatformMenu::updated,
             this, &QDBusPlatformMenu::updated, Qt::UniqueConnection);
+    connect(menu, &QDBusPlatformMenu::popupRequested,
+            this, &QDBusPlatformMenu::popupRequested, Qt::UniqueConnection);
 }
 
 void QDBusPlatformMenu::syncMenuItem(QPlatformMenuItem *menuItem)
@@ -276,6 +280,15 @@ void QDBusPlatformMenu::setVisible(bool isVisible)
 void QDBusPlatformMenu::setContainingMenuItem(QDBusPlatformMenuItem *item)
 {
     m_containingMenuItem = item;
+}
+
+void QDBusPlatformMenu::showPopup(const QWindow *parentWindow, const QRect &targetRect, const QPlatformMenuItem *item)
+{
+    Q_UNUSED(parentWindow);
+    Q_UNUSED(targetRect);
+    Q_UNUSED(item);
+    setVisible(true);
+    emit popupRequested(m_containingMenuItem->dbusID(), QDateTime::currentMSecsSinceEpoch());
 }
 
 QPlatformMenuItem *QDBusPlatformMenu::menuItemAt(int position) const

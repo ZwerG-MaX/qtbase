@@ -49,6 +49,23 @@ QT_BEGIN_NAMESPACE
    System information
 */
 
+/*
+ * GCC (5-7) has a regression that causes it to emit wrong deprecated warnings:
+ * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=77849
+ *
+ * Try to work around it by defining our own macro.
+ */
+
+#ifdef QT_SYSINFO_DEPRECATED_X
+#error "QT_SYSINFO_DEPRECATED_X already defined"
+#endif
+
+#ifdef Q_CC_GNU
+#define QT_SYSINFO_DEPRECATED_X(x)
+#else
+#define QT_SYSINFO_DEPRECATED_X(x) QT_DEPRECATED_X(x)
+#endif
+
 class QString;
 class Q_CORE_EXPORT QSysInfo {
 public:
@@ -79,7 +96,8 @@ public:
 #  endif
     };
 #endif
-    enum WinVersion {
+#if QT_DEPRECATED_SINCE(5, 9)
+    enum QT_DEPRECATED_X("Use QOperatingSystemVersion") WinVersion {
         WV_None     = 0x0000,
 
         WV_32s      = 0x0001,
@@ -117,19 +135,12 @@ public:
         WV_CE_6     = 0x0400,
         WV_CE_based = 0x0f00
     };
-#if defined(Q_OS_WIN) || defined(Q_OS_CYGWIN)
-    static const WinVersion WindowsVersion;
-    static WinVersion windowsVersion();
-#else
-    static const WinVersion WindowsVersion = WV_None;
-    static WinVersion windowsVersion() { return WV_None; }
-#endif
 
 #define Q_MV_OSX(major, minor) (major == 10 ? minor + 2 : (major == 9 ? 1 : 0))
 #define Q_MV_IOS(major, minor) (QSysInfo::MV_IOS | major << 4 | minor)
 #define Q_MV_TVOS(major, minor) (QSysInfo::MV_TVOS | major << 4 | minor)
 #define Q_MV_WATCHOS(major, minor) (QSysInfo::MV_WATCHOS | major << 4 | minor)
-    enum MacVersion {
+    enum QT_DEPRECATED_X("Use QOperatingSystemVersion") MacVersion {
         MV_None    = 0xffff,
         MV_Unknown = 0x0000,
 
@@ -198,13 +209,25 @@ public:
         MV_WATCHOS_2_2 = Q_MV_WATCHOS(2, 2),
         MV_WATCHOS_3_0 = Q_MV_WATCHOS(3, 0)
     };
-#if defined(Q_OS_MAC)
-    static const MacVersion MacintoshVersion;
-    static MacVersion macVersion();
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+#if defined(Q_OS_WIN) || defined(Q_OS_CYGWIN)
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static const WinVersion WindowsVersion;
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static WinVersion windowsVersion();
 #else
-    static const MacVersion MacintoshVersion = MV_None;
-    static MacVersion macVersion() { return MV_None; }
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static const WinVersion WindowsVersion = WV_None;
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static WinVersion windowsVersion() { return WV_None; }
 #endif
+#if defined(Q_OS_MAC)
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static const MacVersion MacintoshVersion;
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static MacVersion macVersion();
+#else
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static const MacVersion MacintoshVersion = MV_None;
+    QT_SYSINFO_DEPRECATED_X("Use QOperatingSystemVersion::current()") static MacVersion macVersion() { return MV_None; }
+#endif
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(5, 9)
 
     static QString buildCpuArchitecture();
     static QString currentCpuArchitecture();
@@ -218,6 +241,8 @@ public:
 
     static QString machineHostName();
 };
+
+#undef QT_SYSINFO_DEPRECATED_X
 
 QT_END_NAMESPACE
 #endif // QSYSINFO_H

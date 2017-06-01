@@ -84,6 +84,7 @@ android|uikit|winrt: \
     CONFIG += builtin_testdata
 
 CONFIG += \
+    utf8_source \
     create_prl link_prl \
     prepare_docs qt_docs_targets \
     no_private_qt_headers_warning QTDIR_build \
@@ -96,6 +97,8 @@ CONFIG += \
 # resolved), nor functional (.res files end up in .prl files and break things).
 unix: CONFIG += explicitlib
 
+# By default we want tests on macOS to be built as standalone executables
+macos: CONFIG += testcase_no_bundle
 
 defineTest(qtBuildPart) {
     bp = $$eval($$upper($$section(_QMAKE_CONF_, /, -2, -2))_BUILD_PARTS)

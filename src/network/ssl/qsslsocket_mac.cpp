@@ -53,9 +53,12 @@
 #include <QtCore/qvector.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qdebug.h>
+#include <QtCore/quuid.h>
+#include <QtCore/qdir.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <vector>
 
 #include <QtCore/private/qcore_mac_p.h>
 
@@ -64,6 +67,102 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+namespace
+{
+#ifdef Q_OS_MACOS
+/*
+
+Our own temporarykeychain is needed only on macOS where SecPKCS12Import changes
+the default keychain and where we see annoying pop-ups asking about accessing a
+private key.
+
+*/
+
+struct EphemeralSecKeychain
+{
+    EphemeralSecKeychain();
+    ~EphemeralSecKeychain();
+
+    SecKeychainRef keychain = nullptr;
+    Q_DISABLE_COPY(EphemeralSecKeychain)
+};
+
+EphemeralSecKeychain::EphemeralSecKeychain()
+{
+    const auto uuid = QUuid::createUuid();
+    if (uuid.isNull()) {
+        qCWarning(lcSsl) << "Failed to create an unique keychain name";
+        return;
+    }
+
+    QString uuidAsString(uuid.toString());
+    Q_ASSERT(uuidAsString.size() > 2);
+    Q_ASSERT(uuidAsString.startsWith(QLatin1Char('{'))
+             && uuidAsString.endsWith(QLatin1Char('}')));
+    uuidAsString = uuidAsString.mid(1, uuidAsString.size() - 2);
+
+    QString keychainName(QDir::tempPath());
+    keychainName.append(QDir::separator());
+    keychainName += uuidAsString;
+    keychainName += QLatin1String(".keychain");
+    // SecKeychainCreate, pathName parameter:
+    //
+    // "A constant character string representing the POSIX path indicating where
+    // to store the keychain."
+    //
+    // Internally they seem to use std::string, but this does not really help.
+    // Fortunately, CFString has a convenient API.
+    QCFType<CFStringRef> cfName = keychainName.toCFString();
+    std::vector<char> posixPath;
+    // "Extracts the contents of a string as a NULL-terminated 8-bit string
+    // appropriate for passing to POSIX APIs."
+    posixPath.resize(CFStringGetMaximumSizeOfFileSystemRepresentation(cfName));
+    const auto ok = CFStringGetFileSystemRepresentation(cfName, &posixPath[0],
+                                                        CFIndex(posixPath.size()));
+    if (!ok) {
+        qCWarning(lcSsl) << "Failed to create a unique keychain name from"
+                         << "QDir::tempPath()";
+        return;
+    }
+
+    std::vector<uint8_t> passUtf8(256);
+    if (SecRandomCopyBytes(kSecRandomDefault, passUtf8.size(), &passUtf8[0])) {
+        qCWarning(lcSsl) << "SecRandomCopyBytes: failed to create a key";
+        return;
+    }
+
+    const OSStatus status = SecKeychainCreate(&posixPath[0], passUtf8.size(),
+                                              &passUtf8[0], FALSE, nullptr,
+                                              &keychain);
+    if (status != errSecSuccess || !keychain) {
+        qCWarning(lcSsl) << "SecKeychainCreate: failed to create a custom keychain";
+        if (keychain) {
+            SecKeychainDelete(keychain);
+            CFRelease(keychain);
+            keychain = nullptr;
+        }
+    }
+
+#ifdef QSSLSOCKET_DEBUG
+    if (keychain) {
+        qCDebug(lcSsl) << "Custom keychain with name" << keychainName << "was created"
+                       << "successfully";
+    }
+#endif
+}
+
+EphemeralSecKeychain::~EphemeralSecKeychain()
+{
+    if (keychain) {
+        // clear file off disk
+        SecKeychainDelete(keychain);
+        CFRelease(keychain);
+    }
+}
+
+#endif // Q_OS_MACOS
+}
 
 static SSLContextRef qt_createSecureTransportContext(QSslSocket::SslMode mode)
 {
@@ -80,98 +179,6 @@ static void qt_releaseSecureTransportContext(SSLContextRef context)
 {
     if (context)
         CFRelease(context);
-}
-
-static bool qt_setSessionProtocol(SSLContextRef context, const QSslConfigurationPrivate &configuration,
-                                  QTcpSocket *plainSocket)
-{
-    Q_ASSERT(context);
-
-#ifndef QSSLSOCKET_DEBUG
-    Q_UNUSED(plainSocket)
-#endif
-
-    OSStatus err = noErr;
-
-    if (configuration.protocol == QSsl::SslV3) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : SSLv3";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kSSLProtocol3);
-    } else if (configuration.protocol == QSsl::TlsV1_0) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.0";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol1);
-    } else if (configuration.protocol == QSsl::TlsV1_1) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.1";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol11);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol11);
-    } else if (configuration.protocol == QSsl::TlsV1_2) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol12);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::AnyProtocol) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : any";
-    #endif
-        // kSSLProtocol3, since kSSLProtocol2 is disabled:
-        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::TlsV1SslV3) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : SSLv3 - TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::SecureProtocols) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1 - TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::TlsV1_0OrLater) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1 - TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::TlsV1_1OrLater) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.1 - TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol11);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else if (configuration.protocol == QSsl::TlsV1_2OrLater) {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.2";
-    #endif
-        err = SSLSetProtocolVersionMin(context, kTLSProtocol12);
-        if (err == noErr)
-            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
-    } else {
-    #ifdef QSSLSOCKET_DEBUG
-        qCDebug(lcSsl) << plainSocket << "no protocol version found in the configuration";
-    #endif
-        return false;
-    }
-
-    return err == noErr;
 }
 
 QSecureTransportContext::QSecureTransportContext(SSLContextRef c)
@@ -568,6 +575,7 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSLCipherSuite(SSLCipherSui
 {
     QSslCipher ciph;
     switch (cipher) {
+    // Sorted as in CipherSuite.h (and groupped by their RFC)
     case SSL_RSA_WITH_NULL_MD5:
         ciph.d->name = QLatin1String("NULL-MD5");
         ciph.d->protocol = QSsl::SslV3;
@@ -585,38 +593,21 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSLCipherSuite(SSLCipherSui
         ciph.d->protocol = QSsl::SslV3;
         break;
 
-    case TLS_RSA_WITH_3DES_EDE_CBC_SHA:
-        ciph.d->name = QLatin1String("DES-CBC3-SHA");
-        break;
+    // TLS addenda using AES, per RFC 3268
     case TLS_RSA_WITH_AES_128_CBC_SHA:
         ciph.d->name = QLatin1String("AES128-SHA");
-        break;
-    case TLS_RSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("AES128-SHA256");
-        break;
-    case TLS_RSA_WITH_AES_256_CBC_SHA:
-        ciph.d->name = QLatin1String("AES256-SHA");
-        break;
-    case TLS_RSA_WITH_AES_256_CBC_SHA256:
-        ciph.d->name = QLatin1String("AES256-SHA256");
-        break;
-
-    case TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA:
-        ciph.d->name = QLatin1String("DHE-RSA-DES-CBC3-SHA");
         break;
     case TLS_DHE_RSA_WITH_AES_128_CBC_SHA:
         ciph.d->name = QLatin1String("DHE-RSA-AES128-SHA");
         break;
-    case TLS_DHE_RSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("DHE-RSA-AES128-SHA256");
+    case TLS_RSA_WITH_AES_256_CBC_SHA:
+        ciph.d->name = QLatin1String("AES256-SHA");
         break;
     case TLS_DHE_RSA_WITH_AES_256_CBC_SHA:
         ciph.d->name = QLatin1String("DHE-RSA-AES256-SHA");
         break;
-    case TLS_DHE_RSA_WITH_AES_256_CBC_SHA256:
-        ciph.d->name = QLatin1String("DHE-RSA-AES256-SHA256");
-        break;
 
+    // ECDSA addenda, RFC 4492
     case TLS_ECDH_ECDSA_WITH_NULL_SHA:
         ciph.d->name = QLatin1String("ECDH-ECDSA-NULL-SHA");
         break;
@@ -629,38 +620,9 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSLCipherSuite(SSLCipherSui
     case TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA:
         ciph.d->name = QLatin1String("ECDH-ECDSA-AES128-SHA");
         break;
-    case TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("ECDH-ECDSA-AES128-SHA256");
-        break;
     case TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA:
         ciph.d->name = QLatin1String("ECDH-ECDSA-AES256-SHA");
         break;
-    case TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384:
-        ciph.d->name = QLatin1String("ECDH-ECDSA-AES256-SHA384");
-        break;
-
-    case TLS_ECDH_RSA_WITH_NULL_SHA:
-        ciph.d->name = QLatin1String("ECDH-RSA-NULL-SHA");
-        break;
-    case TLS_ECDH_RSA_WITH_RC4_128_SHA:
-        ciph.d->name = QLatin1String("ECDH-RSA-AES256-SHA");
-        break;
-    case TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA:
-        ciph.d->name = QLatin1String("ECDH-RSA-DES-CBC3-SHA");
-        break;
-    case TLS_ECDH_RSA_WITH_AES_128_CBC_SHA:
-        ciph.d->name = QLatin1String("ECDH-RSA-AES128-SHA");
-        break;
-    case TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("ECDH-RSA-AES128-SHA256");
-        break;
-    case TLS_ECDH_RSA_WITH_AES_256_CBC_SHA:
-        ciph.d->name = QLatin1String("ECDH-RSA-AES256-SHA");
-        break;
-    case TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384:
-        ciph.d->name = QLatin1String("ECDH-RSA-AES256-SHA384");
-        break;
-
     case TLS_ECDHE_ECDSA_WITH_NULL_SHA:
         ciph.d->name = QLatin1String("ECDHE-ECDSA-NULL-SHA");
         break;
@@ -673,21 +635,29 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSLCipherSuite(SSLCipherSui
     case TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA:
         ciph.d->name = QLatin1String("ECDHE-ECDSA-AES128-SHA");
         break;
-    case TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("ECDHE-ECDSA-AES128-SHA256");
-        break;
     case TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:
         ciph.d->name = QLatin1String("ECDHE-ECDSA-AES256-SHA");
         break;
-    case TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384:
-        ciph.d->name = QLatin1String("ECDHE-ECDSA-AES256-SHA384");
+    case TLS_ECDH_RSA_WITH_NULL_SHA:
+        ciph.d->name = QLatin1String("ECDH-RSA-NULL-SHA");
         break;
-
+    case TLS_ECDH_RSA_WITH_RC4_128_SHA:
+        ciph.d->name = QLatin1String("ECDH-RSA-RC4-SHA");
+        break;
+    case TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA:
+        ciph.d->name = QLatin1String("ECDH-RSA-DES-CBC3-SHA");
+        break;
+    case TLS_ECDH_RSA_WITH_AES_128_CBC_SHA:
+        ciph.d->name = QLatin1String("ECDH-RSA-AES128-SHA");
+        break;
+    case TLS_ECDH_RSA_WITH_AES_256_CBC_SHA:
+        ciph.d->name = QLatin1String("ECDH-RSA-AES256-SHA");
+        break;
     case TLS_ECDHE_RSA_WITH_NULL_SHA:
         ciph.d->name = QLatin1String("ECDHE-RSA-NULL-SHA");
         break;
     case TLS_ECDHE_RSA_WITH_RC4_128_SHA:
-        ciph.d->name = QLatin1String("ECDHE-RSA-AES256-SHA");
+        ciph.d->name = QLatin1String("ECDHE-RSA-RC4-SHA");
         break;
     case TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA:
         ciph.d->name = QLatin1String("ECDHE-RSA-DES-CBC3-SHA");
@@ -695,18 +665,76 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSLCipherSuite(SSLCipherSui
     case TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:
         ciph.d->name = QLatin1String("ECDHE-RSA-AES128-SHA");
         break;
-    case TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256:
-        ciph.d->name = QLatin1String("ECDHE-RSA-AES128-SHA256");
-        break;
     case TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:
         ciph.d->name = QLatin1String("ECDHE-RSA-AES256-SHA");
+        break;
+
+    // TLS 1.2 addenda, RFC 5246
+    case TLS_RSA_WITH_3DES_EDE_CBC_SHA:
+        ciph.d->name = QLatin1String("DES-CBC3-SHA");
+        break;
+    case TLS_RSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("AES128-SHA256");
+        break;
+    case TLS_RSA_WITH_AES_256_CBC_SHA256:
+        ciph.d->name = QLatin1String("AES256-SHA256");
+        break;
+    case TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA:
+        ciph.d->name = QLatin1String("DHE-RSA-DES-CBC3-SHA");
+        break;
+    case TLS_DHE_RSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("DHE-RSA-AES128-SHA256");
+        break;
+    case TLS_DHE_RSA_WITH_AES_256_CBC_SHA256:
+        ciph.d->name = QLatin1String("DHE-RSA-AES256-SHA256");
+        break;
+
+    // Addendum from RFC 4279, TLS PSK
+    // all missing atm.
+
+    // RFC 4785 - Pre-Shared Key (PSK) Ciphersuites with NULL Encryption
+    // all missing atm.
+
+    // Addenda from rfc 5288 AES Galois Counter Mode (CGM) Cipher Suites for TLS
+    case TLS_RSA_WITH_AES_256_GCM_SHA384:
+        ciph.d->name = QLatin1String("AES256-GCM-SHA384");
+        break;
+
+    // RFC 5487 - PSK with SHA-256/384 and AES GCM
+    // all missing atm.
+
+    // Addenda from rfc 5289 Elliptic Curve Cipher Suites with HMAC SHA-256/384
+    case TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("ECDHE-ECDSA-AES128-SHA256");
+        break;
+    case TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384:
+        ciph.d->name = QLatin1String("ECDHE-ECDSA-AES256-SHA384");
+        break;
+    case TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("ECDH-ECDSA-AES128-SHA256");
+        break;
+    case TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384:
+        ciph.d->name = QLatin1String("ECDH-ECDSA-AES256-SHA384");
+        break;
+    case TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("ECDHE-RSA-AES128-SHA256");
         break;
     case TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384:
         ciph.d->name = QLatin1String("ECDHE-RSA-AES256-SHA384");
         break;
+    case TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256:
+        ciph.d->name = QLatin1String("ECDH-RSA-AES128-SHA256");
+        break;
+    case TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384:
+        ciph.d->name = QLatin1String("ECDH-RSA-AES256-SHA384");
+        break;
+
+    // Addenda from rfc 5289 Elliptic Curve Cipher Suites
+    // with SHA-256/384 and AES Galois Counter Mode (GCM)
     case TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
         ciph.d->name = QLatin1String("ECDHE-RSA-AES256-GCM-SHA384");
         break;
+
     default:
         return ciph;
     }
@@ -886,11 +914,24 @@ bool QSslSocketBackendPrivate::setSessionCertificate(QString &errorDescription, 
         QCFType<CFDataRef> pkcs12 = _q_makePkcs12(configuration.localCertificateChain,
                                                   configuration.privateKey, passPhrase).toCFData();
         QCFType<CFStringRef> password = passPhrase.toCFString();
-        const void *keys[] = { kSecImportExportPassphrase };
-        const void *values[] = { password };
-        QCFType<CFDictionaryRef> options(CFDictionaryCreate(Q_NULLPTR, keys, values, 1,
-                                                            Q_NULLPTR, Q_NULLPTR));
-        CFArrayRef items = Q_NULLPTR;
+        const void *keys[2] = { kSecImportExportPassphrase };
+        const void *values[2] = { password };
+        CFIndex nKeys = 1;
+#ifdef Q_OS_MACOS
+        bool envOk = false;
+        const int env = qEnvironmentVariableIntValue("QT_SSL_USE_TEMPORARY_KEYCHAIN", &envOk);
+        if (envOk && env) {
+            static const EphemeralSecKeychain temporaryKeychain;
+            if (temporaryKeychain.keychain) {
+                nKeys = 2;
+                keys[1] = kSecImportExportKeychain;
+                values[1] = temporaryKeychain.keychain;
+            }
+        }
+#endif
+        QCFType<CFDictionaryRef> options = CFDictionaryCreate(nullptr, keys, values, nKeys,
+                                                              nullptr, nullptr);
+        CFArrayRef items = nullptr;
         OSStatus err = SecPKCS12Import(pkcs12, options, &items);
         if (err != noErr) {
 #ifdef QSSLSOCKET_DEBUG
@@ -922,7 +963,7 @@ bool QSslSocketBackendPrivate::setSessionCertificate(QString &errorDescription, 
             return false;
         }
 
-        QCFType<CFMutableArrayRef> certs = CFArrayCreateMutable(Q_NULLPTR, 0, &kCFTypeArrayCallBacks);
+        QCFType<CFMutableArrayRef> certs = CFArrayCreateMutable(nullptr, 0, &kCFTypeArrayCallBacks);
         if (!certs) {
             errorCode = QAbstractSocket::SslInternalError;
             errorDescription = QStringLiteral("Failed to allocate certificates array");
@@ -956,7 +997,7 @@ bool QSslSocketBackendPrivate::setSessionProtocol()
 {
     Q_ASSERT_X(context, Q_FUNC_INFO, "invalid SSL context (null)");
 
-    // QSsl::SslV2 == kSSLProtocol2 is disabled in secure transport and
+    // QSsl::SslV2 == kSSLProtocol2 is disabled in Secure Transport and
     // always fails with errSSLIllegalParam:
     // if (version < MINIMUM_STREAM_VERSION || version > MAXIMUM_STREAM_VERSION)
     //     return errSSLIllegalParam;
@@ -966,7 +1007,87 @@ bool QSslSocketBackendPrivate::setSessionProtocol()
         return false;
     }
 
-    return qt_setSessionProtocol(context, configuration, plainSocket);
+    OSStatus err = noErr;
+
+    if (configuration.protocol == QSsl::SslV3) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : SSLv3";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kSSLProtocol3);
+    } else if (configuration.protocol == QSsl::TlsV1_0) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.0";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol1);
+    } else if (configuration.protocol == QSsl::TlsV1_1) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.1";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol11);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol11);
+    } else if (configuration.protocol == QSsl::TlsV1_2) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol12);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::AnyProtocol) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : any";
+    #endif
+        // kSSLProtocol3, since kSSLProtocol2 is disabled:
+        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::TlsV1SslV3) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : SSLv3 - TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kSSLProtocol3);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::SecureProtocols) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1 - TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::TlsV1_0OrLater) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1 - TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol1);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::TlsV1_1OrLater) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.1 - TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol11);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else if (configuration.protocol == QSsl::TlsV1_2OrLater) {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "requesting : TLSv1.2";
+    #endif
+        err = SSLSetProtocolVersionMin(context, kTLSProtocol12);
+        if (err == noErr)
+            err = SSLSetProtocolVersionMax(context, kTLSProtocol12);
+    } else {
+    #ifdef QSSLSOCKET_DEBUG
+        qCDebug(lcSsl) << plainSocket << "no protocol version found in the configuration";
+    #endif
+        return false;
+    }
+
+    return err == noErr;
 }
 
 bool QSslSocketBackendPrivate::canIgnoreTrustVerificationFailure() const
@@ -1102,7 +1223,8 @@ bool QSslSocketBackendPrivate::verifyPeerTrust()
         CFArrayAppendValue(certArray, certRef);
     }
     SecTrustSetAnchorCertificates(trust, certArray);
-    SecTrustSetAnchorCertificatesOnly(trust, false);
+    // Secure Transport should use anchors only from our QSslConfiguration:
+    SecTrustSetAnchorCertificatesOnly(trust, true);
 
     SecTrustResultType trustResult = kSecTrustResultInvalid;
     SecTrustEvaluate(trust, &trustResult);

@@ -232,7 +232,7 @@ QT_BEGIN_NAMESPACE
     Returns the control type associated with the widget for which
     this size policy applies.
 */
-QSizePolicy::ControlType QSizePolicy::controlType() const
+QSizePolicy::ControlType QSizePolicy::controlType() const Q_DECL_NOTHROW
 {
     return QSizePolicy::ControlType(1 << bits.ctype);
 }
@@ -253,30 +253,9 @@ QSizePolicy::ControlType QSizePolicy::controlType() const
 
     \sa QStyle::layoutSpacing()
 */
-void QSizePolicy::setControlType(ControlType type)
+void QSizePolicy::setControlType(ControlType type) Q_DECL_NOTHROW
 {
-    /*
-        The control type is a flag type, with values 0x1, 0x2, 0x4, 0x8, 0x10,
-        etc. In memory, we pack it onto the available bits (CTSize) in
-        setControlType(), and unpack it here.
-
-        Example:
-
-            0x00000001 maps to 0
-            0x00000002 maps to 1
-            0x00000004 maps to 2
-            0x00000008 maps to 3
-            etc.
-    */
-
-    int i = 0;
-    while (true) {
-        if (type & (0x1 << i)) {
-            bits.ctype = i;
-            return;
-        }
-        ++i;
-    }
+    bits.ctype = toControlTypeFieldValue(type);
 }
 
 /*!
@@ -395,6 +374,18 @@ void QSizePolicy::setControlType(ControlType type)
     \fn void QSizePolicy::transpose()
 
     Swaps the horizontal and vertical policies and stretches.
+
+    \sa transposed()
+*/
+
+/*!
+    \fn QSizePolicy QSizePolicy::transposed() const
+    \since 5.9
+
+    Returns a size policy object with the horizontal and vertical
+    policies and stretches swapped.
+
+    \sa transpose()
 */
 
 /*!

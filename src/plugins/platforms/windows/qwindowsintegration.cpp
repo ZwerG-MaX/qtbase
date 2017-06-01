@@ -88,6 +88,11 @@
 
 #include "qwindowsopengltester.h"
 
+static inline void initOpenGlBlacklistResources()
+{
+    Q_INIT_RESOURCE(openglblacklists);
+}
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -129,9 +134,9 @@ struct QWindowsIntegrationPrivate
     explicit QWindowsIntegrationPrivate(const QStringList &paramList);
     ~QWindowsIntegrationPrivate();
 
-    unsigned m_options;
+    unsigned m_options = 0;
     QWindowsContext m_context;
-    QPlatformFontDatabase *m_fontDatabase;
+    QPlatformFontDatabase *m_fontDatabase = nullptr;
 #ifndef QT_NO_CLIPBOARD
     QWindowsClipboard m_clipboard;
 #  ifndef QT_NO_DRAGANDDROP
@@ -209,10 +214,8 @@ static inline unsigned parseOptions(const QStringList &paramList,
 }
 
 QWindowsIntegrationPrivate::QWindowsIntegrationPrivate(const QStringList &paramList)
-    : m_options(0)
-    , m_fontDatabase(0)
 {
-    Q_INIT_RESOURCE(openglblacklists);
+    initOpenGlBlacklistResources();
 
     static bool dpiAwarenessSet = false;
     int tabletAbsoluteRange = -1;
@@ -306,24 +309,6 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
         return result;
     }
 
-    if (window->type() == Qt::ForeignWindow) {
-        const HWND hwnd = reinterpret_cast<HWND>(window->winId());
-        if (!IsWindow(hwnd)) {
-           qWarning("Windows QPA: Invalid foreign window ID %p.", hwnd);
-           return nullptr;
-        }
-        QWindowsForeignWindow *result = new QWindowsForeignWindow(window, hwnd);
-        const QRect obtainedGeometry = result->geometry();
-        QScreen *screen = Q_NULLPTR;
-        if (const QPlatformScreen *pScreen = result->screenForGeometry(obtainedGeometry))
-            screen = pScreen->screen();
-        if (screen && screen != window->screen())
-            window->setScreen(screen);
-        qCDebug(lcQpaWindows) << "Foreign window:" << window << showbase << hex
-            << result->winId() << noshowbase << dec << obtainedGeometry << screen;
-        return result;
-    }
-
     QWindowsWindowData requested;
     requested.flags = window->flags();
     requested.geometry = QHighDpi::toNativePixels(window->geometry(), window);
@@ -364,6 +349,25 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
             QWindowSystemInterface::handleWindowScreenChanged(window, screen->screen());
     }
 
+    return result;
+}
+
+QPlatformWindow *QWindowsIntegration::createForeignWindow(QWindow *window, WId nativeHandle) const
+{
+    const HWND hwnd = reinterpret_cast<HWND>(nativeHandle);
+    if (!IsWindow(hwnd)) {
+       qWarning("Windows QPA: Invalid foreign window ID %p.", hwnd);
+       return nullptr;
+    }
+    QWindowsForeignWindow *result = new QWindowsForeignWindow(window, hwnd);
+    const QRect obtainedGeometry = result->geometry();
+    QScreen *screen = Q_NULLPTR;
+    if (const QPlatformScreen *pScreen = result->screenForGeometry(obtainedGeometry))
+        screen = pScreen->screen();
+    if (screen && screen != window->screen())
+        window->setScreen(screen);
+    qCDebug(lcQpaWindows) << "Foreign window:" << window << showbase << hex
+        << result->winId() << noshowbase << dec << obtainedGeometry << screen;
     return result;
 }
 

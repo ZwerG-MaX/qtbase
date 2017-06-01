@@ -20,8 +20,7 @@ qtHaveModule(widgets) {
                 multicastsender
 
     qtConfig(bearermanagement) {
-        # no QProcess
-        !vxworks:!qnx:!winrt:!integrity:!uikit: SUBDIRS += network-chat
+        qtConfig(processenvironment): SUBDIRS += network-chat
 
         SUBDIRS += \
                 bearermonitor \
@@ -31,7 +30,6 @@ qtHaveModule(widgets) {
     }
 
     qtConfig(openssl): SUBDIRS += securesocketclient
-    qtConfig(openssl-linked): SUBDIRS += securesocketclient
     qtConfig(sctp): SUBDIRS += multistreamserver multistreamclient
 }
 

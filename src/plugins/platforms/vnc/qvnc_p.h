@@ -95,7 +95,7 @@ public:
     QVncDirtyMapOptimized(QVncScreen *screen) : QVncDirtyMap(screen) {}
     ~QVncDirtyMapOptimized() {}
 
-    void setDirty(int x, int y, bool force = false);
+    void setDirty(int x, int y, bool force = false) override;
 };
 
 
@@ -216,7 +216,7 @@ class QRfbRawEncoder : public QRfbEncoder
 public:
     QRfbRawEncoder(QVncClient *s) : QRfbEncoder(s) {}
 
-    void write();
+    void write() override;
 
 private:
     QByteArray buffer;
@@ -364,6 +364,7 @@ private:
     friend class QRfbMultiColorHextile<SRC>;
 };
 
+#if QT_CONFIG(cursor)
 class QVncClientCursor : public QPlatformCursor
 {
 public:
@@ -372,7 +373,7 @@ public:
 
     void write(QVncClient *client) const;
 
-    void changeCursor(QCursor *widgetCursor, QWindow *window);
+    void changeCursor(QCursor *widgetCursor, QWindow *window) override;
 
     void addClient(QVncClient *client);
     uint removeClient(QVncClient *client);
@@ -381,7 +382,7 @@ public:
     QPoint hotspot;
     QVector<QVncClient *> clients;
 };
-
+#endif // QT_CONFIG(cursor)
 
 class QVncServer : public QObject
 {

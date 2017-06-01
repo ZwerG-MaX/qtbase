@@ -101,7 +101,6 @@ void qt_blend_rgb32_on_rgb32_sse2(uchar *destPixels, int dbpl,
     quint32 *dst = (quint32 *) destPixels;
     if (const_alpha != 256) {
         if (const_alpha != 0) {
-            const __m128i nullVector = _mm_set1_epi32(0);
             const __m128i half = _mm_set1_epi16(0x80);
             const __m128i colorMask = _mm_set1_epi32(0x00ff00ff);
 
@@ -119,12 +118,10 @@ void qt_blend_rgb32_on_rgb32_sse2(uchar *destPixels, int dbpl,
 
                 for (; x < w-3; x += 4) {
                     __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]);
-                    if (_mm_movemask_epi8(_mm_cmpeq_epi32(srcVector, nullVector)) != 0xffff) {
-                        const __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
-                        __m128i result;
-                        INTERPOLATE_PIXEL_255_SSE2(result, srcVector, dstVector, constAlphaVector, oneMinusConstAlpha, colorMask, half);
-                        _mm_store_si128((__m128i *)&dst[x], result);
-                    }
+                    const __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
+                    __m128i result;
+                    INTERPOLATE_PIXEL_255_SSE2(result, srcVector, dstVector, constAlphaVector, oneMinusConstAlpha, colorMask, half);
+                    _mm_store_si128((__m128i *)&dst[x], result);
                 }
                 SIMD_EPILOGUE(x, w, 3)
                     dst[x] = INTERPOLATE_PIXEL_255(src[x], const_alpha, dst[x], one_minus_const_alpha);
@@ -240,11 +237,11 @@ void qt_memfill32(quint32 *dest, quint32 value, int count)
 {
     if (count < 7) {
         switch (count) {
-        case 6: *dest++ = value;
-        case 5: *dest++ = value;
-        case 4: *dest++ = value;
-        case 3: *dest++ = value;
-        case 2: *dest++ = value;
+        case 6: *dest++ = value; Q_FALLTHROUGH();
+        case 5: *dest++ = value; Q_FALLTHROUGH();
+        case 4: *dest++ = value; Q_FALLTHROUGH();
+        case 3: *dest++ = value; Q_FALLTHROUGH();
+        case 2: *dest++ = value; Q_FALLTHROUGH();
         case 1: *dest   = value;
         }
         return;
@@ -252,16 +249,16 @@ void qt_memfill32(quint32 *dest, quint32 value, int count)
 
     const int align = (quintptr)(dest) & 0xf;
     switch (align) {
-    case 4:  *dest++ = value; --count;
-    case 8:  *dest++ = value; --count;
+    case 4:  *dest++ = value; --count; Q_FALLTHROUGH();
+    case 8:  *dest++ = value; --count; Q_FALLTHROUGH();
     case 12: *dest++ = value; --count;
     }
 
     const int rest = count & 0x3;
     if (rest) {
         switch (rest) {
-        case 3: dest[count - 3] = value;
-        case 2: dest[count - 2] = value;
+        case 3: dest[count - 3] = value; Q_FALLTHROUGH();
+        case 2: dest[count - 2] = value; Q_FALLTHROUGH();
         case 1: dest[count - 1] = value;
         }
     }
@@ -280,8 +277,8 @@ void qt_memfill32(quint32 *dest, quint32 value, int count)
     }
 
     switch (count128 & 0x3) {
-    case 3:      _mm_stream_si128(dst128++, value128);
-    case 2:      _mm_stream_si128(dst128++, value128);
+    case 3:      _mm_stream_si128(dst128++, value128); Q_FALLTHROUGH();
+    case 2:      _mm_stream_si128(dst128++, value128); Q_FALLTHROUGH();
     case 1:      _mm_stream_si128(dst128++, value128);
     }
 }
@@ -321,7 +318,7 @@ void qt_memfill16(quint16 *dest, quint16 value, int count)
 {
     if (count < 3) {
         switch (count) {
-        case 2: *dest++ = value;
+        case 2: *dest++ = value; Q_FALLTHROUGH();
         case 1: *dest = value;
         }
         return;

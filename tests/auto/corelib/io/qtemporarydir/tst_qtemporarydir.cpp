@@ -42,6 +42,7 @@
 # include <sys/types.h>
 # include <unistd.h>
 #endif
+#include "emulationdetector.h"
 
 class tst_QTemporaryDir : public QObject
 {
@@ -57,6 +58,8 @@ private slots:
     void fileTemplate_data();
     void getSetCheck();
     void fileName();
+    void filePath_data();
+    void filePath();
     void autoRemove();
     void nonWritableCurrentDir();
     void openOnRootDrives();
@@ -204,6 +207,29 @@ void tst_QTemporaryDir::fileName()
     QCOMPARE(absoluteFilePath, absoluteTempPath);
 }
 
+void tst_QTemporaryDir::filePath_data()
+{
+    QTest::addColumn<QString>("templatePath");
+    QTest::addColumn<QString>("fileName");
+
+    QTest::newRow("0") << QString() << "/tmpfile";
+    QTest::newRow("1") << QString() << "tmpfile";
+    QTest::newRow("2") << "XXXXX" << "tmpfile";
+    QTest::newRow("3") << "YYYYY" << "subdir/file";
+}
+
+void tst_QTemporaryDir::filePath()
+{
+    QFETCH(QString, templatePath);
+    QFETCH(QString, fileName);
+
+    QTemporaryDir dir(templatePath);
+    const QString filePath = dir.filePath(fileName);
+    const QString expectedFilePath = QDir::isAbsolutePath(fileName) ?
+                                     QString() : dir.path() + QLatin1Char('/') + fileName;
+    QCOMPARE(filePath, expectedFilePath);
+}
+
 void tst_QTemporaryDir::autoRemove()
 {
     // Test auto remove
@@ -291,6 +317,13 @@ void tst_QTemporaryDir::nonWritableCurrentDir()
 
     const QFileInfo nonWritableDirFi = QFileInfo(QLatin1String(nonWritableDir));
     QVERIFY(nonWritableDirFi.isDir());
+
+    if (EmulationDetector::isRunningArmOnX86()) {
+        if (nonWritableDirFi.ownerId() == ::geteuid()) {
+            QSKIP("Sysroot directories are owned by the current user");
+        }
+    }
+
     QVERIFY(!nonWritableDirFi.isWritable());
 
     ChdirOnReturn cor(QDir::currentPath());

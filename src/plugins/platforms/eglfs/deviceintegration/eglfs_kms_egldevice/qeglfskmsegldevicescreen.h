@@ -47,14 +47,12 @@ QT_BEGIN_NAMESPACE
 class QEglFSKmsEglDeviceScreen : public QEglFSKmsScreen
 {
 public:
-    QEglFSKmsEglDeviceScreen(QEglFSKmsIntegration *integration,
-                             QEglFSKmsDevice *device,
-                             QEglFSKmsOutput output);
+    QEglFSKmsEglDeviceScreen(QKmsDevice *device, const QKmsOutput &output);
     ~QEglFSKmsEglDeviceScreen();
 
-    QPlatformCursor *cursor() const Q_DECL_OVERRIDE;
+    QPlatformCursor *cursor() const override;
 
-    void waitForFlip() Q_DECL_OVERRIDE;
+    void waitForFlip() override;
 };
 
 QT_END_NAMESPACE

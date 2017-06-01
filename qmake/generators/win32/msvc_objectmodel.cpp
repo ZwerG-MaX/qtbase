@@ -29,11 +29,46 @@
 #include "msvc_objectmodel.h"
 #include "msvc_vcproj.h"
 #include "msvc_vcxproj.h"
+
+#include <ioutils.h>
+
 #include <qscopedpointer.h>
-#include <qstringlist.h>
 #include <qfileinfo.h>
 
+using namespace QMakeInternal;
+
 QT_BEGIN_NAMESPACE
+
+static DotNET vsVersionFromString(const char *versionString)
+{
+    struct VSVersionMapping
+    {
+        const char *str;
+        DotNET version;
+    };
+    static VSVersionMapping mapping[] = {
+        "7.0", NET2002,
+        "7.1", NET2003,
+        "8.0", NET2005,
+        "9.0", NET2008,
+        "10.0", NET2010,
+        "11.0", NET2012,
+        "12.0", NET2013,
+        "14.0", NET2015,
+        "15.0", NET2017
+    };
+    DotNET result = NETUnknown;
+    for (const auto entry : mapping) {
+        if (strcmp(entry.str, versionString) == 0)
+            return entry.version;
+    }
+    return result;
+}
+
+DotNET vsVersionFromString(const ProString &versionString)
+{
+    return vsVersionFromString(versionString.toLatin1().constData());
+}
 
 // XML Tags ---------------------------------------------------------
 const char _Configuration[]                     = "Configuration";
@@ -1118,7 +1153,12 @@ bool VCCLCompilerTool::parseOption(const char* option)
         }
         found = false; break;
     case 'u':
-        UndefineAllPreprocessorDefinitions = _True;
+        if (!second)
+            UndefineAllPreprocessorDefinitions = _True;
+        else if (second == 't' && third == 'f' && fourth == '8')
+            AdditionalOptions += option;
+        else
+            found = false;
         break;
     case 'v':
         if(second == 'd' || second == 'm') {
@@ -1176,6 +1216,7 @@ VCLinkerTool::VCLinkerTool()
     :   DataExecutionPrevention(unset),
         EnableCOMDATFolding(optFoldingDefault),
         GenerateDebugInformation(unset),
+        DebugInfoOption(linkerDebugOptionNone),
         GenerateMapFile(unset),
         HeapCommitSize(-1),
         HeapReserveSize(-1),
@@ -2131,7 +2172,6 @@ VCPreLinkEventTool::VCPreLinkEventTool()
 
 VCConfiguration::VCConfiguration()
     :   WinRT(false),
-        WinPhone(false),
         ATLMinimizesCRunTimeLibraryUsage(unset),
         BuildBrowserInformation(unset),
         CharacterSet(charSetNotSet),
@@ -2144,7 +2184,6 @@ VCConfiguration::VCConfiguration()
     compiler.config = this;
     linker.config = this;
     idl.config = this;
-    custom.config = this;
 }
 
 // VCFilter ---------------------------------------------------------
@@ -2322,7 +2361,7 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
                         tmp_dep_cmd, inFile, out, MakefileGenerator::LocalShell);
             if(Project->canExecute(dep_cmd)) {
                 dep_cmd.prepend(QLatin1String("cd ")
-                                + Project->escapeFilePath(Option::fixPathToLocalOS(Option::output_dir, false))
+                                + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
                                 + QLatin1String(" && "));
                 if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
                     QString indeps;
@@ -2871,7 +2910,6 @@ void VCProjectWriter::write(XmlOutput &xml, const VCConfiguration &tool)
             << attrE(_UseOfMfc, tool.UseOfMfc)
             << attrT(_WholeProgramOptimization, tool.WholeProgramOptimization);
     write(xml, tool.compiler);
-    write(xml, tool.custom);
     if (tool.ConfigurationType == typeStaticLibrary)
         write(xml, tool.librarian);
     else

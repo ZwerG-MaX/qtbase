@@ -266,7 +266,10 @@ QT_BEGIN_NAMESPACE
         allowed to use HTTP/2 with this request. This applies
         to SSL requests or 'cleartext' HTTP/2.
 
-    \omitvalue HTTP2WasUsedAttribute
+    \value HTTP2WasUsedAttribute
+        Replies only, type: QMetaType::Bool (default: false)
+        Indicates whether HTTP/2 was used for receiving this reply.
+        (This value was introduced in 5.9.)
 
     \value EmitAllUploadProgressSignalsAttribute
         Requests only, type: QMetaType::Bool (default: false)
@@ -281,6 +284,19 @@ QT_BEGIN_NAMESPACE
         HTTP redirect response or not. Currently redirects that are insecure,
         that is redirecting from "https" to "http" protocol, are not allowed.
         (This value was introduced in 5.6.)
+
+    \value OriginalContentLengthAttribute
+        Replies only, type QMetaType::Int
+        Holds the original content-length attribute before being invalidated and
+        removed from the header when the data is compressed and the request was
+        marked to be decompressed automatically.
+        (This value was introduced in 5.9.)
+
+    \value RedirectPolicyAttribute
+        Requests only, type: QMetaType::Int, should be one of the
+        QNetworkRequest::RedirectPolicy values (default: ManualRedirectPolicy).
+        This attribute obsoletes FollowRedirectsAttribute.
+        (This value was introduced in 5.9.)
 
     \value User
         Special type. Additional information can be passed in
@@ -327,6 +343,36 @@ QT_BEGIN_NAMESPACE
     \value Automatic            default value: indicates default behaviour.
 
     \value Manual               indicates behaviour has been manually overridden.
+*/
+
+/*!
+    \enum QNetworkRequest::RedirectPolicy
+    \since 5.9
+
+    Indicates whether the Network Access API should automatically follow a
+    HTTP redirect response or not.
+
+    \value ManualRedirectPolicy        Default value: not following any redirects.
+
+    \value NoLessSafeRedirectPolicy    Only "http"->"http", "http" -> "https"
+                                       or "https" -> "https" redirects are allowed.
+                                       Equivalent to setting the old FollowRedirectsAttribute
+                                       to true
+
+    \value SameOriginRedirectPolicy    Require the same protocol, host and port.
+                                       Note, http://example.com and http://example.com:80
+                                       will fail with this policy (implicit/explicit ports
+                                       are considered to be a mismatch).
+
+    \value UserVerifiedRedirectPolicy  Client decides whether to follow each
+                                       redirect by handling the redirected()
+                                       signal, emitting redirectAllowed() on
+                                       the QNetworkReply object to allow
+                                       the redirect or aborting/finishing it to
+                                       reject the redirect.  This can be used,
+                                       for example, to ask the user whether to
+                                       accept the redirect, or to decide
+                                       based on some app-specific configuration.
 */
 
 class QNetworkRequestPrivate: public QSharedData, public QNetworkHeadersPrivate

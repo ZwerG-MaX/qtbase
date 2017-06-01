@@ -41,12 +41,13 @@
 #define QMESSAGEBOX_H
 
 #include <QtWidgets/qtwidgetsglobal.h>
+
+#ifndef QT_NO_MESSAGEBOX
+
 #include <QtWidgets/qdialog.h>
 
 QT_BEGIN_NAMESPACE
 
-
-#ifndef QT_NO_MESSAGEBOX
 
 class QLabel;
 class QMessageBoxPrivate;
@@ -56,7 +57,6 @@ class QCheckBox;
 class Q_WIDGETS_EXPORT QMessageBox : public QDialog
 {
     Q_OBJECT
-    Q_FLAGS(StandardButtons)
     Q_PROPERTY(QString text READ text WRITE setText)
     Q_PROPERTY(Icon icon READ icon WRITE setIcon)
     Q_PROPERTY(QPixmap iconPixmap READ iconPixmap WRITE setIconPixmap)
@@ -131,6 +131,7 @@ public:
     typedef StandardButton Button;  // obsolete
 
     Q_DECLARE_FLAGS(StandardButtons, StandardButton)
+    Q_FLAG(StandardButtons)
 
     explicit QMessageBox(QWidget *parent = Q_NULLPTR);
     QMessageBox(Icon icon, const QString &title, const QString &text,
@@ -322,8 +323,8 @@ QString s = QApplication::tr("Executable '%1' requires Qt "\
 str)).arg(QString::fromLatin1(qVersion())); QMessageBox::critical(0, QApplication::tr(\
 "Incompatible Qt Library Error"), s, QMessageBox::Abort, 0); qFatal("%s", s.toLatin1().data()); }}
 
-#endif // QT_NO_MESSAGEBOX
-
 QT_END_NAMESPACE
+
+#endif // QT_NO_MESSAGEBOX
 
 #endif // QMESSAGEBOX_H

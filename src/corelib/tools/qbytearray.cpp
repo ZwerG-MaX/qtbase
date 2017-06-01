@@ -541,15 +541,40 @@ static const quint16 crc_tbl[16] = {
 
     Returns the CRC-16 checksum of the first \a len bytes of \a data.
 
-    The checksum is independent of the byte order (endianness).
+    The checksum is independent of the byte order (endianness) and will be
+    calculated accorded to the algorithm published in ISO 3309 (Qt::ChecksumIso3309).
 
     \note This function is a 16-bit cache conserving (16 entry table)
     implementation of the CRC-16-CCITT algorithm.
 */
-
 quint16 qChecksum(const char *data, uint len)
 {
-    quint16 crc = 0xffff;
+    return qChecksum(data, len, Qt::ChecksumIso3309);
+}
+
+/*!
+    \relates QByteArray
+    \since 5.9
+
+    Returns the CRC-16 checksum of the first \a len bytes of \a data.
+
+    The checksum is independent of the byte order (endianness) and will
+    be calculated accorded to the algorithm published in \a standard.
+
+    \note This function is a 16-bit cache conserving (16 entry table)
+    implementation of the CRC-16-CCITT algorithm.
+*/
+quint16 qChecksum(const char *data, uint len, Qt::ChecksumType standard)
+{
+    quint16 crc = 0x0000;
+    switch (standard) {
+    case Qt::ChecksumIso3309:
+        crc = 0xffff;
+        break;
+    case Qt::ChecksumItuV41:
+        crc = 0x6363;
+        break;
+    }
     uchar c;
     const uchar *p = reinterpret_cast<const uchar *>(data);
     while (len--) {
@@ -558,7 +583,14 @@ quint16 qChecksum(const char *data, uint len)
         c >>= 4;
         crc = ((crc >> 4) & 0x0fff) ^ crc_tbl[((crc ^ c) & 15)];
     }
-    return ~crc & 0xffff;
+    switch (standard) {
+    case Qt::ChecksumIso3309:
+        crc = ~crc;
+        break;
+    case Qt::ChecksumItuV41:
+        break;
+    }
+    return crc & 0xffff;
 }
 
 /*!
@@ -663,6 +695,20 @@ QByteArray qCompress(const uchar* data, int nbytes, int compressionLevel)
 */
 
 #ifndef QT_NO_COMPRESS
+namespace {
+struct QByteArrayDataDeleter
+{
+    static inline void cleanup(QTypedArrayData<char> *d)
+    { if (d) QTypedArrayData<char>::deallocate(d); }
+};
+}
+
+static QByteArray invalidCompressedData()
+{
+    qWarning("qUncompress: Input data is corrupted");
+    return QByteArray();
+}
+
 QByteArray qUncompress(const uchar* data, int nbytes)
 {
     if (!data) {
@@ -677,53 +723,29 @@ QByteArray qUncompress(const uchar* data, int nbytes)
     ulong expectedSize = uint((data[0] << 24) | (data[1] << 16) |
                               (data[2] <<  8) | (data[3]      ));
     ulong len = qMax(expectedSize, 1ul);
-    QScopedPointer<QByteArray::Data, QScopedPointerPodDeleter> d;
+    const ulong maxPossibleSize = MaxAllocSize - sizeof(QByteArray::Data);
+    if (Q_UNLIKELY(len >= maxPossibleSize)) {
+        // QByteArray does not support that huge size anyway.
+        return invalidCompressedData();
+    }
 
+    QScopedPointer<QByteArray::Data, QByteArrayDataDeleter> d(QByteArray::Data::allocate(expectedSize + 1));
+    if (Q_UNLIKELY(d.data() == nullptr))
+        return invalidCompressedData();
+
+    d->size = expectedSize;
     forever {
         ulong alloc = len;
-        if (len  >= (1u << 31u) - sizeof(QByteArray::Data)) {
-            //QByteArray does not support that huge size anyway.
-            qWarning("qUncompress: Input data is corrupted");
-            return QByteArray();
-        }
-        QByteArray::Data *p = static_cast<QByteArray::Data *>(::realloc(d.data(), sizeof(QByteArray::Data) + alloc + 1));
-        if (!p) {
-            // we are not allowed to crash here when compiling with QT_NO_EXCEPTIONS
-            qWarning("qUncompress: could not allocate enough memory to uncompress data");
-            return QByteArray();
-        }
-        d.take(); // realloc was successful
-        d.reset(p);
-        d->offset = sizeof(QByteArrayData);
-        d->size = 0; // Shut up valgrind "uninitialized variable" warning
 
         int res = ::uncompress((uchar*)d->data(), &len,
                                data+4, nbytes-4);
 
         switch (res) {
         case Z_OK:
-            if (len != alloc) {
-                if (len  >= (1u << 31u) - sizeof(QByteArray::Data)) {
-                    //QByteArray does not support that huge size anyway.
-                    qWarning("qUncompress: Input data is corrupted");
-                    return QByteArray();
-                }
-                QByteArray::Data *p = static_cast<QByteArray::Data *>(::realloc(d.data(), sizeof(QByteArray::Data) + len + 1));
-                if (!p) {
-                    // we are not allowed to crash here when compiling with QT_NO_EXCEPTIONS
-                    qWarning("qUncompress: could not allocate enough memory to uncompress data");
-                    return QByteArray();
-                }
-                d.take(); // realloc was successful
-                d.reset(p);
-            }
-            d->ref.initializeOwned();
+            Q_ASSERT(len <= alloc);
+            Q_UNUSED(alloc);
             d->size = len;
-            d->alloc = uint(len) + 1u;
-            d->capacityReserved = false;
-            d->offset = sizeof(QByteArrayData);
             d->data()[len] = 0;
-
             {
                 QByteArrayDataPtr dataPtr = { d.take() };
                 return QByteArray(dataPtr);
@@ -735,6 +757,17 @@ QByteArray qUncompress(const uchar* data, int nbytes)
 
         case Z_BUF_ERROR:
             len *= 2;
+            if (Q_UNLIKELY(len >= maxPossibleSize)) {
+                // QByteArray does not support that huge size anyway.
+                return invalidCompressedData();
+            } else {
+                // grow the block
+                QByteArray::Data *p = QByteArray::Data::reallocateUnaligned(d.data(), len + 1);
+                if (Q_UNLIKELY(p == nullptr))
+                    return invalidCompressedData();
+                d.take();   // don't free
+                d.reset(p);
+            }
             continue;
 
         case Z_DATA_ERROR:
@@ -1707,19 +1740,8 @@ void QByteArray::reallocData(uint alloc, Data::AllocationOptions options)
             Data::deallocate(d);
         d = x;
     } else {
-        size_t blockSize;
-        if (options & Data::Grow) {
-            auto r = qCalculateGrowingBlockSize(alloc, sizeof(QChar), sizeof(Data));
-            blockSize = r.size;
-            alloc = uint(r.elementCount);
-        } else {
-            blockSize = qCalculateBlockSize(alloc, sizeof(QChar), sizeof(Data));
-        }
-
-        Data *x = static_cast<Data *>(::realloc(d, blockSize));
+        Data *x = Data::reallocateUnaligned(d, alloc, options);
         Q_CHECK_PTR(x);
-        x->alloc = alloc;
-        x->capacityReserved = (options & Data::CapacityReserved) ? 1 : 0;
         d = x;
     }
 }
@@ -4365,12 +4387,41 @@ QByteArray QByteArray::fromHex(const QByteArray &hexEncoded)
 */
 QByteArray QByteArray::toHex() const
 {
-    QByteArray hex(d->size * 2, Qt::Uninitialized);
+    return toHex('\0');
+}
+
+/*! \overload
+    \since 5.9
+
+    Returns a hex encoded copy of the byte array. The hex encoding uses the numbers 0-9 and
+    the letters a-f.
+
+    If \a separator is not '\0', the separator character is inserted between the hex bytes.
+
+    Example:
+    \code
+        QByteArray macAddress = QByteArray::fromHex("123456abcdef");
+        macAddress.toHex(':'); // returns "12:34:56:ab:cd:ef"
+        macAddress.toHex(0);   // returns "123456abcdef"
+    \endcode
+
+    \sa fromHex()
+*/
+QByteArray QByteArray::toHex(char separator) const
+{
+    if (!d->size)
+        return QByteArray();
+
+    const int length = separator ? (d->size * 3 - 1) : (d->size * 2);
+    QByteArray hex(length, Qt::Uninitialized);
     char *hexData = hex.data();
     const uchar *data = (const uchar *)d->data();
-    for (int i = 0; i < d->size; ++i) {
-        hexData[i*2] = QtMiscUtils::toHexLower(data[i] >> 4);
-        hexData[i*2+1] = QtMiscUtils::toHexLower(data[i] & 0xf);
+    for (int i = 0, o = 0; i < d->size; ++i) {
+        hexData[o++] = QtMiscUtils::toHexLower(data[i] >> 4);
+        hexData[o++] = QtMiscUtils::toHexLower(data[i] & 0xf);
+
+        if ((separator) && (o < length))
+            hexData[o++] = separator;
     }
     return hex;
 }

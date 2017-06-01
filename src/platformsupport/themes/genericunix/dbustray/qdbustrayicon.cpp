@@ -65,9 +65,32 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(qLcTray, "qt.qpa.tray")
 
+static QString iconTempPath()
+{
+    QString tempPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (!tempPath.isEmpty())
+        return tempPath;
+
+    tempPath = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+
+    if (!tempPath.isEmpty()) {
+        QDir tempDir(tempPath);
+        if (tempDir.exists())
+            return tempPath;
+
+        if (tempDir.mkpath(QStringLiteral("."))) {
+            const QFile::Permissions permissions = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
+            if (QFile(tempPath).setPermissions(permissions))
+                return tempPath;
+        }
+    }
+
+    return QDir::tempPath();
+}
+
 static const QString KDEItemFormat = QStringLiteral("org.kde.StatusNotifierItem-%1-%2");
 static const QString KDEWatcherService = QStringLiteral("org.kde.StatusNotifierWatcher");
-static const QString TempFileTemplate =  QDir::tempPath() + QLatin1String("/qt-trayicon-XXXXXX.png");
+static const QString TempFileTemplate = iconTempPath() + QLatin1String("/qt-trayicon-XXXXXX.png");
 static const QString XdgNotificationService = QStringLiteral("org.freedesktop.Notifications");
 static const QString XdgNotificationPath = QStringLiteral("/org/freedesktop/Notifications");
 static const QString DefaultAction = QStringLiteral("default");
@@ -116,6 +139,8 @@ void QDBusTrayIcon::init()
 {
     qCDebug(qLcTray) << "registering" << m_instanceId;
     m_registered = dBusConnection()->registerTrayIcon(this);
+    QObject::connect(dBusConnection()->dbusWatcher(), &QDBusServiceWatcher::serviceRegistered,
+                     this, &QDBusTrayIcon::watcherServiceRegistered);
 }
 
 void QDBusTrayIcon::cleanup()
@@ -128,6 +153,15 @@ void QDBusTrayIcon::cleanup()
     delete m_notifier;
     m_notifier = Q_NULLPTR;
     m_registered = false;
+}
+
+void QDBusTrayIcon::watcherServiceRegistered(const QString &serviceName)
+{
+    Q_UNUSED(serviceName);
+    // We have the icon registered, but the watcher has restarted or
+    // changed, so we need to tell it about our icon again
+    if (m_registered)
+        dBusConnection()->registerTrayIconWithWatcher(this);
 }
 
 void QDBusTrayIcon::attentionTimerExpired()
@@ -160,6 +194,12 @@ QTemporaryFile *QDBusTrayIcon::tempIcon(const QIcon &icon)
         uint pid = session.interface()->servicePid(KDEWatcherService).value();
         QString processName = QLockFilePrivate::processNameByPid(pid);
         necessary = processName.endsWith(QLatin1String("indicator-application-service"));
+        if (!necessary && QGuiApplication::desktopSettingsAware()) {
+            // Accessing to process name might be not allowed if the application
+            // is confined, thus we can just rely on the current desktop in use
+            const QPlatformServices *services = QGuiApplicationPrivate::platformIntegration()->services();
+            necessary = services->desktopEnvironment().split(':').contains("UNITY");
+        }
         necessity_checked = true;
     }
     if (!necessary)

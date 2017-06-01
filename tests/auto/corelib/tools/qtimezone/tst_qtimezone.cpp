@@ -45,6 +45,8 @@ private slots:
     void dataStreamTest();
     void isTimeZoneIdAvailable();
     void availableTimeZoneIds();
+    void transitionEachZone_data();
+    void transitionEachZone();
     void stressTest();
     void windowsId();
     void isValidId_data();
@@ -54,23 +56,24 @@ private slots:
     void icuTest();
     void tzTest();
     void macTest();
+    void darwinTypes();
     void winTest();
 
 private:
-    void printTimeZone(const QTimeZone tz);
+    void printTimeZone(const QTimeZone &tz);
 #ifdef QT_BUILD_INTERNAL
     void testCetPrivate(const QTimeZonePrivate &tzp);
 #endif // QT_BUILD_INTERNAL
-    bool debug;
+    const bool debug;
 };
 
 tst_QTimeZone::tst_QTimeZone()
-{
     // Set to true to print debug output, test Display Names and run long stress tests
-    debug = false;
+    : debug(false)
+{
 }
 
-void tst_QTimeZone::printTimeZone(const QTimeZone tz)
+void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
 {
     QDateTime now = QDateTime::currentDateTime();
     QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
@@ -343,6 +346,7 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     foreach (const QByteArray &id, available)
         QVERIFY(QTimeZone::isTimeZoneIdAvailable(id));
 
+#ifdef QT_BUILD_INTERNAL
     // a-z, A-Z, 0-9, '.', '-', '_' are valid chars
     // Can't start with '-'
     // Parts separated by '/', each part min 1 and max of 14 chars
@@ -365,6 +369,57 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     QCOMPARE(QTimeZonePrivate::isValidId("123456789012345"), false);
     QCOMPARE(QTimeZonePrivate::isValidId("123456789012345/12345678901234"), false);
     QCOMPARE(QTimeZonePrivate::isValidId("12345678901234/123456789012345"), false);
+#endif // QT_BUILD_INTERNAL
+}
+
+void tst_QTimeZone::transitionEachZone_data()
+{
+    QTest::addColumn<QByteArray>("zone");
+    QTest::addColumn<qint64>("secs");
+    QTest::addColumn<int>("start");
+    QTest::addColumn<int>("stop");
+
+    struct {
+        qint64 baseSecs;
+        int start, stop;
+        int year;
+    } table[] = {
+        { 25666200, 3, 12, 1970 },  // 1970-10-25 01:30 UTC; North America
+        { 1288488600, -4, 8, 2010 } // 2010-10-31 01:30 UTC; Europe, Russia
+    };
+
+    QString name;
+    for (int k = sizeof(table) / sizeof(table[0]); k-- > 0; ) {
+        foreach (QByteArray zone, QTimeZone::availableTimeZoneIds()) {
+            name.sprintf("%s@%d", zone.constData(), table[k].year);
+            QTest::newRow(name.toUtf8().constData())
+                << zone
+                << table[k].baseSecs
+                << table[k].start
+                << table[k].stop;
+        }
+    }
+}
+
+void tst_QTimeZone::transitionEachZone()
+{
+    // Regression test: round-trip fromMsecs/toMSecs should be idempotent; but
+    // various zones failed during fall-back transitions.
+    QFETCH(QByteArray, zone);
+    QFETCH(qint64, secs);
+    QFETCH(int, start);
+    QFETCH(int, stop);
+    QTimeZone named(zone);
+
+    for (int i = start; i < stop; i++) {
+        qint64 here = secs + i * 3600;
+        QDateTime when = QDateTime::fromMSecsSinceEpoch(here * 1000, named);
+        qint64 stamp = when.toMSecsSinceEpoch();
+        if (here * 1000 != stamp) // (The +1 is due to using *1*:30 as baseSecs.)
+            qDebug() << "Failing for" << zone << "at half past" << (i + 1) << "UTC";
+        QCOMPARE(stamp % 1000, 0);
+        QCOMPARE(here - stamp / 1000, 0);
+    }
 }
 
 void tst_QTimeZone::availableTimeZoneIds()
@@ -704,9 +759,9 @@ void tst_QTimeZone::tzTest()
 
     // Test display names by type, either ICU or abbreviation only
     QLocale enUS("en_US");
-#ifdef QT_USE_ICU
     // Only test names in debug mode, names used can vary by ICU version installed
     if (debug) {
+#ifdef QT_USE_ICU
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::LongName, enUS),
                 QString("Central European Standard Time"));
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::ShortName, enUS),
@@ -726,9 +781,7 @@ void tst_QTimeZone::tzTest()
                 QString("GMT+01:00"));
         QCOMPARE(tzp.displayName(QTimeZone::GenericTime, QTimeZone::OffsetName, enUS),
                 QString("UTC+01:00"));
-    }
 #else
-    if (debug) {
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::LongName, enUS),
                 QString("CET"));
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::ShortName, enUS),
@@ -747,10 +800,8 @@ void tst_QTimeZone::tzTest()
                 QString("CET"));
         QCOMPARE(tzp.displayName(QTimeZone::GenericTime, QTimeZone::OffsetName, enUS),
                 QString("CET"));
-    }
 #endif // QT_USE_ICU
 
-    if (debug) {
         // Test Abbreviations
         QCOMPARE(tzp.abbreviation(std), QString("CET"));
         QCOMPARE(tzp.abbreviation(dst), QString("CEST"));
@@ -905,6 +956,16 @@ void tst_QTimeZone::macTest()
 
     testCetPrivate(tzp);
 #endif // Q_OS_MAC
+}
+
+void tst_QTimeZone::darwinTypes()
+{
+#ifndef Q_OS_DARWIN
+    QSKIP("This is an Apple-only test");
+#else
+    extern void tst_QTimeZone_darwinTypes(); // in tst_qtimezone_darwin.mm
+    tst_QTimeZone_darwinTypes();
+#endif
 }
 
 void tst_QTimeZone::winTest()

@@ -26,6 +26,7 @@ defineTest(qtConfLibrary_psqlConfig) {
         export($${1}.includedir)
         return(true)
     }
+    qtLog("pg_config not found.")
     return(false)
 }
 
@@ -57,15 +58,27 @@ defineTest(qtConfLibrary_mysqlConfig) {
         libs = $$filterLibraryPath($$libs)
         # -rdynamic should not be returned by mysql_config, but is on RHEL 6.6
         libs -= -rdynamic
+        equals($${1}.cleanlibs, true) {
+            for(l, libs) {
+                # Drop all options besides the -L one and the -lmysqlclient one
+                # so we don't unnecessarily link to libs like OpenSSL
+                contains(l, "^(-L|-lmysqlclient).*"): cleanlibs += $$l
+            }
+            libs = $$cleanlibs
+        }
         $${1}.libs = "$$val_escape(libs)"
-        eval(includedir = $$includedir)
-        includedir ~= s/^-I//g
+        eval(rawincludedir = $$includedir)
+        rawincludedir ~= s/^-I//g
+        includedir =
+        for (id, rawincludedir): \
+            includedir += $$clean_path($$id)
         includedir -= $$QMAKE_DEFAULT_INCDIRS
         $${1}.includedir = "$$val_escape(includedir)"
         export($${1}.libs)
         export($${1}.includedir)
         return(true)
     }
+    qtLog("mysql_config not found.")
     return(false)
 }
 

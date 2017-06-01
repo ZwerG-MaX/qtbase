@@ -47,7 +47,11 @@
 QT_BEGIN_NAMESPACE
 
 
-QBasicAtomicInt qopengltextureglyphcache_serial_number = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int next_qopengltextureglyphcache_serial_number()
+{
+    static QBasicAtomicInt serial = Q_BASIC_ATOMIC_INITIALIZER(0);
+    return 1 + serial.fetchAndAddRelaxed(1);
+}
 
 QOpenGLTextureGlyphCache::QOpenGLTextureGlyphCache(QFontEngine::GlyphFormat format, const QTransform &matrix)
     : QImageTextureGlyphCache(format, matrix)
@@ -55,7 +59,7 @@ QOpenGLTextureGlyphCache::QOpenGLTextureGlyphCache(QFontEngine::GlyphFormat form
     , pex(0)
     , m_blitProgram(0)
     , m_filterMode(Nearest)
-    , m_serialNumber(qopengltextureglyphcache_serial_number.fetchAndAddRelaxed(1))
+    , m_serialNumber(next_qopengltextureglyphcache_serial_number())
     , m_buffer(QOpenGLBuffer::VertexBuffer)
 {
 #ifdef QT_GL_TEXTURE_GLYPH_CACHE_DEBUG
@@ -342,22 +346,14 @@ void QOpenGLTextureGlyphCache::resizeTextureData(int width, int height)
                 QString source;
                 source.append(QLatin1String(isCoreProfile ? qopenglslMainWithTexCoordsVertexShader_core : qopenglslMainWithTexCoordsVertexShader));
                 source.append(QLatin1String(isCoreProfile ? qopenglslUntransformedPositionVertexShader_core : qopenglslUntransformedPositionVertexShader));
-
-                QOpenGLShader *vertexShader = new QOpenGLShader(QOpenGLShader::Vertex, m_blitProgram);
-                vertexShader->compileSourceCode(source);
-
-                m_blitProgram->addShader(vertexShader);
+                m_blitProgram->addCacheableShaderFromSourceCode(QOpenGLShader::Vertex, source);
             }
 
             {
                 QString source;
                 source.append(QLatin1String(isCoreProfile ? qopenglslMainFragmentShader_core : qopenglslMainFragmentShader));
                 source.append(QLatin1String(isCoreProfile ? qopenglslImageSrcFragmentShader_core : qopenglslImageSrcFragmentShader));
-
-                QOpenGLShader *fragmentShader = new QOpenGLShader(QOpenGLShader::Fragment, m_blitProgram);
-                fragmentShader->compileSourceCode(source);
-
-                m_blitProgram->addShader(fragmentShader);
+                m_blitProgram->addCacheableShaderFromSourceCode(QOpenGLShader::Fragment, source);
             }
 
             m_blitProgram->bindAttributeLocation("vertexCoordsArray", QT_VERTEX_COORDS_ATTR);
@@ -380,8 +376,8 @@ void QOpenGLTextureGlyphCache::resizeTextureData(int width, int height)
         blitProgram = m_blitProgram;
 
     } else {
-        pex->setVertexAttributePointer(QT_VERTEX_COORDS_ATTR, m_vertexCoordinateArray);
-        pex->setVertexAttributePointer(QT_TEXTURE_COORDS_ATTR, m_textureCoordinateArray);
+        pex->uploadData(QT_VERTEX_COORDS_ATTR, m_vertexCoordinateArray, 8);
+        pex->uploadData(QT_TEXTURE_COORDS_ATTR, m_textureCoordinateArray, 8);
 
         pex->shaderManager->useBlitProgram();
         blitProgram = pex->shaderManager->blitProgram();
