@@ -42,7 +42,9 @@
 
 #if QT_CONFIG(style_fusion) || defined(QT_PLUGIN)
 #include "qcommonstyle_p.h"
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
+#endif
 #if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
 #endif
@@ -53,19 +55,35 @@
 #include <qdir.h>
 #include <qstyleoption.h>
 #include <qapplication.h>
+#if QT_CONFIG(mainwindow)
 #include <qmainwindow.h>
+#endif
 #include <qfont.h>
+#if QT_CONFIG(groupbox)
 #include <qgroupbox.h>
+#endif
 #include <qpixmapcache.h>
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
 #if QT_CONFIG(abstractslider)
 #include <qabstractslider.h>
 #endif
+#if QT_CONFIG(slider)
 #include <qslider.h>
+#endif
+#if QT_CONFIG(splitter)
 #include <qsplitter.h>
+#endif
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
+#if QT_CONFIG(wizard)
 #include <qwizard.h>
+#endif
 #include <qdrawutil.h>
 #include <private/qstylehelper_p.h>
 #include <private/qdrawhelper_p.h>
@@ -988,11 +1006,9 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
         break;
     case PE_PanelMenu: {
         painter->save();
-        QColor menuBackground = option->palette.base().color().lighter(108);
+        const QBrush menuBackground = option->palette.base().color().lighter(108);
         QColor borderColor = option->palette.background().color().darker(160);
-        painter->setPen(borderColor);
-        painter->setBrush(menuBackground);
-        painter->drawRect(option->rect.adjusted(0, 0, -1, -1));
+        qDrawPlainRect(painter, option->rect, borderColor, 1, &menuBackground);
         painter->restore();
     }
         break;
@@ -3712,7 +3728,6 @@ int QFusionStyle::styleHint(StyleHint hint, const QStyleOption *option, const QW
     case SH_ScrollView_FrameOnlyAroundContents:
     case SH_Menu_AllowActiveAndDisabled:
     case SH_MainWindow_SpaceBelowMenuBar:
-    case SH_DialogButtonBox_ButtonsHaveIcons:
     case SH_MessageBox_CenterButtons:
     case SH_RubberBand_Mask:
         return 0;
@@ -3727,7 +3742,7 @@ int QFusionStyle::styleHint(StyleHint hint, const QStyleOption *option, const QW
 
     case SH_MessageBox_TextInteractionFlags:
         return Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse;
-#ifndef QT_NO_WIZARD
+#if QT_CONFIG(wizard)
     case SH_WizardStyle:
         return QWizard::ClassicStyle;
 #endif

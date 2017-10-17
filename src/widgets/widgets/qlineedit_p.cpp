@@ -40,10 +40,10 @@
 #include "qlineedit.h"
 #include "qlineedit_p.h"
 
-#ifndef QT_NO_LINEEDIT
-
 #include "qvariant.h"
+#if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
+#endif
 #include "qdrag.h"
 #include "qwidgetaction.h"
 #include "qclipboard.h"
@@ -54,7 +54,9 @@
 #include "qinputmethod.h"
 #include "qlist.h"
 #endif
+#include <qpainter.h>
 #include <qpropertyanimation.h>
+#include <qvalidator.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -87,7 +89,7 @@ QRect QLineEditPrivate::cursorRect() const
     return adjustedControlRect(control->cursorRect());
 }
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
 
 void QLineEditPrivate::_q_completionHighlighted(const QString &newText)
 {
@@ -108,7 +110,7 @@ void QLineEditPrivate::_q_completionHighlighted(const QString &newText)
     }
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 void QLineEditPrivate::_q_handleWindowActivate()
 {
@@ -121,7 +123,7 @@ void QLineEditPrivate::_q_textEdited(const QString &text)
 {
     Q_Q(QLineEdit);
     emit q->textEdited(text);
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     if (control->completer()
         && control->completer()->completionMode() != QCompleter::InlineCompletion)
         control->complete(-1); // update the popup on cut/paste/del
@@ -621,5 +623,3 @@ int QLineEditPrivate::effectiveRightTextMargin() const
 QT_END_NAMESPACE
 
 #include "moc_qlineedit_p.cpp"
-
-#endif

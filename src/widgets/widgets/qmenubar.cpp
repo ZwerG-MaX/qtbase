@@ -49,16 +49,19 @@
 #include <qpainter.h>
 #include <qstylepainter.h>
 #include <qevent.h>
+#if QT_CONFIG(mainwindow)
 #include <qmainwindow.h>
+#endif
 #include <qtoolbar.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
 #include <qpa/qplatformtheme.h>
 #include "private/qguiapplication_p.h"
 #include "qpa/qplatformintegration.h"
-
-#ifndef QT_NO_MENUBAR
-
 
 #include "qmenu_p.h"
 #include "qmenubar_p.h"
@@ -80,7 +83,7 @@ QMenuBarExtension::QMenuBarExtension(QWidget *parent)
 {
     setObjectName(QLatin1String("qt_menubar_ext_button"));
     setAutoRaise(true);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     setPopupMode(QToolButton::InstantPopup);
 #endif
     setIcon(style()->standardIcon(QStyle::SP_ToolBarHorizontalExtensionButton, 0, parentWidget()));
@@ -376,7 +379,7 @@ void QMenuBarPrivate::setCurrentAction(QAction *action, bool popup, bool activat
         q->update(actionRect(currentAction));
 
     popupState = popup;
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     QAction *previousAction = currentAction;
 #endif
     currentAction = action;
@@ -385,7 +388,7 @@ void QMenuBarPrivate::setCurrentAction(QAction *action, bool popup, bool activat
         if(popup)
             popupAction(action, activateFirst);
         q->update(actionRect(action));
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     }  else if (previousAction) {
         QString empty;
         QStatusTipEvent tip(empty);
@@ -1013,7 +1016,7 @@ void QMenuBar::mousePressEvent(QMouseEvent *e)
     QAction *action = d->actionAt(e->pos());
     if (!action || !d->isVisible(action) || !action->isEnabled()) {
         d->setCurrentAction(0);
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
         if (QWhatsThis::inWhatsThisMode())
             QWhatsThis::showText(e->globalPos(), d->whatsThis, this);
 #endif
@@ -1432,7 +1435,7 @@ bool QMenuBar::event(QEvent *e)
     }
     break;
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     case QEvent::QueryWhatsThis:
         e->setAccepted(d->whatsThis.size());
         if (QAction *action = d->actionAt(static_cast<QHelpEvent*>(e)->pos())) {
@@ -1870,9 +1873,6 @@ QPlatformMenuBar *QMenuBar::platformMenuBar()
 
 // for private slots
 
-
 QT_END_NAMESPACE
 
 #include <moc_qmenubar.cpp>
-
-#endif // QT_NO_MENUBAR

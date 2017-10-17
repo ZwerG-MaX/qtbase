@@ -121,8 +121,13 @@ void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteA
 
 void QAndroidPlatformNativeInterface::customEvent(QEvent *event)
 {
-    if (event->type() == QEvent::User)
-        QtAndroid::setAndroidPlatformIntegration(static_cast<QAndroidPlatformIntegration *>(QGuiApplicationPrivate::platformIntegration()));
+    if (event->type() != QEvent::User)
+        return;
+
+    QMutexLocker lock(QtAndroid::platformInterfaceMutex());
+    QAndroidPlatformIntegration *api = static_cast<QAndroidPlatformIntegration *>(QGuiApplicationPrivate::platformIntegration());
+    QtAndroid::setAndroidPlatformIntegration(api);
+    api->flushPendingUpdates();
 }
 
 QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &paramList)
@@ -403,6 +408,14 @@ void QAndroidPlatformIntegration::setScreenOrientation(Qt::ScreenOrientation cur
 {
     m_orientation = currentOrientation;
     m_nativeOrientation = nativeOrientation;
+}
+
+void QAndroidPlatformIntegration::flushPendingUpdates()
+{
+    m_primaryScreen->setPhysicalSize(QSize(m_defaultPhysicalSizeWidth,
+                                           m_defaultPhysicalSizeHeight));
+    m_primaryScreen->setSize(QSize(m_defaultScreenWidth, m_defaultScreenHeight));
+    m_primaryScreen->setAvailableGeometry(QRect(0, 0, m_defaultGeometryWidth, m_defaultGeometryHeight));
 }
 
 #ifndef QT_NO_ACCESSIBILITY

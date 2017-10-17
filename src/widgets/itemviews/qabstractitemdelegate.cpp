@@ -39,19 +39,25 @@
 
 #include "qabstractitemdelegate.h"
 
-#ifndef QT_NO_ITEMVIEWS
 #include <qabstractitemmodel.h>
 #include <qabstractitemview.h>
 #include <qfontmetrics.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
 #include <qtooltip.h>
 #include <qevent.h>
 #include <qstring.h>
 #include <qdebug.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(textedit)
 #include <qtextedit.h>
 #include <qplaintextedit.h>
+#endif
 #include <qapplication.h>
+#include <qvalidator.h>
 #include <private/qtextengine_p.h>
 #include <private/qabstractitemdelegate_p.h>
 
@@ -393,7 +399,7 @@ bool QAbstractItemDelegate::helpEvent(QHelpEvent *event,
         }
         break;}
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     case QEvent::QueryWhatsThis: {
         if (index.data(Qt::WhatsThisRole).isValid())
             return true;
@@ -431,7 +437,7 @@ QAbstractItemDelegatePrivate::QAbstractItemDelegatePrivate()
 
 static bool editorHandlesKeyEvent(QWidget *editor, const QKeyEvent *event)
 {
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     // do not filter enter / return / tab / backtab for QTextEdit or QPlainTextEdit
     if (qobject_cast<QTextEdit *>(editor) || qobject_cast<QPlainTextEdit *>(editor)) {
         switch (event->key()) {
@@ -445,7 +451,7 @@ static bool editorHandlesKeyEvent(QWidget *editor, const QKeyEvent *event)
             break;
         }
     }
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
     Q_UNUSED(editor);
     Q_UNUSED(event);
@@ -534,7 +540,7 @@ bool QAbstractItemDelegatePrivate::editorEventFilter(QObject *object, QEvent *ev
 
 bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
 {
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
     if (QLineEdit *e = qobject_cast<QLineEdit*>(editor)) {
         if (!e->hasAcceptableInput()) {
 #if QT_CONFIG(validator)
@@ -549,7 +555,7 @@ bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
     }
 #else
     Q_UNUSED(editor)
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
 
     return true;
 }
@@ -604,5 +610,3 @@ void QAbstractItemDelegatePrivate::_q_commitDataAndCloseEditor(QWidget *editor)
 QT_END_NAMESPACE
 
 #include "moc_qabstractitemdelegate.cpp"
-
-#endif // QT_NO_ITEMVIEWS

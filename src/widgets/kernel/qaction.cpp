@@ -47,7 +47,9 @@
 #include "qlist.h"
 #include <private/qshortcutmap_p.h>
 #include <private/qapplication_p.h>
+#if QT_CONFIG(menu)
 #include <private/qmenu_p.h>
+#endif
 #include <private/qdebug_p.h>
 
 #define QAPP_CHECK(functionName) \
@@ -91,7 +93,7 @@ QActionPrivate::~QActionPrivate()
 
 bool QActionPrivate::showStatusText(QWidget *widget, const QString &str)
 {
-#ifdef QT_NO_STATUSTIP
+#if !QT_CONFIG(statustip)
     Q_UNUSED(widget);
     Q_UNUSED(str);
 #else
@@ -112,7 +114,7 @@ void QActionPrivate::sendDataChanged()
         QWidget *w = widgets.at(i);
         QApplication::sendEvent(w, &e);
     }
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     for (int i = 0; i < graphicsWidgets.size(); ++i) {
         QGraphicsWidget *w = graphicsWidgets.at(i);
         QApplication::sendEvent(w, &e);
@@ -277,6 +279,8 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 /*!
     Constructs an action with \a parent. If \a parent is an action
     group the action will be automatically inserted into the group.
+
+    \note The \a parent argument is optional since Qt 5.7.
 */
 QAction::QAction(QObject* parent)
     : QAction(*new QActionPrivate, parent)
@@ -358,7 +362,7 @@ QList<QWidget *> QAction::associatedWidgets() const
     return d->widgets;
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 /*!
   \since 4.5
   Returns a list of widgets this action has been added to.
@@ -563,7 +567,7 @@ QAction::~QAction()
         QWidget *w = d->widgets.at(i);
         w->removeAction(this);
     }
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     for (int i = d->graphicsWidgets.size()-1; i >= 0; --i) {
         QGraphicsWidget *w = d->graphicsWidgets.at(i);
         w->removeAction(this);
@@ -641,7 +645,7 @@ QIcon QAction::icon() const
     return d->icon;
 }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
   Returns the menu contained by this action. Actions that contain
   menus can be used to create menu items with submenus, or inserted
@@ -668,7 +672,7 @@ void QAction::setMenu(QMenu *menu)
         menu->d_func()->setOverrideMenuAction(this);
     d->sendDataChanged();
 }
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 /*!
   If \a b is true then this action will be considered a separator.

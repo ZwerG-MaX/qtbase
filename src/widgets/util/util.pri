@@ -3,21 +3,19 @@
 HEADERS += \
         util/qsystemtrayicon.h \
         util/qcolormap.h \
-        util/qcompleter.h \
-        util/qcompleter_p.h \
-        util/qsystemtrayicon_p.h \
-        util/qundogroup.h \
-        util/qundostack.h \
-        util/qundostack_p.h \
-        util/qundoview.h
+        util/qsystemtrayicon_p.h
 
 SOURCES += \
         util/qsystemtrayicon.cpp \
-        util/qcolormap.cpp \
-        util/qcompleter.cpp \
-        util/qundogroup.cpp \
-        util/qundostack.cpp \
-        util/qundoview.cpp
+        util/qcolormap.cpp
+
+qtConfig(completer) {
+    HEADERS += \
+        util/qcompleter.h \
+        util/qcompleter_p.h
+
+    SOURCES += util/qcompleter.cpp
+}
 
 qtConfig(scroller) {
     HEADERS += \
@@ -31,6 +29,24 @@ qtConfig(scroller) {
         util/qscroller.cpp \
         util/qscrollerproperties.cpp \
         util/qflickgesture.cpp \
+}
+
+qtConfig(undocommand) {
+    HEADERS += \
+        util/qundostack.h \
+        util/qundostack_p.h
+
+    SOURCES += util/qundostack.cpp
+}
+
+qtConfig(undogroup) {
+    HEADERS += util/qundogroup.h
+    SOURCES += util/qundogroup.cpp
+}
+
+qtConfig(undoview) {
+    HEADERS += util/qundoview.h
+    SOURCES += util/qundoview.cpp
 }
 
 win32:!winrt {

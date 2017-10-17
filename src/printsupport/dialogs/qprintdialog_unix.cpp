@@ -40,15 +40,19 @@
 #include "qplatformdefs.h"
 #include <QtPrintSupport/private/qtprintsupportglobal_p.h>
 
-#ifndef QT_NO_PRINTDIALOG
-
 #include "private/qabstractprintdialog_p.h"
+#if QT_CONFIG(messagebox)
 #include <QtWidgets/qmessagebox.h>
+#endif
 #include "qprintdialog.h"
+#if QT_CONFIG(filedialog)
 #include "qfiledialog.h"
+#endif
 #include <QtCore/qdir.h>
 #include <QtGui/qevent.h>
+#if QT_CONFIG(filesystemmodel)
 #include <QtWidgets/qfilesystemmodel.h>
+#endif
 #include <QtWidgets/qstyleditemdelegate.h>
 #include <QtPrintSupport/qprinter.h>
 
@@ -59,12 +63,14 @@
 
 #include <QtWidgets/qdialogbuttonbox.h>
 
-#include "private/qfscompleter_p.h"
+#if QT_CONFIG(completer)
+#include <private/qcompleter_p.h>
+#endif
 #include "ui_qprintpropertieswidget.h"
 #include "ui_qprintsettingsoutput.h"
 #include "ui_qprintwidget.h"
 
-#ifndef QT_NO_CUPS
+#if QT_CONFIG(cups)
 #include <private/qcups_p.h>
 #if QT_CONFIG(cupsjobwidget)
 #include "qcupsjobwidget_p.h"
@@ -203,7 +209,7 @@ public:
     void selectPrinter(const QPrinter::OutputFormat outputFormat);
 
     void _q_togglePageSetCombo(bool);
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
     void _q_checkFields();
 #endif
     void _q_collapseOrExpandDialog();
@@ -313,7 +319,7 @@ void QPrintDialogPrivate::init()
     options.grayscale->setIconSize(QSize(32, 32));
     options.grayscale->setIcon(QIcon(QLatin1String(":/qt-project.org/dialogs/qprintdialog/images/status-gray-scale.png")));
 
-#ifndef QT_NO_CUPS
+#if QT_CONFIG(cups)
     // Add Page Set widget if CUPS is available
     options.pageSetCombo->addItem(tr("All Pages"), QVariant::fromValue(QCUPSSupport::AllPages));
     options.pageSetCombo->addItem(tr("Odd Pages"), QVariant::fromValue(QCUPSSupport::OddPages));
@@ -337,7 +343,7 @@ void QPrintDialogPrivate::init()
     lay->addWidget(bottom);
     lay->addWidget(buttons);
 
-#ifdef QT_NO_MESSAGEBOX
+#if !QT_CONFIG(messagebox)
     QObject::connect(buttons, SIGNAL(accepted()), q, SLOT(accept()));
 #else
     QObject::connect(buttons, SIGNAL(accepted()), q, SLOT(_q_checkFields()));
@@ -435,7 +441,7 @@ void QPrintDialogPrivate::setupPrinter()
         }
     }
 
-#ifndef QT_NO_CUPS
+#if QT_CONFIG(cups)
     // page set
     if (p->printRange() == QPrinter::AllPages || p->printRange() == QPrinter::PageRange) {
         //If the application is selecting pages and the first page number is even then need to adjust the odd-even accordingly
@@ -496,14 +502,14 @@ void QPrintDialogPrivate::_q_collapseOrExpandDialog()
     }
 }
 
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
 void QPrintDialogPrivate::_q_checkFields()
 {
     Q_Q(QPrintDialog);
     if (top->d->checkFields())
         q->accept();
 }
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
 
 
 void QPrintDialogPrivate::updateWidgets()
@@ -518,7 +524,7 @@ void QPrintDialogPrivate::updateWidgets()
     options.printCurrentPage->setVisible(q->isOptionEnabled(QPrintDialog::PrintCurrentPage));
     options.collate->setVisible(q->isOptionEnabled(QPrintDialog::PrintCollateCopies));
 
-#ifndef QT_NO_CUPS
+#if QT_CONFIG(cups)
     // Don't display Page Set if only Selection or Current Page are enabled
     if (!q->isOptionEnabled(QPrintDialog::PrintPageRange)
         && (q->isOptionEnabled(QPrintDialog::PrintSelection) || q->isOptionEnabled(QPrintDialog::PrintCurrentPage))) {
@@ -675,7 +681,7 @@ QUnixPrintWidgetPrivate::QUnixPrintWidgetPrivate(QUnixPrintWidget *p, QPrinter *
     }
     widget.properties->setEnabled(true);
 
-#if !defined(QT_NO_FILESYSTEMMODEL) && !defined(QT_NO_COMPLETER)
+#if QT_CONFIG(filesystemmodel) && QT_CONFIG(completer)
     QFileSystemModel *fsm = new QFileSystemModel(widget.filename);
     fsm->setRootPath(QDir::homePath());
     widget.filename->setCompleter(new QCompleter(fsm, widget.filename));
@@ -782,7 +788,7 @@ void QUnixPrintWidgetPrivate::setOptionsPane(QPrintDialogPrivate *pane)
 void QUnixPrintWidgetPrivate::_q_btnBrowseClicked()
 {
     QString filename = widget.filename->text();
-#ifndef QT_NO_FILEDIALOG
+#if QT_CONFIG(filedialog)
     filename = QFileDialog::getSaveFileName(parent, QPrintDialog::tr("Print To File ..."), filename,
                                             QString(), 0, QFileDialog::DontConfirmOverwrite);
 #else
@@ -836,7 +842,7 @@ void QUnixPrintWidgetPrivate::applyPrinterProperties()
         propertiesDialog->applyPrinterProperties(printer);
 }
 
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
 bool QUnixPrintWidgetPrivate::checkFields()
 {
     if (widget.filename->isEnabled()) {
@@ -867,7 +873,7 @@ bool QUnixPrintWidgetPrivate::checkFields()
         }
     }
 
-#ifndef QT_NO_CUPS
+#if QT_CONFIG(cups)
     if (propertiesDialogShown) {
         QCUPSSupport::PagesPerSheet pagesPerSheet = propertiesDialog->widget.pageSetup->m_ui.pagesPerSheetCombo
                                                                     ->currentData().value<QCUPSSupport::PagesPerSheet>();
@@ -887,7 +893,7 @@ bool QUnixPrintWidgetPrivate::checkFields()
     // Every test passed. Accept the dialog.
     return true;
 }
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
 
 void QUnixPrintWidgetPrivate::setupPrinterProperties()
 {
@@ -983,6 +989,3 @@ QT_END_NAMESPACE
 
 #include "moc_qprintdialog.cpp"
 #include "qprintdialog_unix.moc"
-
-#endif // QT_NO_PRINTDIALOG
-

@@ -69,18 +69,18 @@
 #include <xcb/xfixes.h>
 #include <xcb/xinerama.h>
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 #include <X11/Xlib.h>
 #include <X11/Xlib-xcb.h>
 #include <X11/Xlibint.h>
 #include <X11/Xutil.h>
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
 #include <X11/extensions/XI2proto.h>
 #endif
 
-#ifdef XCB_USE_RENDER
+#if QT_CONFIG(xcb_render)
 #include <xcb/render.h>
 #endif
 
@@ -116,7 +116,7 @@ Q_LOGGING_CATEGORY(lcQpaScreen, "qt.qpa.screen")
 #define XCB_GE_GENERIC 35
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
 // Starting from the xcb version 1.9.3 struct xcb_ge_event_t has changed:
 // - "pad0" became "extension"
 // - "pad1" and "pad" became "pad0"
@@ -134,9 +134,9 @@ static inline bool isXIEvent(xcb_generic_event_t *event, int opCode)
     qt_xcb_ge_event_t *e = reinterpret_cast<qt_xcb_ge_event_t *>(event);
     return e->extension == opCode;
 }
-#endif // XCB_USE_XINPUT2
+#endif // QT_CONFIG(xinput2)
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 static const char * const xcbConnectionErrors[] = {
     "No error", /* Error 0 */
     "I/O error", /* XCB_CONN_ERROR */
@@ -557,7 +557,7 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
     , m_displayName(displayName ? QByteArray(displayName) : qgetenv("DISPLAY"))
     , m_nativeInterface(nativeInterface)
 {
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     Display *dpy = XOpenDisplay(m_displayName.constData());
     if (dpy) {
         m_primaryScreenNumber = DefaultScreen(dpy);
@@ -569,11 +569,12 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
     }
 #else
     m_connection = xcb_connect(m_displayName.constData(), &m_primaryScreenNumber);
-#endif //XCB_USE_XLIB
+#endif // QT_CONFIG(xcb_xlib)
 
-    if (Q_UNLIKELY(!m_connection || xcb_connection_has_error(m_connection)))
-        qFatal("QXcbConnection: Could not connect to display %s", m_displayName.constData());
-
+    if (Q_UNLIKELY(!m_connection || xcb_connection_has_error(m_connection))) {
+        qCWarning(lcQpaScreen, "QXcbConnection: Could not connect to display %s", m_displayName.constData());
+        return;
+    }
 
     m_reader = new QXcbEventReader(this);
     m_reader->start();
@@ -583,7 +584,7 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
 #if QT_CONFIG(xkb)
         &xcb_xkb_id,
 #endif
-#ifdef XCB_USE_RENDER
+#if QT_CONFIG(xcb_render)
         &xcb_render_id,
 #endif
         0
@@ -604,7 +605,7 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
     initializeScreens();
 
     initializeXRender();
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
     if (!qEnvironmentVariableIsSet("QT_XCB_NO_XI2"))
         initializeXInput2();
 #endif
@@ -664,11 +665,11 @@ QXcbConnection::~QXcbConnection()
     delete m_drag;
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
     finalizeXInput2();
 #endif
 
-    if (m_reader->isRunning()) {
+    if (m_reader && m_reader->isRunning()) {
         sendConnectionEvent(QXcbAtom::_QT_CLOSE_CONNECTION);
         m_reader->wait();
     }
@@ -685,13 +686,20 @@ QXcbConnection::~QXcbConnection()
 
     delete m_glIntegration;
 
-#ifdef XCB_USE_XLIB
-    XCloseDisplay(static_cast<Display *>(m_xlib_display));
+    if (isConnected()) {
+#if QT_CONFIG(xcb_xlib)
+        XCloseDisplay(static_cast<Display *>(m_xlib_display));
 #else
-    xcb_disconnect(xcb_connection());
+        xcb_disconnect(xcb_connection());
 #endif
+    }
 
     delete m_keyboard;
+}
+
+bool QXcbConnection::isConnected() const
+{
+    return m_connection && !xcb_connection_has_error(m_connection);
 }
 
 QXcbScreen *QXcbConnection::primaryScreen() const
@@ -1201,7 +1209,7 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
             }
             break;
         }
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
         case XCB_GE_GENERIC:
             // Here the windowEventListener is invoked from xi2HandleEvent()
             if (m_xi2Enabled && isXIEvent(event, m_xiOpCode))
@@ -1533,7 +1541,7 @@ xcb_window_t QXcbConnection::clientLeader()
                                        1,
                                        &m_clientLeader));
 
-#if !defined(QT_NO_SESSIONMANAGER) && defined(XCB_USE_SM)
+#if QT_CONFIG(xcb_sm)
         // If we are session managed, inform the window manager about it
         QByteArray session = qGuiApp->sessionId().toLatin1();
         if (!session.isEmpty()) {
@@ -1551,7 +1559,7 @@ xcb_window_t QXcbConnection::clientLeader()
     return m_clientLeader;
 }
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 void *QXcbConnection::xlib_display() const
 {
     return m_xlib_display;
@@ -1573,7 +1581,7 @@ void *QXcbConnection::createVisualInfoForDefaultVisualId() const
 
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
 // it is safe to cast XI_* events here as long as we are only touching the first 32 bytes,
 // after that position event needs memmove, see xi2PrepareXIGenericDeviceEvent
 static inline bool isXIType(xcb_generic_event_t *event, int opCode, uint16_t type)
@@ -1618,7 +1626,7 @@ bool QXcbConnection::compressEvent(xcb_generic_event_t *event, int currentIndex,
         }
         return false;
     }
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
     // compress XI_* events
     if (responseType == XCB_GE_GENERIC) {
         if (!m_xi2Enabled)
@@ -1626,11 +1634,11 @@ bool QXcbConnection::compressEvent(xcb_generic_event_t *event, int currentIndex,
 
         // compress XI_Motion, but not from tablet devices
         if (isXIType(event, m_xiOpCode, XI_Motion)) {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
             xXIDeviceEvent *xdev = reinterpret_cast<xXIDeviceEvent *>(event);
             if (const_cast<QXcbConnection *>(this)->tabletDataForDevice(xdev->sourceid))
                 return false;
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
             for (int j = nextIndex; j < eventqueue->size(); ++j) {
                 xcb_generic_event_t *next = eventqueue->at(j);
                 if (!isValid(next))
@@ -2067,7 +2075,7 @@ void QXcbConnection::initializeXFixes()
 
 void QXcbConnection::initializeXRender()
 {
-#ifdef XCB_USE_RENDER
+#if QT_CONFIG(xcb_render)
     const xcb_query_extension_reply_t *reply = xcb_get_extension_data(m_connection, &xcb_render_id);
     if (!reply || !reply->present)
         return;
@@ -2232,7 +2240,7 @@ bool QXcbConnection::xi2MouseEvents() const
 }
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
 static int xi2ValuatorOffset(const unsigned char *maskPtr, int maskLen, int number)
 {
     int offset = 0;
@@ -2276,7 +2284,7 @@ void QXcbConnection::xi2PrepareXIGenericDeviceEvent(xcb_ge_event_t *event)
     // and allow casting, overwriting the full_sequence field.
     memmove((char*) event + 32, (char*) event + 36, event->length * 4);
 }
-#endif // defined(XCB_USE_XINPUT2)
+#endif // QT_CONFIG(xinput2)
 
 QXcbSystemTrayTracker *QXcbConnection::systemTrayTracker() const
 {

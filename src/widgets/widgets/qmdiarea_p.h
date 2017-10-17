@@ -55,7 +55,7 @@
 #include "qmdiarea.h"
 #include "qmdisubwindow.h"
 
-#ifndef QT_NO_MDIAREA
+QT_REQUIRE_CONFIG(mdiarea);
 
 #include <QList>
 #include <QVector>
@@ -144,7 +144,7 @@ public:
     QMdi::Rearranger *regularTiler;
     QMdi::Rearranger *iconTiler;
     QMdi::Placer *placer;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     QRubberBand *rubberBand;
 #endif
     QMdiAreaTabBar *tabBar;
@@ -158,12 +158,12 @@ public:
     QMdiArea::WindowOrder activationOrder;
     QMdiArea::AreaOptions options;
     QMdiArea::ViewMode viewMode;
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
     bool documentMode;
     bool tabsClosable;
     bool tabsMovable;
 #endif
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
     QTabWidget::TabShape tabShape;
     QTabWidget::TabPosition tabPosition;
 #endif
@@ -213,7 +213,7 @@ public:
     QList<QMdiSubWindow *> subWindowList(QMdiArea::WindowOrder, bool reversed = false) const;
     void disconnectSubWindow(QObject *subWindow);
     void setViewMode(QMdiArea::ViewMode mode);
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
     void updateTabBarGeometry();
     void refreshTabBar();
 #endif
@@ -254,7 +254,7 @@ public:
             subWindow->d_func()->setActive(active, changeFocus);
     }
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     void showRubberBandFor(QMdiSubWindow *subWindow);
 
     inline void hideRubberBand()
@@ -263,10 +263,8 @@ public:
             rubberBand->hide();
         indexToHighlighted = -1;
     }
-#endif // QT_NO_RUBBERBAND
+#endif // QT_CONFIG(rubberband)
 };
-
-#endif // QT_NO_MDIAREA
 
 QT_END_NAMESPACE
 

@@ -51,12 +51,12 @@
 #include <QtWidgets/qstyle.h>
 #include <QtWidgets/qtoolbutton.h>
 #include <QtGui/qvalidator.h>
+#if QT_CONFIG(filedialog)
 #include <QtWidgets/qfiledialog.h>
+#endif
 #include <QtWidgets/qmainwindow.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtCore/QCoreApplication>
-
-#ifndef QT_NO_PRINTPREVIEWDIALOG
 
 #include "private/qdialog_p.h"
 
@@ -787,7 +787,3 @@ QT_END_NAMESPACE
 
 #include "moc_qprintpreviewdialog.cpp"
 #include "qprintpreviewdialog.moc"
-
-#endif // QT_NO_PRINTPREVIEWDIALOG
-
-

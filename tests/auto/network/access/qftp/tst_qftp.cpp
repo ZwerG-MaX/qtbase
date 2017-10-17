@@ -186,7 +186,7 @@ void tst_QFtp::initTestCase_data()
     QTest::addColumn<bool>("setSession");
 
     QTest::newRow("WithoutProxy") << false << 0 << false;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
     QTest::newRow("WithSocks5Proxy") << true << int(QNetworkProxy::Socks5Proxy) << false;
 #endif
     //### doesn't work well yet.
@@ -194,7 +194,7 @@ void tst_QFtp::initTestCase_data()
 
 #ifndef QT_NO_BEARERMANAGEMENT
     QTest::newRow("WithoutProxyWithSession") << false << 0 << true;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
     QTest::newRow("WithSocks5ProxyAndSession") << true << int(QNetworkProxy::Socks5Proxy) << true;
 #endif
 #endif
@@ -205,7 +205,7 @@ void tst_QFtp::initTestCase()
     QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager manager;
-    networkSessionImplicit = QSharedPointer<QNetworkSession>(new QNetworkSession(manager.defaultConfiguration()));
+    networkSessionImplicit = QSharedPointer<QNetworkSession>::create(manager.defaultConfiguration());
     networkSessionImplicit->open();
     QVERIFY(networkSessionImplicit->waitForOpened(60000)); //there may be user prompt on 1st connect
 #endif

@@ -54,25 +54,29 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qmainwindow.h"
 
-#ifndef QT_NO_MAINWINDOW
-
 #include "QtWidgets/qlayout.h"
+#if QT_CONFIG(tabbar)
 #include "QtWidgets/qtabbar.h"
+#endif
 #include "QtCore/qvector.h"
 #include "QtCore/qset.h"
 #include "QtCore/qbasictimer.h"
 #include "private/qlayoutengine_p.h"
 #include "private/qwidgetanimator_p.h"
 
+#if QT_CONFIG(dockwidget)
 #include "qdockarealayout_p.h"
+#endif
 #include "qtoolbararealayout_p.h"
+
+QT_REQUIRE_CONFIG(mainwindow);
 
 QT_BEGIN_NAMESPACE
 
 class QToolBar;
 class QRubberBand;
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 class QDockWidgetGroupWindow : public QWidget
 {
     Q_OBJECT
@@ -126,7 +130,7 @@ public:
     QToolBarAreaLayout toolBarAreaLayout;
 #endif
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QDockAreaLayout dockAreaLayout;
 #else
     QLayoutItem *centralWidgetItem;
@@ -188,7 +192,7 @@ public:
 
     QLayoutItem *statusbar;
 
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
     QStatusBar *statusBar() const;
     void setStatusBar(QStatusBar *sb);
 #endif
@@ -217,7 +221,7 @@ public:
 
     // dock widgets
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     void setCorner(Qt::Corner corner, Qt::DockWidgetArea area);
     Qt::DockWidgetArea corner(Qt::Corner corner) const;
     void addDockWidget(Qt::DockWidgetArea area,
@@ -232,7 +236,7 @@ public:
     void setVerticalTabsEnabled(bool enabled);
     bool restoreDockWidget(QDockWidget *dockwidget);
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
     QDockAreaLayoutInfo *dockInfo(QWidget *w);
     bool _documentMode;
     bool documentMode() const;
@@ -248,7 +252,7 @@ public:
     QList<QWidget*> unusedSeparatorWidgets;
     int sep; // separator extent
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
     QTabWidget::TabPosition tabPositions[4];
     QTabWidget::TabShape _tabShape;
 
@@ -258,8 +262,8 @@ public:
     void setTabPosition(Qt::DockWidgetAreas areas, QTabWidget::TabPosition tabPosition);
 
     QDockWidgetGroupWindow *createTabbedDockWindow();
-#endif // QT_NO_TABWIDGET
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabwidget)
+#endif // QT_CONFIG(tabbar)
 
     // separators
 
@@ -271,7 +275,7 @@ public:
     bool separatorMove(const QPoint &pos);
     bool endSeparatorMove(const QPoint &pos);
     void keepSize(QDockWidget *w);
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 
     // save/restore
 
@@ -301,10 +305,10 @@ public:
     QList<int> currentGapPos;
     QRect currentGapRect;
     QWidget *pluggingWidget;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     QPointer<QRubberBand> gapIndicator;
 #endif
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QPointer<QWidget> currentHoveredFloat; // set when dragging over a floating dock widget
     void setCurrentHoveredFloat(QWidget *w);
 #endif
@@ -321,14 +325,14 @@ public:
 
 private Q_SLOTS:
     void updateGapIndicator();
-#ifndef QT_NO_DOCKWIDGET
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(dockwidget)
+#if QT_CONFIG(tabbar)
     void tabChanged();
     void tabMoved(int from, int to);
 #endif
 #endif
 private:
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
     void updateTabBarShapes();
 #endif
 #if 0 // Used to be included in Qt4 for Q_WS_MAC
@@ -367,14 +371,12 @@ public:
 #endif
 };
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_DEBUG_STREAM)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_DEBUG_STREAM)
 class QDebug;
 QDebug operator<<(QDebug debug, const QDockAreaLayout &layout);
 QDebug operator<<(QDebug debug, const QMainWindowLayout *layout);
 #endif
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_MAINWINDOW
 
 #endif // QDYNAMICMAINWINDOWLAYOUT_P_H

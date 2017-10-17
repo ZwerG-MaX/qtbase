@@ -50,8 +50,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_FILESYSTEMMODEL
-
 #ifdef QT_BUILD_INTERNAL
 static QBasicAtomicInt fetchedRoot = Q_BASIC_ATOMIC_INITIALIZER(false);
 Q_AUTOTEST_EXPORT void qt_test_resetFetchedRoot()
@@ -100,7 +98,7 @@ QFileInfoGatherer::QFileInfoGatherer(QObject *parent)
     if (listener.canConvert<QObject *>()) {
         if (QObject *driveListener = listener.value<QObject *>()) {
             connect(driveListener, SIGNAL(driveAdded()), this, SLOT(driveAdded()));
-            connect(driveListener, SIGNAL(driveRemoved(QString)), this, SLOT(driveRemoved()));
+            connect(driveListener, SIGNAL(driveRemoved()), this, SLOT(driveRemoved()));
         }
     }
 #  endif // Q_OS_WIN && !Q_OS_WINRT
@@ -365,8 +363,6 @@ void QFileInfoGatherer::fetch(const QFileInfo &fileInfo, QElapsedTimer &base, bo
         firstTime = false;
     }
 }
-
-#endif // QT_NO_FILESYSTEMMODEL
 
 QT_END_NAMESPACE
 

@@ -250,6 +250,9 @@ private slots:
     void reuseQFile();
 
 private:
+#ifdef BUILTIN_TESTDATA
+    QSharedPointer<QTemporaryDir> m_dataDir;
+#endif
     enum FileType {
         OpenQFile,
         OpenFd,
@@ -412,8 +415,10 @@ static QByteArray msgFileDoesNotExist(const QString &name)
 void tst_QFile::initTestCase()
 {
     QVERIFY2(m_temporaryDir.isValid(), qPrintable(m_temporaryDir.errorString()));
+#if QT_CONFIG(process)
     m_stdinProcessDir = QFINDTESTDATA("stdinprocess");
     QVERIFY(!m_stdinProcessDir.isEmpty());
+#endif
     m_testSourceFile = QFINDTESTDATA("tst_qfile.cpp");
     QVERIFY(!m_testSourceFile.isEmpty());
     m_testLogFile = QFINDTESTDATA("testlog.txt");
@@ -426,8 +431,15 @@ void tst_QFile::initTestCase()
     QVERIFY(!m_forRenamingFile.isEmpty());
     m_twoDotsFile = QFINDTESTDATA("two.dots.file");
     QVERIFY(!m_twoDotsFile.isEmpty());
+
+#ifndef BUILTIN_TESTDATA
     m_testFile = QFINDTESTDATA("testfile.txt");
     QVERIFY(!m_testFile.isEmpty());
+#else
+    m_dataDir = QEXTRACTTESTDATA("/");
+    QVERIFY2(!m_dataDir.isNull(), qPrintable("Could not extract test data"));
+    m_testFile = m_dataDir->path() + "/testfile.txt";
+#endif
     m_resourcesDir = QFINDTESTDATA("resources");
     QVERIFY(!m_resourcesDir.isEmpty());
     m_noEndOfLineFile = QFINDTESTDATA("noendofline.txt");
@@ -1143,7 +1155,6 @@ void tst_QFile::invalidFile_data()
 #else
 #if !defined(Q_OS_WINRT)
     QTest::newRow( "colon2" ) << invalidDriveLetter() + QString::fromLatin1(":ail:invalid");
-    QTest::newRow( "date" ) << QString( "testLog-03:20.803Z.txt" );
 #endif
     QTest::newRow( "colon3" ) << QString( ":failinvalid" );
     QTest::newRow( "forwardslash" ) << QString( "fail/invalid" );

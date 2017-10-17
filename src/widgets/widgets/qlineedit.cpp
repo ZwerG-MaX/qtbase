@@ -40,7 +40,6 @@
 #include "qlineedit.h"
 #include "qlineedit_p.h"
 
-#ifndef QT_NO_LINEEDIT
 #include "qaction.h"
 #include "qapplication.h"
 #include "qclipboard.h"
@@ -49,7 +48,9 @@
 #include "qevent.h"
 #include "qfontmetrics.h"
 #include "qstylehints.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include "qpainter.h"
 #include "qpixmap.h"
 #include "qpointer.h"
@@ -60,16 +61,19 @@
 #include "qvalidator.h"
 #include "qvariant.h"
 #include "qvector.h"
-#include "qwhatsthis.h"
 #include "qdebug.h"
+#if QT_CONFIG(textedit)
 #include "qtextedit.h"
 #include <private/qtextedit_p.h>
+#endif
 #include <private/qwidgettextcontrol_p.h>
 
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
+#if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
+#endif
 #include "private/qstylesheetstyle_p.h"
 
 #ifndef QT_NO_SHORTCUT
@@ -128,6 +132,8 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
     \ingroup basicwidgets
     \inmodule QtWidgets
 
+    \image windows-lineedit.png
+
     A line edit allows the user to enter and edit a single line of
     plain text with a useful collection of editing functions,
     including undo and redo, cut and paste, and drag and drop (see
@@ -141,7 +147,6 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
     inputMask(), or both. When switching between a validator and an input mask
     on the same line edit, it is best to clear the validator or input mask to
     prevent undefined behavior.
-
 
     A related class is QTextEdit which allows multi-line, rich text
     editing.
@@ -201,15 +206,6 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
 
     Any other key sequence that represents a valid character, will
     cause the character to be inserted into the line edit.
-
-    \table 100%
-    \row \li \inlineimage macintosh-lineedit.png Screenshot of a Macintosh style line edit
-         \li A line edit shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \row \li \inlineimage windowsvista-lineedit.png Screenshot of a Windows Vista style line edit
-         \li A line edit shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row \li \inlineimage fusion-lineedit.png Screenshot of a Fusion style line edit
-         \li A line edit shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
 
     \sa QTextEdit, QLabel, QComboBox, {fowler}{GUI Design Handbook: Field, Entry}, {Line Edits Example}
 */
@@ -622,7 +618,7 @@ void QLineEdit::setValidator(const QValidator *v)
 }
 #endif // QT_NO_VALIDATOR
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
 /*!
     \since 4.2
 
@@ -674,7 +670,7 @@ QCompleter *QLineEdit::completer() const
     return d->control->completer();
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 /*!
     Returns a recommended size for the widget.
@@ -964,7 +960,7 @@ QString QLineEdit::selectedText() const
 }
 
 /*!
-    selectionStart() returns the index of the first selected character in the
+    Returns the index of the first selected character in the
     line edit or -1 if no text is selected.
 
     \sa selectedText()
@@ -1195,6 +1191,7 @@ QMargins QLineEdit::textMargins() const
     \row \li \c > \li All following alphabetic characters are uppercased.
     \row \li \c < \li All following alphabetic characters are lowercased.
     \row \li \c ! \li Switch off case conversion.
+    \row \li \c {[ ] { }} \li Reserved.
     \row \li \tt{\\} \li Use \tt{\\} to escape the special
                            characters listed above to use them as
                            separators.
@@ -1748,7 +1745,7 @@ void QLineEdit::inputMethodEvent(QInputMethodEvent *e)
 
     d->control->processInputMethodEvent(e);
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     if (!e->commitString().isEmpty())
         d->control->complete(Qt::Key_unknown);
 #endif
@@ -1779,7 +1776,7 @@ QVariant QLineEdit::inputMethodQuery(Qt::InputMethodQuery property, QVariant arg
             return QVariant(d->xToPos(pt.x(), QTextLine::CursorBetweenCharacters));
         return QVariant(d->control->cursor()); }
     case Qt::ImSurroundingText:
-        return QVariant(d->control->text());
+        return QVariant(d->control->surroundingText());
     case Qt::ImCurrentSelection:
         return QVariant(selectedText());
     case Qt::ImMaximumTextLength:
@@ -1829,7 +1826,7 @@ void QLineEdit::focusInEvent(QFocusEvent *e)
         d->control->setCancelText(d->control->text());
     }
 #endif
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     if (d->control->completer()) {
         d->control->completer()->setWidget(this);
         QObject::connect(d->control->completer(), SIGNAL(activated(QString)),
@@ -1876,7 +1873,7 @@ void QLineEdit::focusOutEvent(QFocusEvent *e)
 #ifdef QT_KEYPAD_NAVIGATION
     d->control->setCancelText(QString());
 #endif
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     if (d->control->completer()) {
         QObject::disconnect(d->control->completer(), 0, this, 0);
     }
@@ -2223,5 +2220,3 @@ void QLineEdit::changeEvent(QEvent *ev)
 QT_END_NAMESPACE
 
 #include "moc_qlineedit.cpp"
-
-#endif // QT_NO_LINEEDIT

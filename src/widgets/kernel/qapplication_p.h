@@ -165,7 +165,7 @@ public:
     static QWidget *focusNextPrevChild_helper(QWidget *toplevel, bool next,
                                               bool *wrappingOccurred = 0);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     // Maintain a list of all scenes to ensure font and palette propagation to
     // all scenes.
     QList<QGraphicsScene *> scene_list;
@@ -195,7 +195,7 @@ public:
     static QWidget *focus_widget;
     static QWidget *hidden_focus_widget;
     static QWidget *active_window;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     static int  wheel_scroll_lines;
     static QPointer<QWidget> wheel_widget;
 #endif

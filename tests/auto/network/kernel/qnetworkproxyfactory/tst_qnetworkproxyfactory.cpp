@@ -41,8 +41,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QList>
-
+#include <QSysInfo>
 #include <QThread>
+
+#include <private/qtnetworkglobal_p.h>
 
 class tst_QNetworkProxyFactory : public QObject {
     Q_OBJECT
@@ -366,8 +368,8 @@ void tst_QNetworkProxyFactory::genericSystemProxy()
     QFETCH(QString, hostName);
     QFETCH(int, port);
 
-// The generic system proxy is only available on the following platforms
-#if (!defined Q_OS_WIN) && (!defined Q_OS_OSX)
+// We can only use the generic system proxy where available:
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS) && !QT_CONFIG(libproxy)
     qputenv(envVar, url);
     const QList<QNetworkProxy> systemProxy = QNetworkProxyFactory::systemProxyForQuery();
     QCOMPARE(systemProxy.size(), 1);
@@ -416,6 +418,9 @@ public:
 //regression test for QTBUG-18799
 void tst_QNetworkProxyFactory::systemProxyForQueryCalledFromThread()
 {
+    if (QSysInfo::productType() == QLatin1String("windows") && QSysInfo::productVersion() == QLatin1String("7sp1")) {
+        QSKIP("This test fails by the systemProxyForQuery() call hanging - QTQAINFRA-1200");
+    }
     QUrl url(QLatin1String("http://qt-project.org"));
     QNetworkProxyQuery query(url);
     QSPFQThread thread;

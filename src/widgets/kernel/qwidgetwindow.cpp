@@ -152,6 +152,10 @@ QObject *QWidgetWindow::focusObject() const
     if (!windowWidget)
         return Q_NULLPTR;
 
+    // A window can't have a focus object if it's being destroyed.
+    if (QWidgetPrivate::get(windowWidget)->data.in_destructor)
+        return nullptr;
+
     QWidget *widget = windowWidget->focusWidget();
 
     if (!widget)
@@ -261,7 +265,7 @@ bool QWidgetWindow::event(QEvent *event)
         handleResizeEvent(static_cast<QResizeEvent *>(event));
         return true;
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         handleWheelEvent(static_cast<QWheelEvent *>(event));
         return true;
@@ -295,7 +299,7 @@ bool QWidgetWindow::event(QEvent *event)
     }
         return true;
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     case QEvent::TabletPress:
     case QEvent::TabletMove:
     case QEvent::TabletRelease:
@@ -774,7 +778,7 @@ void QWidgetWindow::handleCloseEvent(QCloseEvent *event)
     event->setAccepted(is_closing);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 
 void QWidgetWindow::handleWheelEvent(QWheelEvent *event)
 {
@@ -804,7 +808,7 @@ void QWidgetWindow::handleWheelEvent(QWheelEvent *event)
     QGuiApplication::sendSpontaneousEvent(widget, &translated);
 }
 
-#endif // QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 #ifndef QT_NO_DRAGANDDROP
 
@@ -970,7 +974,7 @@ bool QWidgetWindow::nativeEvent(const QByteArray &eventType, void *message, long
     return m_widget->nativeEvent(eventType, message, result);
 }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
 {
     static QPointer<QWidget> qt_tablet_target = 0;
@@ -1000,7 +1004,7 @@ void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
     if (event->type() == QEvent::TabletRelease && event->buttons() == Qt::NoButton)
         qt_tablet_target = 0;
 }
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
 #ifndef QT_NO_GESTURES
 void QWidgetWindow::handleGestureEvent(QNativeGestureEvent *e)

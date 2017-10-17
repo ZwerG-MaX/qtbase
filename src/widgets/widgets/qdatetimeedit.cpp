@@ -54,8 +54,6 @@
 
 #include <algorithm>
 
-#ifndef QT_NO_DATETIMEEDIT
-
 //#define QDATETIMEEDIT_QDTEDEBUG
 #ifdef QDATETIMEEDIT_QDTEDEBUG
 #  define QDTEDEBUG qDebug() << QString::fromLatin1("%1:%2").arg(__FILE__).arg(__LINE__)
@@ -75,6 +73,8 @@ QT_BEGIN_NAMESPACE
 
   \ingroup basicwidgets
   \inmodule QtWidgets
+
+  \image windows-datetimeedit.png
 
   QDateTimeEdit allows the user to edit dates by using the keyboard or
   the arrow keys to increase and decrease date and time values. The
@@ -102,15 +102,6 @@ QT_BEGIN_NAMESPACE
   Additionally, you can supply a custom calendar widget for use as the
   calendar pop-up by calling the setCalendarWidget() function. The existing
   calendar widget can be retrieved with calendarWidget().
-
-  \table 100%
-  \row \li \inlineimage windowsvista-datetimeedit.png Screenshot of a Windows Vista style date time editing widget
-       \li A date time editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-datetimeedit.png Screenshot of a Macintosh style date time editing widget
-       \li A date time editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-datetimeedit.png Screenshot of a Fusion style date time editing widget
-       \li A date time editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QDateEdit, QTimeEdit, QDate, QTime
 */
@@ -1201,7 +1192,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
   \reimp
 */
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QDateTimeEdit::wheelEvent(QWheelEvent *event)
 {
     QAbstractSpinBox::wheelEvent(event);
@@ -1505,6 +1496,8 @@ void QDateTimeEdit::mousePressEvent(QMouseEvent *event)
   \ingroup basicwidgets
   \inmodule QtWidgets
 
+  \image windows-timeedit.png
+
   Many of the properties and functions provided by QTimeEdit are implemented in
   QDateTimeEdit. These are the relevant properties of this class:
 
@@ -1517,15 +1510,6 @@ void QDateTimeEdit::mousePressEvent(QMouseEvent *event)
   \li \l{QDateTimeEdit::displayFormat}{displayFormat} contains a string that is used
      to format the time displayed in the widget.
   \endlist
-
-  \table 100%
-  \row \li \inlineimage windowsvista-timeedit.png Screenshot of a Windows Vista style time editing widget
-       \li A time editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-timeedit.png Screenshot of a Macintosh style time editing widget
-       \li A time editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-timeedit.png Screenshot of a Fusion style time editing widget
-       \li A time editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QDateEdit, QDateTimeEdit
 */
@@ -1582,6 +1566,8 @@ QTimeEdit::~QTimeEdit()
   \ingroup basicwidgets
   \inmodule QtWidgets
 
+  \image windows-dateedit.png
+
   Many of the properties and functions provided by QDateEdit are implemented in
   QDateTimeEdit. These are the relevant properties of this class:
 
@@ -1594,15 +1580,6 @@ QTimeEdit::~QTimeEdit()
   \li \l{QDateTimeEdit::displayFormat}{displayFormat} contains a string that is used
      to format the date displayed in the widget.
   \endlist
-
-  \table 100%
-  \row \li \inlineimage windowsvista-dateedit.png Screenshot of a Windows Vista style date editing widget
-       \li A date editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-dateedit.png Screenshot of a Macintosh style date editing widget
-       \li A date editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-dateedit.png Screenshot of a Fusion style date editing widget
-       \li A date editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QTimeEdit, QDateTimeEdit
 */
@@ -2695,5 +2672,3 @@ void QCalendarPopup::hideEvent(QHideEvent *)
 QT_END_NAMESPACE
 #include "moc_qdatetimeedit.cpp"
 #include "moc_qdatetimeedit_p.cpp"
-
-#endif // QT_NO_DATETIMEEDIT

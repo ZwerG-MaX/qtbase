@@ -780,10 +780,10 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
 
             if (qobject_cast<const QMessageBox *> (widget))
                 buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_msgbox_buttonbox"));
-#ifndef QT_NO_INPUTDIALOG
+#if QT_CONFIG(inputdialog)
             else if (qobject_cast<const QInputDialog *> (widget))
                 buttonBox = widget->findChild<const QDialogButtonBox *>(QLatin1String("qt_inputdlg_buttonbox"));
-#endif // QT_NO_INPUTDIALOG
+#endif // QT_CONFIG(inputdialog)
 
             if (buttonBox) {
                 //draw white panel part
@@ -1175,7 +1175,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
         }
     }
     break;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     case CE_MenuItem:
         if (const QStyleOptionMenuItem *menuitem = qstyleoption_cast<const QStyleOptionMenuItem *>(option)) {
             // windows always has a check column, regardless whether we have an icon or not
@@ -1333,7 +1333,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             }
         }
         break;
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
     case CE_HeaderSection:
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(option)) {
             partId = HP_HEADERITEM;
@@ -1438,7 +1438,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                 }
             }
             break;
-#ifndef QT_NO_ITEMVIEWS
+#if QT_CONFIG(itemviews)
     case CE_ItemViewItem:
         {
             const QStyleOptionViewItem *vopt;
@@ -1473,12 +1473,12 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             }
             break;
         }
-#endif // QT_NO_ITEMVIEWS
-#ifndef QT_NO_COMBOBOX
+#endif // QT_CONFIG(itemviews)
+#if QT_CONFIG(combobox)
     case CE_ComboBoxLabel:
         QCommonStyle::drawControl(element, option, painter, widget);
         break;
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
     default:
         QWindowsXPStyle::drawControl(element, option, painter, widget);
         break;
@@ -1774,7 +1774,7 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
             }
         }
         break;
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
     case CC_SpinBox:
         if (const QStyleOptionSpinBox *sb = qstyleoption_cast<const QStyleOptionSpinBox *>(option))
         {
@@ -1832,7 +1832,7 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
             }
         }
         break;
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
     default:
         QWindowsXPStyle::drawComplexControl(control, option, painter, widget);
         break;
@@ -1871,7 +1871,7 @@ QSize QWindowsVistaStyle::sizeFromContents(ContentsType type, const QStyleOption
                 sz.setHeight(minimumHeight);
         }
         return sz;
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
     case CT_MenuBarItem:
         if (!sz.isEmpty())
             sz += QSize(windowsItemHMargin * 5 + 1, 5);
@@ -2121,7 +2121,7 @@ QRect QWindowsVistaStyle::subControlRect(ComplexControl control, const QStyleOpt
 
     QRect rect = QWindowsXPStyle::subControlRect(control, option, subControl, widget);
     switch (control) {
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
     case CC_ComboBox:
         if (const QStyleOptionComboBox *cb = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
             int x = cb->rect.x(),
@@ -2153,7 +2153,8 @@ QRect QWindowsVistaStyle::subControlRect(ComplexControl control, const QStyleOpt
             rect = visualRect(cb->direction, cb->rect, rect);
             return rect;
         }
-#endif // QT_NO_COMBOBOX
+        break;
+#endif // QT_CONFIG(combobox)
     case CC_TitleBar:
         if (const QStyleOptionTitleBar *tb = qstyleoption_cast<const QStyleOptionTitleBar *>(option)) {
             if (!buttonVisible(subControl, tb))
@@ -2291,11 +2292,11 @@ void QWindowsVistaStyle::polish(QApplication *app)
 void QWindowsVistaStyle::polish(QWidget *widget)
 {
     QWindowsXPStyle::polish(widget);
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
     if (qobject_cast<QLineEdit*>(widget))
         widget->setAttribute(Qt::WA_Hover);
     else
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
     if (qobject_cast<QGroupBox*>(widget))
         widget->setAttribute(Qt::WA_Hover);
     else if (qobject_cast<QCommandLinkButton*>(widget)) {
@@ -2323,7 +2324,7 @@ void QWindowsVistaStyle::polish(QWidget *widget)
             buttonBox->setContentsMargins(0, 9, 0, 0);
 #endif
     }
-#ifndef QT_NO_INPUTDIALOG
+#if QT_CONFIG(inputdialog)
     else if (qobject_cast<QInputDialog *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground);
 #if QT_CONFIG(dialogbuttonbox)
@@ -2332,7 +2333,7 @@ void QWindowsVistaStyle::polish(QWidget *widget)
             buttonBox->setContentsMargins(0, 9, 0, 0);
 #endif
     }
-#endif // QT_NO_INPUTDIALOG
+#endif // QT_CONFIG(inputdialog)
     else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
         tree->viewport()->setAttribute(Qt::WA_Hover);
     }
@@ -2352,11 +2353,11 @@ void QWindowsVistaStyle::unpolish(QWidget *widget)
 
     d->stopAnimation(widget);
 
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
     if (qobject_cast<QLineEdit*>(widget))
         widget->setAttribute(Qt::WA_Hover, false);
     else
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
     if (qobject_cast<QGroupBox*>(widget))
         widget->setAttribute(Qt::WA_Hover, false);
     else if (qobject_cast<QMessageBox *> (widget)) {
@@ -2367,7 +2368,7 @@ void QWindowsVistaStyle::unpolish(QWidget *widget)
             buttonBox->setContentsMargins(0, 0, 0, 0);
 #endif
     }
-#ifndef QT_NO_INPUTDIALOG
+#if QT_CONFIG(inputdialog)
     else if (qobject_cast<QInputDialog *> (widget)) {
         widget->setAttribute(Qt::WA_StyledBackground, false);
 #if QT_CONFIG(dialogbuttonbox)
@@ -2376,7 +2377,7 @@ void QWindowsVistaStyle::unpolish(QWidget *widget)
             buttonBox->setContentsMargins(0, 0, 0, 0);
 #endif
     }
-#endif // QT_NO_INPUTDIALOG
+#endif // QT_CONFIG(inputdialog)
     else if (QTreeView *tree = qobject_cast<QTreeView *> (widget)) {
         tree->viewport()->setAttribute(Qt::WA_Hover, false);
     } else if (qobject_cast<QCommandLinkButton*>(widget)) {

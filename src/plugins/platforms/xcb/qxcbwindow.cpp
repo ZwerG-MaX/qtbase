@@ -99,12 +99,12 @@
 #include <QTextCodec>
 #include <stdio.h>
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
 #include <X11/extensions/XInput2.h>
 #include <X11/extensions/XI2proto.h>
 #endif
@@ -154,6 +154,14 @@ const quint32 XEMBED_VERSION = 0;
 QXcbScreen *QXcbWindow::parentScreen()
 {
     return parent() ? static_cast<QXcbWindow*>(parent())->parentScreen() : xcbScreen();
+}
+
+//QPlatformWindow::screenForGeometry version that uses deviceIndependentGeometry
+QXcbScreen *QXcbWindow::initialScreen() const
+{
+    QWindowPrivate *windowPrivate = qt_window_private(window());
+    QScreen *screen = windowPrivate->screenForGeometry(window()->geometry());
+    return static_cast<QXcbScreen*>(screen->handle());
 }
 
 // Returns \c true if we should set WM_TRANSIENT_FOR on \a w
@@ -243,7 +251,7 @@ static inline bool positionIncludesFrame(QWindow *w)
     return qt_window_private(w)->positionPolicy == QWindowPrivate::WindowFrameInclusive;
 }
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 static inline XTextProperty* qstringToXTP(Display *dpy, const QString& s)
 {
     #include <X11/Xatom.h>
@@ -289,7 +297,7 @@ static inline XTextProperty* qstringToXTP(Display *dpy, const QString& s)
 #endif
     return &tp;
 }
-#endif // XCB_USE_XLIB
+#endif // QT_CONFIG(xcb_xlib)
 
 // TODO move this into a utility function in QWindow or QGuiApplication
 static QWindow *childWindowAt(QWindow *win, const QPoint &p)
@@ -350,8 +358,8 @@ void QXcbWindow::create()
     Qt::WindowType type = window()->type();
 
     QXcbScreen *currentScreen = xcbScreen();
-    QRect rect = windowGeometry();
-    QXcbScreen *platformScreen = parent() ? parentScreen() : static_cast<QXcbScreen*>(screenForGeometry(rect));
+    QXcbScreen *platformScreen = parent() ? parentScreen() : initialScreen();
+    QRect rect = QHighDpi::toNativePixels(window()->geometry(), platformScreen);
 
     if (type == Qt::Desktop) {
         m_window = platformScreen->root();
@@ -550,7 +558,7 @@ void QXcbWindow::create()
                                    32, 2, (void *)data));
 
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
     connection()->xi2Select(m_window);
 #endif
 
@@ -561,7 +569,7 @@ void QXcbWindow::create()
     if (window()->flags() & Qt::WindowTransparentForInput)
         setTransparentForMouseEvents(true);
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     // force sync to read outstanding requests - see QTBUG-29106
     XSync(DISPLAY_FROM_XCB(platformScreen), false);
 #endif
@@ -589,13 +597,17 @@ QXcbWindow::~QXcbWindow()
     }
 
     destroy();
+}
 
-    if (isForeignWindow()) {
-        if (connection()->mouseGrabber() == this)
-            connection()->setMouseGrabber(Q_NULLPTR);
-        if (connection()->mousePressWindow() == this)
-            connection()->setMousePressWindow(Q_NULLPTR);
-    }
+QXcbForeignWindow::~QXcbForeignWindow()
+{
+    // Clear window so that destroy() does not affect it
+    m_window = 0;
+
+    if (connection()->mouseGrabber() == this)
+        connection()->setMouseGrabber(nullptr);
+    if (connection()->mousePressWindow() == this)
+        connection()->setMousePressWindow(nullptr);
 }
 
 void QXcbWindow::destroy()
@@ -1523,7 +1535,7 @@ void QXcbWindow::setWindowTitle(const QString &title)
                                    ba.length(),
                                    ba.constData()));
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     XTextProperty *text = qstringToXTP(DISPLAY_FROM_XCB(this), title);
     if (text)
         XSetWMName(DISPLAY_FROM_XCB(this), m_window, text);

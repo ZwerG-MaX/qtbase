@@ -38,7 +38,6 @@
 ****************************************************************************/
 #include "qtreeview.h"
 
-#ifndef QT_NO_TREEVIEW
 #include <qheaderview.h>
 #include <qitemdelegate.h>
 #include <qapplication.h>
@@ -70,6 +69,8 @@ QT_BEGIN_NAMESPACE
     \ingroup model-view
     \ingroup advanced
     \inmodule QtWidgets
+
+    \image windows-treeview.png
 
     A QTreeView implements a tree representation of items from a
     model. This class is used to provide standard hierarchical lists that
@@ -149,15 +150,6 @@ QT_BEGIN_NAMESPACE
     \omit
     Describe the expanding/collapsing concept if not covered elsewhere.
     \endomit
-
-    \table 100%
-    \row \li \inlineimage windowsvista-treeview.png Screenshot of a Windows Vista style tree view
-         \li \inlineimage macintosh-treeview.png Screenshot of a Macintosh style tree view
-         \li \inlineimage fusion-treeview.png Screenshot of a Fusion style tree view
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} tree view.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} tree view.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} tree view.
-    \endtable
 
     \section1 Improving Performance
 
@@ -1818,7 +1810,7 @@ void QTreeView::drawBranches(QPainter *painter, const QRect &rect,
     QStyle::State extraFlags = QStyle::State_None;
     if (isEnabled())
         extraFlags |= QStyle::State_Enabled;
-    if (window()->isActiveWindow())
+    if (hasFocus())
         extraFlags |= QStyle::State_Active;
     QPoint oldBO = painter->brushOrigin();
     if (verticalScrollMode() == QAbstractItemView::ScrollPerPixel)
@@ -4003,5 +3995,3 @@ int QTreeView::visualIndex(const QModelIndex &index) const
 QT_END_NAMESPACE
 
 #include "moc_qtreeview.cpp"
-
-#endif // QT_NO_TREEVIEW

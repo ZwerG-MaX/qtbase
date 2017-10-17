@@ -43,7 +43,9 @@
 #include <private/qmath_p.h>
 #include <private/qstyle_p.h>
 #include <qmath.h>
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
 #include <qabstractscrollarea.h>
 #include <qwindow.h>
 
@@ -67,13 +69,13 @@ QString uniqueName(const QString &key, const QStyleOption *option, const QSize &
                       % HexString<uint>(size.width())
                       % HexString<uint>(size.height());
 
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
     if (const QStyleOptionSpinBox *spinBox = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
         tmp = tmp % HexString<uint>(spinBox->buttonSymbols)
                   % HexString<uint>(spinBox->stepEnabled)
                   % QLatin1Char(spinBox->frame ? '1' : '0'); ;
     }
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
 
     // QTBUG-56743, try to create a palette cache key reflecting the value,
     // as leaks may occur in conjunction with QStyleSheetStyle/QRenderRule modifying
@@ -131,7 +133,7 @@ bool hasAncestor(QObject *obj, QAccessible::Role role)
 #endif // QT_NO_ACCESSIBILITY
 
 
-#ifndef QT_NO_DIAL
+#if QT_CONFIG(dial)
 
 int calcBigLineSize(int radius)
 {
@@ -350,7 +352,7 @@ void drawDial(const QStyleOptionSlider *option, QPainter *painter)
     painter->drawEllipse(dialRect);
     painter->restore();
 }
-#endif //QT_NO_DIAL
+#endif //QT_CONFIG(dial)
 
 void drawBorderPixmap(const QPixmap &pixmap, QPainter *painter, const QRect &rect,
                      int left, int top, int right,

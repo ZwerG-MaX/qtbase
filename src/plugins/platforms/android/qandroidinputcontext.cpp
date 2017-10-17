@@ -303,7 +303,7 @@ static jboolean paste(JNIEnv */*env*/, jobject /*thiz*/)
         return JNI_FALSE;
 
 #ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
-    qDebug("@@@");
+    qDebug("@@@ PASTE");
 #endif
     return m_androidInputContext->paste();
 }
@@ -537,7 +537,7 @@ void QAndroidInputContext::updateSelectionHandles()
         ? QHighDpiScaling::factor(window)
         : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
 
-    QInputMethodQueryEvent query(Qt::ImCursorPosition | Qt::ImAnchorPosition | Qt::ImEnabled);
+    QInputMethodQueryEvent query(Qt::ImCursorPosition | Qt::ImAnchorPosition | Qt::ImEnabled | Qt::ImCurrentSelection);
     QCoreApplication::sendEvent(m_focusObject, &query);
     int cpos = query.value(Qt::ImCursorPosition).toInt();
     int anchor = query.value(Qt::ImAnchorPosition).toInt();
@@ -563,7 +563,8 @@ void QAndroidInputContext::updateSelectionHandles()
 
     QPoint leftPoint(leftRect.bottomLeft().toPoint() * pixelDensity);
     QPoint righPoint(rightRect.bottomRight().toPoint() * pixelDensity);
-    QtAndroidInput::updateHandles(CursorHandleShowSelection, leftPoint, righPoint);
+    QtAndroidInput::updateHandles(CursorHandleShowSelection, leftPoint, righPoint,
+                                  query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
 
     if (m_cursorHandleShown == CursorHandleShowPopup) {
         // make sure the popup does not reappear when the selection menu closes
@@ -1137,6 +1138,7 @@ jboolean QAndroidInputContext::copyURL()
 
 jboolean QAndroidInputContext::paste()
 {
+    finishComposingText();
     m_cursorHandleShown = CursorHandleNotShown;
     sendShortcut(QKeySequence::Paste);
     return JNI_TRUE;

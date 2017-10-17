@@ -47,8 +47,6 @@
 #include <QDebug>
 #include <cmath>
 
-#ifdef XCB_USE_XINPUT2
-
 #include <X11/extensions/XInput2.h>
 #include <X11/extensions/XI2proto.h>
 
@@ -92,15 +90,32 @@ void QXcbConnection::initializeXInput2()
 #else
             qCDebug(lcQpaXInputDevices, "XInput version %d.%d is available and Qt supports 2.0", xiMajor, m_xi2Minor);
 #endif
+            xi2SelectStateEvents();
         }
 
         xi2SetupDevices();
     }
 }
 
+void QXcbConnection::xi2SelectStateEvents()
+{
+    // These state events do not depend on a specific X window, but are global
+    // for the X client's (application's) state.
+    unsigned int bitMask = 0;
+    unsigned char *xiBitMask = reinterpret_cast<unsigned char *>(&bitMask);
+    XIEventMask xiEventMask;
+    bitMask = XI_HierarchyChangedMask;
+    bitMask |= XI_DeviceChangedMask;
+    xiEventMask.deviceid = XIAllDevices;
+    xiEventMask.mask_len = sizeof(bitMask);
+    xiEventMask.mask = xiBitMask;
+    Display *dpy = static_cast<Display *>(m_xlib_display);
+    XISelectEvents(dpy, DefaultRootWindow(dpy), &xiEventMask, 1);
+}
+
 void QXcbConnection::xi2SetupDevices()
 {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     m_tabletData.clear();
 #endif
     m_scrollingDevices.clear();
@@ -116,7 +131,7 @@ void QXcbConnection::xi2SetupDevices()
         if (devices[i].use != XISlavePointer)
             continue;
         qCDebug(lcQpaXInputDevices) << "input device " << devices[i].name << "ID" << devices[i].deviceid;
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
         TabletData tabletData;
 #endif
         ScrollingDevice scrollingDevice;
@@ -126,7 +141,7 @@ void QXcbConnection::xi2SetupDevices()
                 XIValuatorClassInfo *vci = reinterpret_cast<XIValuatorClassInfo *>(devices[i].classes[c]);
                 const int valuatorAtom = qatom(vci->label);
                 qCDebug(lcQpaXInputDevices) << "   has valuator" << atomName(vci->label) << "recognized?" << (valuatorAtom < QXcbAtom::NAtoms);
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
                 if (valuatorAtom < QXcbAtom::NAtoms) {
                     TabletData::ValuatorClassInfo info;
                     info.minVal = vci->min;
@@ -134,7 +149,7 @@ void QXcbConnection::xi2SetupDevices()
                     info.number = vci->number;
                     tabletData.valuatorInfo[valuatorAtom] = info;
                 }
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
                 if (valuatorAtom == QXcbAtom::RelHorizScroll || valuatorAtom == QXcbAtom::RelHorizWheel)
                     scrollingDevice.lastScrollPosition.setX(vci->value);
                 else if (valuatorAtom == QXcbAtom::RelVertScroll || valuatorAtom == QXcbAtom::RelVertWheel)
@@ -191,7 +206,7 @@ void QXcbConnection::xi2SetupDevices()
             }
         }
         bool isTablet = false;
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
         // If we have found the valuators which we expect a tablet to have, it might be a tablet.
         if (tabletData.valuatorInfo.contains(QXcbAtom::AbsX) &&
                 tabletData.valuatorInfo.contains(QXcbAtom::AbsY) &&
@@ -241,7 +256,7 @@ void QXcbConnection::xi2SetupDevices()
             m_tabletData.append(tabletData);
             qCDebug(lcQpaXInputDevices) << "   it's a tablet with pointer type" << dbgType;
         }
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
 #ifdef XCB_USE_XINPUT21
         if (scrollingDevice.orientations || scrollingDevice.legacyOrientations) {
@@ -330,7 +345,7 @@ void QXcbConnection::xi2Select(xcb_window_t window)
 #endif // XCB_USE_XINPUT22
 
     QSet<int> tabletDevices;
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     if (!m_tabletData.isEmpty()) {
         unsigned int tabletBitMask;
         unsigned char *xiTabletBitMask = reinterpret_cast<unsigned char *>(&tabletBitMask);
@@ -347,7 +362,7 @@ void QXcbConnection::xi2Select(xcb_window_t window)
         }
         XISelectEvents(xDisplay, window, xiEventMask.data(), m_tabletData.count());
     }
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
 #ifdef XCB_USE_XINPUT21
     // Enable each scroll device
@@ -373,17 +388,6 @@ void QXcbConnection::xi2Select(xcb_window_t window)
 #else
     Q_UNUSED(xiBitMask);
 #endif
-
-    {
-        // Listen for hotplug events
-        XIEventMask xiEventMask;
-        bitMask = XI_HierarchyChangedMask;
-        bitMask |= XI_DeviceChangedMask;
-        xiEventMask.deviceid = XIAllDevices;
-        xiEventMask.mask_len = sizeof(bitMask);
-        xiEventMask.mask = xiBitMask;
-        XISelectEvents(xDisplay, window, &xiEventMask, 1);
-    }
 }
 
 XInput2TouchDeviceData *QXcbConnection::touchDeviceForId(int id)
@@ -482,12 +486,12 @@ XInput2TouchDeviceData *QXcbConnection::touchDeviceForId(int id)
     return dev;
 }
 
-#if defined(XCB_USE_XINPUT21) || !defined(QT_NO_TABLETEVENT)
+#if defined(XCB_USE_XINPUT21) || QT_CONFIG(tabletevent)
 static inline qreal fixed1616ToReal(FP1616 val)
 {
     return qreal(val) / 0x10000;
 }
-#endif // defined(XCB_USE_XINPUT21) || !defined(QT_NO_TABLETEVENT)
+#endif // defined(XCB_USE_XINPUT21) || QT_CONFIG(tabletevent)
 
 void QXcbConnection::xi2HandleEvent(xcb_ge_event_t *event)
 {
@@ -536,13 +540,13 @@ void QXcbConnection::xi2HandleEvent(xcb_ge_event_t *event)
             return;
     }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     if (!xiEnterEvent) {
         QXcbConnection::TabletData *tablet = tabletDataForDevice(sourceDeviceId);
         if (tablet && xi2HandleTabletEvent(xiEvent, tablet))
             return;
     }
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
 #ifdef XCB_USE_XINPUT21
     QHash<int, ScrollingDevice>::iterator device = m_scrollingDevices.find(sourceDeviceId);
@@ -698,10 +702,8 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
         if (m_xiGrab) {
             // XIAllowTouchEvents deadlocks with libXi < 1.7.4 (this has nothing to do with the XI2 versions like 2.2)
             // http://lists.x.org/archives/xorg-devel/2014-July/043059.html
-#ifdef XCB_USE_XINPUT2
             XIAllowTouchEvents(static_cast<Display *>(m_xlib_display), xiDeviceEvent->deviceid,
                                xiDeviceEvent->detail, xiDeviceEvent->event, XIAcceptTouch);
-#endif
         }
         break;
     case XI_TouchUpdate:
@@ -1026,12 +1028,14 @@ Qt::MouseButton QXcbConnection::xiToQtMouseButton(uint32_t b)
     return Qt::NoButton;
 }
 
+#ifdef XCB_USE_XINPUT22
 bool QXcbConnection::isTouchScreen(int id) const
 {
     auto device = m_touchDevices.value(id);
     return device && device->qtTouchDevice
         && device->qtTouchDevice->type() == QTouchDevice::TouchScreen;
 }
+#endif
 
 #if QT_CONFIG(tabletevent)
 static QTabletEvent::TabletDevice toolIdToTabletDevice(quint32 toolId) {
@@ -1240,6 +1244,4 @@ QXcbConnection::TabletData *QXcbConnection::tabletDataForDevice(int id)
     return Q_NULLPTR;
 }
 
-#endif // QT_NO_TABLETEVENT
-
-#endif // XCB_USE_XINPUT2
+#endif // QT_CONFIG(tabletevent)

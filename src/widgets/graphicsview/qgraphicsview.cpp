@@ -271,8 +271,6 @@ static const int QGRAPHICSVIEW_PREALLOC_STYLE_OPTIONS = 503; // largest prime < 
 #include "qgraphicsview.h"
 #include "qgraphicsview_p.h"
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include "qgraphicsitem.h"
 #include "qgraphicsitem_p.h"
 #include "qgraphicsscene.h"
@@ -353,7 +351,7 @@ QGraphicsViewPrivate::QGraphicsViewPrivate()
       viewportUpdateMode(QGraphicsView::MinimalViewportUpdate),
       optimizationFlags(0),
       scene(0),
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
       rubberBanding(false),
       rubberBandSelectionMode(Qt::IntersectsItemShape),
       rubberBandSelectionOperation(Qt::ReplaceSelection),
@@ -633,7 +631,7 @@ void QGraphicsViewPrivate::mouseMoveEventHandler(QMouseEvent *event)
 {
     Q_Q(QGraphicsView);
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     updateRubberBand(event);
 #endif
 
@@ -708,7 +706,7 @@ void QGraphicsViewPrivate::mouseMoveEventHandler(QMouseEvent *event)
 /*!
     \internal
 */
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
 QRegion QGraphicsViewPrivate::rubberBandRegion(const QWidget *widget, const QRect &rect) const
 {
     QStyleHintReturnMask mask;
@@ -1508,7 +1506,7 @@ void QGraphicsView::setDragMode(DragMode mode)
 #endif
 }
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
 /*!
     \property QGraphicsView::rubberBandSelectionMode
     \brief the behavior for selecting items with a rubber band selection rectangle.
@@ -3274,7 +3272,7 @@ void QGraphicsView::mousePressEvent(QMouseEvent *event)
         }
     }
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     if (d->dragMode == QGraphicsView::RubberBandDrag && !d->rubberBanding) {
         if (d->sceneInteractionAllowed) {
             // Rubberbanding is only allowed in interactive mode.
@@ -3336,7 +3334,7 @@ void QGraphicsView::mouseReleaseEvent(QMouseEvent *event)
 {
     Q_D(QGraphicsView);
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     if (d->dragMode == QGraphicsView::RubberBandDrag && d->sceneInteractionAllowed && !event->buttons()) {
         if (d->rubberBanding) {
             if (d->viewportUpdateMode != QGraphicsView::NoViewportUpdate){
@@ -3409,7 +3407,7 @@ void QGraphicsView::mouseReleaseEvent(QMouseEvent *event)
 #endif
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 /*!
     \reimp
 */
@@ -3437,7 +3435,7 @@ void QGraphicsView::wheelEvent(QWheelEvent *event)
     if (!event->isAccepted())
         QAbstractScrollArea::wheelEvent(event);
 }
-#endif // QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 /*!
     \reimp
@@ -3459,7 +3457,7 @@ void QGraphicsView::paintEvent(QPaintEvent *event)
 
     // Set up the painter
     QPainter painter(viewport());
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     if (d->rubberBanding && !d->rubberBandRect.isEmpty())
         painter.save();
 #endif
@@ -3583,7 +3581,7 @@ void QGraphicsView::paintEvent(QPaintEvent *event)
     // Foreground
     drawForeground(&painter, exposedSceneRect);
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     // Rubberband
     if (d->rubberBanding && !d->rubberBandRect.isEmpty()) {
         painter.restore();
@@ -3651,7 +3649,7 @@ void QGraphicsView::scrollContentsBy(int dx, int dy)
     if (d->viewportUpdateMode != QGraphicsView::NoViewportUpdate) {
         if (d->viewportUpdateMode != QGraphicsView::FullViewportUpdate) {
             if (d->accelerateScrolling) {
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
                 // Update new and old rubberband regions
                 if (!d->rubberBandRect.isEmpty()) {
                     QRegion rubberBandRegion(d->rubberBandRegion(viewport(), d->rubberBandRect));
@@ -3935,5 +3933,3 @@ QRectF QGraphicsViewPrivate::mapToScene(const QRectF &rect) const
 QT_END_NAMESPACE
 
 #include "moc_qgraphicsview.cpp"
-
-#endif // QT_NO_GRAPHICSVIEW

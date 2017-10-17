@@ -42,9 +42,15 @@
 
 #ifndef QT_NO_SHORTCUT
 #include <qevent.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
 #include <qapplication.h>
 #include <private/qapplication_p.h>
 #include <private/qshortcutmap_p.h>
@@ -62,7 +68,7 @@ QT_BEGIN_NAMESPACE
 
 
 static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidget *active_window);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 static bool correctGraphicsWidgetContext(Qt::ShortcutContext context, QGraphicsWidget *w, QWidget *active_window);
 #endif
 #ifndef QT_NO_ACTION
@@ -108,7 +114,7 @@ bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context)
         return correctActionContext(context, a, active_window);
 #endif
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QGraphicsWidget *gw = qobject_cast<QGraphicsWidget *>(object))
         return correctGraphicsWidgetContext(context, gw, active_window);
 #endif
@@ -141,7 +147,7 @@ bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context)
 static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidget *active_window)
 {
     bool visible = w->isVisible();
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
     if (QMenuBar *menuBar = qobject_cast<QMenuBar *>(w)) {
         if (menuBar->isNativeMenuBar())
             visible = true;
@@ -166,7 +172,7 @@ static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidge
 
     // Below is Qt::WindowShortcut context
     QWidget *tlw = w->window();
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QWExtra *topData = static_cast<QWidgetPrivate *>(QObjectPrivate::get(tlw))->extra) {
         if (topData->proxyWidget) {
             bool res = correctGraphicsWidgetContext(context, (QGraphicsWidget *)topData->proxyWidget, active_window);
@@ -202,11 +208,11 @@ static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidge
     return true;
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 static bool correctGraphicsWidgetContext(Qt::ShortcutContext context, QGraphicsWidget *w, QWidget *active_window)
 {
     bool visible = w->isVisible();
-#if defined(Q_OS_DARWIN) && !defined(QT_NO_MENUBAR)
+#if defined(Q_OS_DARWIN) && QT_CONFIG(menubar)
     if (!qApp->testAttribute(Qt::AA_DontUseNativeMenuBar) && qobject_cast<QMenuBar *>(w))
         visible = true;
 #endif
@@ -272,7 +278,7 @@ static bool correctActionContext(Qt::ShortcutContext context, QAction *a, QWidge
 #endif
     for (int i = 0; i < widgets.size(); ++i) {
         QWidget *w = widgets.at(i);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         if (QMenu *menu = qobject_cast<QMenu *>(w)) {
 #ifdef Q_OS_DARWIN
             // On Mac, menu item shortcuts are processed before reaching any window.
@@ -296,7 +302,7 @@ static bool correctActionContext(Qt::ShortcutContext context, QAction *a, QWidge
                 return true;
     }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     const QList<QGraphicsWidget *> &graphicsWidgets = static_cast<QActionPrivate *>(QObjectPrivate::get(a))->graphicsWidgets;
 #if defined(DEBUG_QSHORTCUTMAP)
     if (graphicsWidgets.isEmpty())
@@ -641,7 +647,7 @@ bool QShortcut::event(QEvent *e)
     if (d->sc_enabled && e->type() == QEvent::Shortcut) {
         QShortcutEvent *se = static_cast<QShortcutEvent *>(e);
         if (se->shortcutId() == d->sc_id && se->key() == d->sc_sequence){
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
             if (QWhatsThis::inWhatsThisMode()) {
                 QWhatsThis::showText(QCursor::pos(), d->sc_whatsthis);
                 handled = true;

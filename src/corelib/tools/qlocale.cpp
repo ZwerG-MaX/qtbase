@@ -54,7 +54,9 @@
 #include "qlocale.h"
 #include "qlocale_p.h"
 #include "qlocale_tools_p.h"
+#if QT_CONFIG(datetimeparser)
 #include "qdatetimeparser_p.h"
+#endif
 #include "qnamespace.h"
 #include "qdatetime.h"
 #include "qstringlist.h"
@@ -328,7 +330,7 @@ QByteArray QLocalePrivate::bcp47Name(char separator) const
     if (m_data->m_language_id == QLocale::AnyLanguage)
         return QByteArray();
     if (m_data->m_language_id == QLocale::C)
-        return QByteArrayLiteral("C");
+        return QByteArrayLiteral("en");
 
     QLocaleId localeId = QLocaleId::fromIds(m_data->m_language_id, m_data->m_script_id, m_data->m_country_id);
     return localeId.withLikelySubtagsRemoved().name(separator);
@@ -1862,7 +1864,7 @@ QDateTime QLocale::toDateTime(const QString &string, FormatType format) const
 QTime QLocale::toTime(const QString &string, const QString &format) const
 {
     QTime time;
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(datetimeparser)
     QDateTimeParser dt(QVariant::Time, QDateTimeParser::FromString);
     dt.setDefaultLocale(*this);
     if (dt.parseFormat(format))
@@ -1893,7 +1895,7 @@ QTime QLocale::toTime(const QString &string, const QString &format) const
 QDate QLocale::toDate(const QString &string, const QString &format) const
 {
     QDate date;
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(datetimeparser)
     QDateTimeParser dt(QVariant::Date, QDateTimeParser::FromString);
     dt.setDefaultLocale(*this);
     if (dt.parseFormat(format))
@@ -1923,7 +1925,7 @@ QDate QLocale::toDate(const QString &string, const QString &format) const
 #ifndef QT_NO_DATESTRING
 QDateTime QLocale::toDateTime(const QString &string, const QString &format) const
 {
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(datetimeparser)
     QTime time;
     QDate date;
 
@@ -2742,14 +2744,17 @@ QString QLocalePrivate::dateTimeToString(const QString &format, const QDateTime 
                 } else {
                     repeat = 1;
                 }
-                switch (repeat) {
-                case 1:
-                    result.append(m_data->longLongToString(time.msec()));
-                    break;
-                case 3:
-                    result.append(m_data->longLongToString(time.msec(), -1, 10, 3, QLocaleData::ZeroPadded));
-                    break;
+
+                // note: the millisecond component is treated like the decimal part of the seconds
+                // so ms == 2 is always printed as "002", but ms == 200 can be either "2" or "200"
+                result.append(m_data->longLongToString(time.msec(), -1, 10, 3, QLocaleData::ZeroPadded));
+                if (repeat == 1) {
+                    if (result.endsWith(zero()))
+                        result.chop(1);
+                    if (result.endsWith(zero()))
+                        result.chop(1);
                 }
+
                 break;
 
             case 't':
@@ -3005,13 +3010,17 @@ QString QLocaleData::unsLongLongToString(const QChar zero, const QChar group,
                                             int base, int width,
                                             unsigned flags)
 {
+    const QChar resultZero = base == 10 ? zero : QChar(QLatin1Char('0'));
+    QString num_str = l ? qulltoa(l, base, zero) : QString(resultZero);
+
     bool precision_not_specified = false;
     if (precision == -1) {
+        if (flags == NoFlags)
+            return num_str; // fast-path: nothing below applies, so we're done.
+
         precision_not_specified = true;
         precision = 1;
     }
-
-    QString num_str = qulltoa(l, base, zero);
 
     uint cnt_thousand_sep = 0;
     if (flags & ThousandsGroup && base == 10) {
@@ -3021,7 +3030,6 @@ QString QLocaleData::unsLongLongToString(const QChar zero, const QChar group,
         }
     }
 
-    const QChar resultZero = base == 10 ? zero : QChar(QLatin1Char('0'));
     const int zeroPadding = precision - num_str.length()/* + cnt_thousand_sep*/;
     if (zeroPadding > 0)
         num_str.prepend(QString(zeroPadding, resultZero));
@@ -3665,3 +3673,7 @@ QDebug operator<<(QDebug dbg, const QLocale &l)
 }
 #endif
 QT_END_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+#include "moc_qlocale.cpp"
+#endif

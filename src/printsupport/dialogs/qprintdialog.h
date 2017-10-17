@@ -42,12 +42,11 @@
 
 #include <QtPrintSupport/qtprintsupportglobal.h>
 
-#ifndef QT_NO_PRINTDIALOG
-
 #include <QtPrintSupport/qabstractprintdialog.h>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(printdialog);
 
+QT_BEGIN_NAMESPACE
 
 class QPrintDialogPrivate;
 class QPushButton;
@@ -95,15 +94,13 @@ private:
 #if defined (Q_OS_UNIX) && !defined(Q_OS_MAC)
     Q_PRIVATE_SLOT(d_func(), void _q_togglePageSetCombo(bool))
     Q_PRIVATE_SLOT(d_func(), void _q_collapseOrExpandDialog())
-# if !defined(QT_NO_MESSAGEBOX)
+#if QT_CONFIG(messagebox)
     Q_PRIVATE_SLOT(d_func(), void _q_checkFields())
-# endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
     friend class QUnixPrintWidget;
 # endif // Q_OS_UNIX
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_PRINTDIALOG
 
 #endif // QPRINTDIALOG_H

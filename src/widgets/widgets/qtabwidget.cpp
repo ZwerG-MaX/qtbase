@@ -39,7 +39,6 @@
 
 #include "qtabwidget.h"
 
-#ifndef QT_NO_TABWIDGET
 #include "private/qwidget_p.h"
 #include "private/qtabbar_p.h"
 #include "qapplication.h"
@@ -63,6 +62,8 @@ QT_BEGIN_NAMESPACE
     \ingroup organizers
     \ingroup basicwidgets
     \inmodule QtWidgets
+
+    \image windows-tabwidget.png
 
     A tab widget provides a tab bar (see QTabBar) and a "page area"
     that is used to display pages related to each tab. By default, the
@@ -116,15 +117,6 @@ QT_BEGIN_NAMESPACE
     Most of the functionality in QTabWidget is provided by a QTabBar
     (at the top, providing the tabs) and a QStackedWidget (most of the
     area, organizing the individual pages).
-
-    \table 100%
-    \row \li \inlineimage windowsvista-tabwidget.png Screenshot of a Windows Vista style tab widget
-         \li \inlineimage macintosh-tabwidget.png Screenshot of a Macintosh style tab widget
-         \li \inlineimage fusion-tabwidget.png Screenshot of a Fusion style tab widget
-    \row \li A Windows Vista style tab widget.
-         \li A Macintosh style tab widget.
-         \li A Fusion style tab widget.
-    \endtable
 
     \sa QTabBar, QStackedWidget, QToolBox, {Tab Dialog Example}
 */
@@ -203,6 +195,8 @@ public:
     void _q_tabMoved(int from, int to);
     void init();
 
+    void initBasicStyleOption(QStyleOptionTabWidgetFrame *option) const;
+
     QTabBar *tabs;
     QStackedWidget *stack;
     QRect panelRect;
@@ -265,6 +259,43 @@ bool QTabWidget::hasHeightForWidth() const
     return has;
 }
 
+/*!
+    \internal
+
+    Initialize only time inexpensive parts of the style option
+    for QTabWidget::setUpLayout()'s non-visible code path.
+*/
+void QTabWidgetPrivate::initBasicStyleOption(QStyleOptionTabWidgetFrame *option) const
+{
+    Q_Q(const QTabWidget);
+    option->initFrom(q);
+
+    if (q->documentMode())
+        option->lineWidth = 0;
+    else
+        option->lineWidth = q->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, 0, q);
+
+    switch (pos) {
+    case QTabWidget::North:
+        option->shape = shape == QTabWidget::Rounded ? QTabBar::RoundedNorth
+                                                     : QTabBar::TriangularNorth;
+        break;
+    case QTabWidget::South:
+        option->shape = shape == QTabWidget::Rounded ? QTabBar::RoundedSouth
+                                                     : QTabBar::TriangularSouth;
+        break;
+    case QTabWidget::West:
+        option->shape = shape == QTabWidget::Rounded ? QTabBar::RoundedWest
+                                                     : QTabBar::TriangularWest;
+        break;
+    case QTabWidget::East:
+        option->shape = shape == QTabWidget::Rounded ? QTabBar::RoundedEast
+                                                     : QTabBar::TriangularEast;
+        break;
+    }
+
+    option->tabBarRect = q->tabBar()->geometry();
+}
 
 /*!
     Initialize \a option with the values from this QTabWidget. This method is useful
@@ -279,12 +310,7 @@ void QTabWidget::initStyleOption(QStyleOptionTabWidgetFrame *option) const
         return;
 
     Q_D(const QTabWidget);
-    option->initFrom(this);
-
-    if (documentMode())
-        option->lineWidth = 0;
-    else
-        option->lineWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, 0, this);
+    d->initBasicStyleOption(option);
 
     int exth = style()->pixelMetric(QStyle::PM_TabBarBaseHeight, 0, this);
     QSize t(0, d->stack->frameWidth());
@@ -315,31 +341,10 @@ void QTabWidget::initStyleOption(QStyleOptionTabWidgetFrame *option) const
         option->leftCornerWidgetSize = QSize(0, 0);
     }
 
-    switch (d->pos) {
-    case QTabWidget::North:
-        option->shape = d->shape == QTabWidget::Rounded ? QTabBar::RoundedNorth
-                                                        : QTabBar::TriangularNorth;
-        break;
-    case QTabWidget::South:
-        option->shape = d->shape == QTabWidget::Rounded ? QTabBar::RoundedSouth
-                                                        : QTabBar::TriangularSouth;
-        break;
-    case QTabWidget::West:
-        option->shape = d->shape == QTabWidget::Rounded ? QTabBar::RoundedWest
-                                                        : QTabBar::TriangularWest;
-        break;
-    case QTabWidget::East:
-        option->shape = d->shape == QTabWidget::Rounded ? QTabBar::RoundedEast
-                                                        : QTabBar::TriangularEast;
-        break;
-    }
-
     option->tabBarSize = t;
 
-    QRect tbRect = tabBar()->geometry();
     QRect selectedTabRect = tabBar()->tabRect(tabBar()->currentIndex());
-    option->tabBarRect = tbRect;
-    selectedTabRect.moveTopLeft(selectedTabRect.topLeft() + tbRect.topLeft());
+    selectedTabRect.moveTopLeft(selectedTabRect.topLeft() + option->tabBarRect.topLeft());
     option->selectedTabRect = selectedTabRect;
 }
 
@@ -771,16 +776,18 @@ void QTabWidget::setUpLayout(bool onlyCheck)
     if (onlyCheck && !d->dirty)
         return; // nothing to do
 
-    QStyleOptionTabWidgetFrame option;
-    initStyleOption(&option);
-
-    // this must be done immediately, because QWidgetItem relies on it (even if !isVisible())
-    d->setLayoutItemMargins(QStyle::SE_TabWidgetLayoutItem, &option);
-
     if (!isVisible()) {
+        // this must be done immediately, because QWidgetItem relies on it (even if !isVisible())
+        QStyleOptionTabWidgetFrame basicOption;
+        d->initBasicStyleOption(&basicOption);
+        d->setLayoutItemMargins(QStyle::SE_TabWidgetLayoutItem, &basicOption);
         d->dirty = true;
         return; // we'll do it later
     }
+
+    QStyleOptionTabWidgetFrame option;
+    initStyleOption(&option);
+    d->setLayoutItemMargins(QStyle::SE_TabWidgetLayoutItem, &option);
 
     QRect tabRect = style()->subElementRect(QStyle::SE_TabWidgetTabBar, &option, this);
     d->panelRect = style()->subElementRect(QStyle::SE_TabWidgetTabPane, &option, this);
@@ -1170,7 +1177,7 @@ QString QTabWidget::tabToolTip(int index) const
 }
 #endif // QT_NO_TOOLTIP
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
 /*!
     \since 4.1
 
@@ -1194,7 +1201,7 @@ QString QTabWidget::tabWhatsThis(int index) const
     Q_D(const QTabWidget);
     return d->tabs->tabWhatsThis(index);
 }
-#endif // QT_NO_WHATSTHIS
+#endif // QT_CONFIG(whatsthis)
 
 /*!
   This virtual handler is called after a new tab was added or
@@ -1382,5 +1389,3 @@ void QTabWidget::clear()
 QT_END_NAMESPACE
 
 #include "moc_qtabwidget.cpp"
-
-#endif //QT_NO_TABWIDGET

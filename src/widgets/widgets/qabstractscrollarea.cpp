@@ -39,7 +39,7 @@
 
 #include "qabstractscrollarea.h"
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 
 #include "qscrollbar.h"
 #include "qapplication.h"
@@ -50,7 +50,9 @@
 #include "qboxlayout.h"
 #include "qpainter.h"
 #include "qmargins.h"
+#if QT_CONFIG(itemviews)
 #include "qheaderview.h"
+#endif
 
 #include <QDebug>
 
@@ -1188,7 +1190,7 @@ bool QAbstractScrollArea::viewportEvent(QEvent *e)
     case QEvent::TouchEnd:
     case QEvent::MouseMove:
     case QEvent::ContextMenu:
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
 #endif
 #ifndef QT_NO_DRAGANDDROP
@@ -1305,7 +1307,7 @@ void QAbstractScrollArea::mouseMoveEvent(QMouseEvent *e)
 
     \sa QWidget::wheelEvent()
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QAbstractScrollArea::wheelEvent(QWheelEvent *e)
 {
     Q_D(QAbstractScrollArea);
@@ -1473,7 +1475,7 @@ bool QAbstractScrollAreaPrivate::canStartScrollingAt( const QPoint &startPos )
 {
     Q_Q(QAbstractScrollArea);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     // don't start scrolling when a drag mode has been set.
     // don't start scrolling on a movable item.
     if (QGraphicsView *view = qobject_cast<QGraphicsView *>(q)) {
@@ -1660,4 +1662,4 @@ QT_END_NAMESPACE
 #include "moc_qabstractscrollarea.cpp"
 #include "moc_qabstractscrollarea_p.cpp"
 
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)

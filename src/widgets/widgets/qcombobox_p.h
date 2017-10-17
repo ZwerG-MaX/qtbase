@@ -54,7 +54,6 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qcombobox.h"
 
-#ifndef QT_NO_COMBOBOX
 #include "QtWidgets/qabstractslider.h"
 #include "QtWidgets/qapplication.h"
 #include "QtWidgets/qitemdelegate.h"
@@ -68,11 +67,15 @@
 #include "QtCore/qtimer.h"
 #include "private/qwidget_p.h"
 #include "QtCore/qpointer.h"
+#if QT_CONFIG(completer)
 #include "QtWidgets/qcompleter.h"
+#endif
 #include "QtGui/qevent.h"
 #include "QtCore/qdebug.h"
 
 #include <limits.h>
+
+QT_REQUIRE_CONFIG(combobox);
 
 QT_BEGIN_NAMESPACE
 
@@ -354,7 +357,7 @@ public:
     void _q_emitCurrentIndexChanged(const QModelIndex &index);
     void _q_modelDestroyed();
     void _q_modelReset();
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     void _q_completerActivated(const QModelIndex &index);
 #endif
     void _q_resetButton();
@@ -414,7 +417,7 @@ public:
 #ifdef Q_OS_MAC
     QPlatformMenu *m_platformMenu;
 #endif
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     QPointer<QCompleter> completer;
 #endif
     static QPalette viewContainerPalette(QComboBox *cmb)
@@ -422,7 +425,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_COMBOBOX
 
 #endif // QCOMBOBOX_P_H

@@ -69,6 +69,7 @@ public:
     static const QOperatingSystemVersion OSXYosemite;
     static const QOperatingSystemVersion OSXElCapitan;
     static const QOperatingSystemVersion MacOSSierra;
+    static const QOperatingSystemVersion MacOSHighSierra;
 
     static const QOperatingSystemVersion AndroidJellyBean;
     static const QOperatingSystemVersion AndroidJellyBean_MR1;
@@ -79,8 +80,8 @@ public:
     static const QOperatingSystemVersion AndroidMarshmallow;
     static const QOperatingSystemVersion AndroidNougat;
     static const QOperatingSystemVersion AndroidNougat_MR1;
+    static const QOperatingSystemVersion AndroidOreo;
 
-    QOperatingSystemVersion(const QOperatingSystemVersion &other) = default;
     Q_DECL_CONSTEXPR QOperatingSystemVersion(OSType osType,
                                              int vmajor, int vminor = -1, int vmicro = -1)
         : m_os(osType),
@@ -98,7 +99,9 @@ public:
     Q_DECL_CONSTEXPR int segmentCount() const
     { return m_micro >= 0 ? 3 : m_minor >= 0 ? 2 : m_major >= 0 ? 1 : 0; }
 
+#ifdef Q_COMPILER_INITIALIZER_LISTS
     bool isAnyOfType(std::initializer_list<OSType> types) const;
+#endif
     Q_DECL_CONSTEXPR OSType type() const { return m_os; }
     QString name() const;
 
@@ -123,6 +126,7 @@ private:
 
     static int compare(const QOperatingSystemVersion &v1, const QOperatingSystemVersion &v2);
 };
+Q_DECLARE_TYPEINFO(QOperatingSystemVersion, QT_VERSION < QT_VERSION_CHECK(6, 0, 0) ? Q_RELOCATABLE_TYPE : Q_PRIMITIVE_TYPE);
 
 QT_END_NAMESPACE
 

@@ -37,6 +37,7 @@
 
 #include <qtimer.h>
 #include <qthread.h>
+#include <qoperatingsystemversion.h>
 
 #if defined Q_OS_UNIX
 #include <unistd.h>
@@ -144,12 +145,10 @@ void tst_QTimer::timeout()
 
     QCOMPARE(helper.count, 0);
 
-    QTest::qWait(TIMEOUT_TIMEOUT);
-    QVERIFY(helper.count > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(helper.count > 0, TIMEOUT_TIMEOUT);
     int oldCount = helper.count;
 
-    QTest::qWait(TIMEOUT_TIMEOUT);
-    QVERIFY(helper.count > oldCount);
+    QTRY_VERIFY_WITH_TIMEOUT(helper.count > oldCount, TIMEOUT_TIMEOUT);
 }
 
 void tst_QTimer::remainingTime()
@@ -500,6 +499,9 @@ void tst_QTimer::moveToThread()
 {
 #if defined(Q_OS_WIN32)
     QSKIP("Does not work reliably on Windows :(");
+#elif defined(Q_OS_MACOS)
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSSierra)
+        QSKIP("Does not work reliably on macOS 10.12 (QTBUG-59679)");
 #endif
     QTimer ti1;
     QTimer ti2;

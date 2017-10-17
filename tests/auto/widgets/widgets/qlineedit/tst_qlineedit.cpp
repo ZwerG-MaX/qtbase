@@ -147,6 +147,7 @@ private slots:
 
     void keypress_inputMask_data();
     void keypress_inputMask();
+    void keypress_inputMethod_inputMask();
 
     void inputMaskAndValidator_data();
     void inputMaskAndValidator();
@@ -260,7 +261,7 @@ private slots:
     // task-specific tests:
     void task180999_focus();
     void task174640_editingFinished();
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     void task198789_currentCompletion();
     void task210502_caseInsensitiveInlineCompletion();
 #endif
@@ -311,6 +312,8 @@ private slots:
     void shortcutOverrideOnReadonlyLineEdit_data();
     void shortcutOverrideOnReadonlyLineEdit();
     void QTBUG59957_clearButtonLeftmostAction();
+
+    void QTBUG_60319_setInputMaskCheckImSurroundingText();
 
 protected slots:
     void editingFinished();
@@ -803,6 +806,37 @@ void tst_QLineEdit::keypress_inputMask()
     QCOMPARE(testWidget->displayText(), expectedDisplayText);
 }
 
+void tst_QLineEdit::keypress_inputMethod_inputMask()
+{
+    // Similar to the keypress_inputMask test, but this is done solely via
+    // input methods
+    QLineEdit *testWidget = ensureTestWidget();
+    testWidget->setInputMask("AA.AA.AA");
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 3);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.."));
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 6);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.EE."));
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 8);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.EE.EE"));
+}
 
 void tst_QLineEdit::hasAcceptableInputMask_data()
 {
@@ -3106,7 +3140,6 @@ void tst_QLineEdit::inputMaskAndValidator()
 
 void tst_QLineEdit::maxLengthAndInputMask()
 {
-    // Really a test for #30447
     QLineEdit *testWidget = ensureTestWidget();
     QVERIFY(testWidget->inputMask().isNull());
     testWidget->setMaxLength(10);
@@ -3114,6 +3147,16 @@ void tst_QLineEdit::maxLengthAndInputMask()
     testWidget->setInputMask(QString());
     QVERIFY(testWidget->inputMask().isNull());
     QCOMPARE(testWidget->maxLength(), 10);
+
+    testWidget->setInputMask("XXXX");
+    QCOMPARE(testWidget->maxLength(), 4);
+
+    testWidget->setMaxLength(15);
+    QCOMPARE(testWidget->maxLength(), 4);
+
+    // 8 \ => raw string with 4 \ => input mask with 2 \ => maxLength = 2
+    testWidget->setInputMask("\\\\\\\\");
+    QCOMPARE(testWidget->maxLength(), 2);
 }
 
 
@@ -3587,7 +3630,7 @@ void tst_QLineEdit::task174640_editingFinished()
     QCOMPARE(editingFinishedSpy.count(), 1);
 }
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
 class task198789_Widget : public QWidget
 {
     Q_OBJECT
@@ -3646,7 +3689,7 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
     QCOMPARE(lineEdit.text(), completion);
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 
 void tst_QLineEdit::task229938_dontEmitChangedWhenTextIsNotChanged()
@@ -4653,6 +4696,17 @@ bool tst_QLineEdit::unselectingWithLeftOrRightChangesCursorPosition()
     // X11 used to behave like window prior to 4.2. Changes caused by QKeySequence
     // resulted in an inadvertant change in behavior
     return false;
+}
+
+void tst_QLineEdit::QTBUG_60319_setInputMaskCheckImSurroundingText()
+{
+    QLineEdit *testWidget = ensureTestWidget();
+    QString mask("+000(000)-000-00-00");
+    testWidget->setInputMask(mask);
+    testWidget->setCursorPosition(mask.length());
+    QString surroundingText = testWidget->inputMethodQuery(Qt::ImSurroundingText).toString();
+    int cursorPosition = testWidget->inputMethodQuery(Qt::ImCursorPosition).toInt();
+    QCOMPARE(surroundingText.length(), cursorPosition);
 }
 
 QTEST_MAIN(tst_QLineEdit)

@@ -67,24 +67,44 @@
 #include <qpushbutton.h>
 #endif
 #include <qradiobutton.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
 #include <qgroupbox.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
 #include <qtoolbar.h>
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
+#if QT_CONFIG(dockwidget)
 #include <qdockwidget.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(treeview)
 #include <qtreeview.h>
+#endif
 #include <qtextedit.h>
 #include <qmessagebox.h>
 #if QT_CONFIG(dialogbuttonbox)
 #include <qdialogbuttonbox.h>
 #endif
 #include <qinputdialog.h>
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
+#endif
 #include <qdatetime.h>
 #include <qcommandlinkbutton.h>
 

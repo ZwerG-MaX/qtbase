@@ -38,6 +38,8 @@
 **
 ****************************************************************************/
 
+#include <QtGui/qtguiglobal.h>
+
 #include "androidjniinput.h"
 #include "androidjnimain.h"
 #include "qandroidplatformintegration.h"
@@ -48,6 +50,7 @@
 
 #include <QGuiApplication>
 #include <QDebug>
+#include <math.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -121,11 +124,11 @@ namespace QtAndroidInput
         return m_softwareKeyboardRect;
     }
 
-    void updateHandles(int mode, QPoint cursor, QPoint anchor)
+    void updateHandles(int mode, QPoint cursor, QPoint anchor, bool rtl)
     {
-        QJNIObjectPrivate::callStaticMethod<void>(applicationClass(), "updateHandles", "(IIIII)V",
+        QJNIObjectPrivate::callStaticMethod<void>(applicationClass(), "updateHandles", "(IIIIIZ)V",
                                                   mode, cursor.x(), cursor.y(), anchor.x(),
-                                                  anchor.y());
+                                                  anchor.y(), rtl);
     }
 
     static void mouseDown(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
@@ -171,6 +174,25 @@ namespace QtAndroidInput
                                                  localPos,
                                                  globalPos,
                                                  Qt::MouseButtons(Qt::LeftButton));
+    }
+
+    static void mouseWheel(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y, jfloat hdelta, jfloat vdelta)
+    {
+        if (m_ignoreMouseEvents)
+            return;
+
+        QPoint globalPos(x,y);
+        QWindow *tlw = m_mouseGrabber.data();
+        if (!tlw)
+            tlw = topLevelWindowAt(globalPos);
+        QPoint localPos = tlw ? (globalPos-tlw->position()) : globalPos;
+        QPoint angleDelta(hdelta * 120, vdelta * 120);
+
+        QWindowSystemInterface::handleWheelEvent(tlw,
+                                                 localPos,
+                                                 globalPos,
+                                                 QPoint(),
+                                                 angleDelta);
     }
 
     static void longPress(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
@@ -251,6 +273,7 @@ namespace QtAndroidInput
         if (m_touchPoints.isEmpty())
             return;
 
+        QMutexLocker lock(QtAndroid::platformInterfaceMutex());
         QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
         if (!platformIntegration)
             return;
@@ -273,17 +296,17 @@ namespace QtAndroidInput
 
     static bool isTabletEventSupported(JNIEnv */*env*/, jobject /*thiz*/)
     {
-#ifdef QT_NO_TABLETEVENT
-        return false;
-#else
+#if QT_CONFIG(tabletevent)
         return true;
-#endif // QT_NO_TABLETEVENT
+#else
+        return false;
+#endif // QT_CONFIG(tabletevent)
     }
 
     static void tabletEvent(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint deviceId, jlong time, jint action,
         jint pointerType, jint buttonState, jfloat x, jfloat y, jfloat pressure)
     {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
         QPointF globalPosF(x, y);
         QPoint globalPos((int)x, (int)y);
         QWindow *tlw = topLevelWindowAt(globalPos);
@@ -325,7 +348,7 @@ namespace QtAndroidInput
         QWindowSystemInterface::handleTabletEvent(tlw, ulong(time),
             localPos, globalPosF, QTabletEvent::Stylus, pointerType,
             buttons, pressure, 0, 0, 0., 0., 0, deviceId, Qt::NoModifier);
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
     }
 
     static int mapAndroidKey(int key)
@@ -824,6 +847,7 @@ namespace QtAndroidInput
         {"mouseDown", "(III)V", (void *)mouseDown},
         {"mouseUp", "(III)V", (void *)mouseUp},
         {"mouseMove", "(III)V", (void *)mouseMove},
+        {"mouseWheel", "(IIIFF)V", (void *)mouseWheel},
         {"longPress", "(III)V", (void *)longPress},
         {"isTabletEventSupported", "()Z", (void *)isTabletEventSupported},
         {"tabletEvent", "(IIJIIIFFF)V", (void *)tabletEvent},

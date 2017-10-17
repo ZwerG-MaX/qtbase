@@ -52,13 +52,13 @@
 //
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
-#include <qlistwidget.h>
+#include <qlistview.h>
 #include <qstandarditemmodel.h>
 #include <qstyleditemdelegate.h>
 #include <qurl.h>
 #include <qvector.h>
 
-#ifndef QT_NO_FILEDIALOG
+QT_REQUIRE_CONFIG(filedialog);
 
 QT_BEGIN_NAMESPACE
 
@@ -148,7 +148,7 @@ protected:
 
 private Q_SLOTS:
     void clicked(const QModelIndex &index);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     void showContextMenu(const QPoint &position);
 #endif
     void removeEntry();
@@ -158,8 +158,6 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_FILEDIALOG
 
 #endif // QSIDEBAR_H
 

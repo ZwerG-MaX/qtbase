@@ -58,12 +58,11 @@
 #include <QtWidgets/qabstractitemview.h>
 #include <QtWidgets/qheaderview.h>
 
+QT_REQUIRE_CONFIG(itemviews);
 
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_ACCESSIBILITY
-
-#ifndef QT_NO_ITEMVIEWS
 
 class QAccessibleTableCell;
 class QAccessibleTableHeaderCell;
@@ -145,7 +144,7 @@ private:
     QAccessible::Role m_role;
 };
 
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
 class QAccessibleTree :public QAccessibleTable
 {
 public:
@@ -223,7 +222,7 @@ private:
     void unselectCell();
 
 friend class QAccessibleTable;
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
 friend class QAccessibleTree;
 #endif
 };
@@ -259,7 +258,7 @@ private:
     Qt::Orientation orientation;
 
 friend class QAccessibleTable;
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
 friend class QAccessibleTree;
 #endif
 };
@@ -298,8 +297,6 @@ private:
     QPointer<QAbstractItemView> view;
 };
 
-
-#endif
 
 #endif // QT_NO_ACCESSIBILITY
 

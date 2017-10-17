@@ -207,7 +207,8 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
         // in the queue. WM_QT_ACTIVATENOTIFIERS will be posted again as a result of
         // event processing.
         MSG msg;
-        if (!PeekMessage(&msg, 0, WM_QT_SOCKETNOTIFIER, WM_QT_SOCKETNOTIFIER, PM_NOREMOVE)
+        if (!PeekMessage(&msg, d->internalHwnd,
+                         WM_QT_SOCKETNOTIFIER, WM_QT_SOCKETNOTIFIER, PM_NOREMOVE)
             && d->queuedSocketEvents.isEmpty()) {
             // register all socket notifiers
             for (QSFDict::iterator it = d->active_fd.begin(), end = d->active_fd.end();
@@ -860,7 +861,7 @@ bool QEventDispatcherWin32::unregisterTimers(QObject *object)
     Q_D(QEventDispatcherWin32);
     if (d->timerVec.isEmpty())
         return false;
-    register WinTimerInfo *t;
+    WinTimerInfo *t;
     for (int i=0; i<d->timerVec.size(); i++) {
         t = d->timerVec.at(i);
         if (t && t->obj == object) {                // object found
@@ -957,7 +958,7 @@ int QEventDispatcherWin32::remainingTime(int timerId)
 
     quint64 currentTime = qt_msectime();
 
-    register WinTimerInfo *t;
+    WinTimerInfo *t;
     for (int i=0; i<d->timerVec.size(); i++) {
         t = d->timerVec.at(i);
         if (t && t->timerId == timerId) {                // timer found

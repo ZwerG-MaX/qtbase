@@ -1359,7 +1359,7 @@ static inline void qConvertARGB64PMToA2RGB30PM_sse2(uint *dest, const QRgba64 *b
     const __m128i cmask = _mm_set1_epi32(0x000003ff);
     int i = 0;
     __m128i vr, vg, vb, va;
-    for (; i < count && (const uintptr_t)buffer & 0xF; ++i) {
+    for (; i < count && uintptr_t(buffer) & 0xF; ++i) {
         *dest++ = qConvertRgb64ToRgb30<PixelOrder>(*buffer++);
     }
 
@@ -1858,9 +1858,6 @@ static inline uint interpolate_4_pixels_16(uint tl, uint tr, uint bl, uint br, u
 #if defined(__SSE2__)
 static inline QRgba64 interpolate_4_pixels_rgb64(QRgba64 t[], QRgba64 b[], uint distx, uint disty)
 {
-    const __m128i vdistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(distx), _MM_SHUFFLE(0, 0, 0, 0));
-    const __m128i vidistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(0x10000 - distx), _MM_SHUFFLE(0, 0, 0, 0));
-
     __m128i vt = _mm_loadu_si128((const __m128i*)t);
     if (disty) {
        __m128i vb = _mm_loadu_si128((const __m128i*)b);
@@ -1868,8 +1865,12 @@ static inline QRgba64 interpolate_4_pixels_rgb64(QRgba64 t[], QRgba64 b[], uint 
         vb = _mm_mulhi_epu16(vb, _mm_set1_epi16(disty));
         vt = _mm_add_epi16(vt, vb);
     }
-    vt = _mm_mulhi_epu16(vt, _mm_unpacklo_epi64(vidistx, vdistx));
-    vt = _mm_add_epi16(vt, _mm_srli_si128(vt, 8));
+    if (distx) {
+        const __m128i vdistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(distx), _MM_SHUFFLE(0, 0, 0, 0));
+        const __m128i vidistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(0x10000 - distx), _MM_SHUFFLE(0, 0, 0, 0));
+        vt = _mm_mulhi_epu16(vt, _mm_unpacklo_epi64(vidistx, vdistx));
+        vt = _mm_add_epi16(vt, _mm_srli_si128(vt, 8));
+    }
 #ifdef Q_PROCESSOR_X86_64
     return QRgba64::fromRgba64(_mm_cvtsi128_si64(vt));
 #else
@@ -3089,8 +3090,6 @@ static const QRgba64 *QT_FASTCALL fetchTransformedBilinear64(QRgba64 *buffer, co
                 for (int i = 0; i < len; ++i) {
                     int distx = (fracX & 0x0000ffff);
 #if defined(__SSE2__)
-                    const __m128i vdistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(distx), _MM_SHUFFLE(0, 0, 0, 0));
-                    const __m128i vidistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(0x10000 - distx), _MM_SHUFFLE(0, 0, 0, 0));
                     __m128i vt = _mm_loadu_si128((const __m128i*)(buf1 + i*2));
                     if (disty) {
                         __m128i vb = _mm_loadu_si128((const __m128i*)(buf2 + i*2));
@@ -3098,8 +3097,12 @@ static const QRgba64 *QT_FASTCALL fetchTransformedBilinear64(QRgba64 *buffer, co
                         vb = _mm_mulhi_epu16(vb, vdy);
                         vt = _mm_add_epi16(vt, vb);
                     }
-                    vt = _mm_mulhi_epu16(vt, _mm_unpacklo_epi64(vidistx, vdistx));
-                    vt = _mm_add_epi16(vt, _mm_srli_si128(vt, 8));
+                    if (distx) {
+                        const __m128i vdistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(distx), _MM_SHUFFLE(0, 0, 0, 0));
+                        const __m128i vidistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(0x10000 - distx), _MM_SHUFFLE(0, 0, 0, 0));
+                        vt = _mm_mulhi_epu16(vt, _mm_unpacklo_epi64(vidistx, vdistx));
+                        vt = _mm_add_epi16(vt, _mm_srli_si128(vt, 8));
+                    }
                     _mm_storel_epi64((__m128i*)(b+i), vt);
 #else
                     b[i] = interpolate_4_pixels_rgb64((QRgba64 *)buf1 + i*2, (QRgba64 *)buf2 + i*2, distx, disty);
@@ -5624,14 +5627,16 @@ static void qt_alphamapblit_generic(QRasterBuffer *rasterBuffer,
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
-                Q_ASSERT(clip.len <= buffer_size);
-                QRgba64 *dest = destFetch64((QRgba64*)buffer, rasterBuffer, start, clip.y, clip.len);
+                if (end <= start)
+                    continue;
+                Q_ASSERT(end - start <= buffer_size);
+                QRgba64 *dest = destFetch64((QRgba64*)buffer, rasterBuffer, start, clip.y, end - start);
 
                 for (int xp=start; xp<end; ++xp) {
                     const int coverage = map[xp - x];
                     alphamapblend_generic(coverage, dest, xp - start, srcColor, color, colorProfile);
                 }
-                destStore64(rasterBuffer, start, clip.y, dest, clip.len);
+                destStore64(rasterBuffer, start, clip.y, dest, end - start);
             } // for (i -> line.count)
             map += mapStride;
         } // for (yp -> bottom)
@@ -5897,14 +5902,16 @@ static void qt_alphargbblit_generic(QRasterBuffer *rasterBuffer,
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
-                Q_ASSERT(clip.len <= buffer_size);
-                QRgba64 *dest = destFetch64((QRgba64*)buffer, rasterBuffer, start, clip.y, clip.len);
+                if (end <= start)
+                    continue;
+                Q_ASSERT(end - start <= buffer_size);
+                QRgba64 *dest = destFetch64((QRgba64*)buffer, rasterBuffer, start, clip.y, end - start);
 
                 for (int xp=start; xp<end; ++xp) {
                     const uint coverage = src[xp - x];
                     alphargbblend_generic(coverage, dest, xp - start, srcColor, color, colorProfile);
                 }
-                destStore64(rasterBuffer, start, clip.y, dest, clip.len);
+                destStore64(rasterBuffer, start, clip.y, dest, end - start);
             } // for (i -> line.count)
             src += srcStride;
         } // for (yp -> bottom)
@@ -6077,7 +6084,7 @@ DrawHelper qDrawHelper[QImage::NImageFormats] =
     // Format_ARGB32,
     {
         blend_color_generic,
-        qt_gradient_argb32,
+        blend_src_generic,
         qt_bitmapblit_argb32,
         qt_alphamapblit_argb32,
         qt_alphargbblit_argb32,

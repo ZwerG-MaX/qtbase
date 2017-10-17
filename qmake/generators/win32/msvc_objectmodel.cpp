@@ -47,15 +47,15 @@ static DotNET vsVersionFromString(const char *versionString)
         DotNET version;
     };
     static VSVersionMapping mapping[] = {
-        "7.0", NET2002,
-        "7.1", NET2003,
-        "8.0", NET2005,
-        "9.0", NET2008,
-        "10.0", NET2010,
-        "11.0", NET2012,
-        "12.0", NET2013,
-        "14.0", NET2015,
-        "15.0", NET2017
+        { "7.0", NET2002 },
+        { "7.1", NET2003 },
+        { "8.0", NET2005 },
+        { "9.0", NET2008 },
+        { "10.0", NET2010 },
+        { "11.0", NET2012 },
+        { "12.0", NET2013 },
+        { "14.0", NET2015 },
+        { "15.0", NET2017 }
     };
     DotNET result = NETUnknown;
     for (const auto entry : mapping) {
@@ -950,12 +950,8 @@ bool VCCLCompilerTool::parseOption(const char* option)
                     ForceConformanceInForLoopScope = ((*c) == '-' ? _False : _True);
                 else if(fourth == 'w')
                     TreatWChar_tAsBuiltInType = ((*c) == '-' ? _False : _True);
-                else if (config->CompilerVersion >= NET2013 && strncmp(option + 4, "strictStrings", 13) == 0)
-                    AdditionalOptions += option;
-                else if (config->CompilerVersion >= NET2015 && strncmp(option + 4, "throwingNew", 11) == 0)
-                    AdditionalOptions += option;
                 else
-                    found = false;
+                    AdditionalOptions += option;
             } else {
                 found = false; break;
             }
@@ -1155,7 +1151,7 @@ bool VCCLCompilerTool::parseOption(const char* option)
     case 'u':
         if (!second)
             UndefineAllPreprocessorDefinitions = _True;
-        else if (second == 't' && third == 'f' && fourth == '8')
+        else if (strcmp(option + 2, "tf-8") == 0)
             AdditionalOptions += option;
         else
             found = false;

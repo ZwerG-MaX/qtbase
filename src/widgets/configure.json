@@ -80,7 +80,8 @@
         "effects": {
             "label": "Effects",
             "purpose": "Provides special widget effects (e.g. fading and scrolling).",
-            "section": "Kernel"
+            "section": "Kernel",
+            "output": [ "privateFeature" ]
         },
         "filesystemmodel": {
             "label": "QFileSystemModel",
@@ -134,7 +135,7 @@
             "label": "QDateTimeEdit",
             "purpose": "Supports editing dates and times.",
             "section": "Widgets",
-            "condition": "features.calendarwidget && features.datestring && features.textdate",
+            "condition": "features.calendarwidget && features.datestring && features.textdate && features.datetimeparser",
             "output": [ "publicFeature", "feature" ]
         },
         "stackedwidget": {
@@ -430,13 +431,6 @@
             "label": "Status Tip",
             "purpose": "Supports status tip functionality and events.",
             "section": "Widgets",
-            "output": [ "publicFeature", "feature" ]
-        },
-        "whatsthis": {
-            "label": "QWhatsThis",
-            "purpose": "Supports displaying \"What's this\" help.",
-            "section": "Widgets",
-            "condition": "features.toolbutton",
             "output": [ "publicFeature", "feature" ]
         },
         "sizegrip": {

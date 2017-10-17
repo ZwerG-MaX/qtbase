@@ -577,7 +577,6 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
                         " -import dir         : Specify an import directory.\n"
                         " -plugins dir        : Specify a directory where to search for plugins.\n"
                         " -input dir/file     : Specify the root directory for test cases or a single test case file.\n"
-                        " -qtquick1           : Run with QtQuick 1 rather than QtQuick 2.\n"
                         " -translation file   : Specify the translation file.\n"
                         );
             }
@@ -774,7 +773,6 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
                                 " -import    : Specify an import directory.\n"
                                 " -plugins   : Specify a directory where to search for plugins.\n"
                                 " -input     : Specify the root directory for test cases.\n"
-                                " -qtquick1  : Run with QtQuick 1 rather than QtQuick 2.\n"
                        );
             }
 
@@ -1652,9 +1650,15 @@ static LONG WINAPI windowsFaultHandler(struct _EXCEPTION_POINTERS *exInfo)
 }
 #endif // Q_OS_WIN) && !Q_OS_WINRT
 
+static void qputenvIfEmpty(const char *name, const QByteArray &value)
+{
+    if (qEnvironmentVariableIsEmpty(name))
+        qputenv(name, value);
+}
+
 static void initEnvironment()
 {
-    qputenv("QT_LOGGING_TO_CONSOLE", "1");
+    qputenvIfEmpty("QT_LOGGING_TO_CONSOLE", "1");
     qputenv("QT_QTESTLIB_RUNNING", "1");
 }
 

@@ -42,15 +42,22 @@
 #ifndef QT_NO_TOOLBAR
 
 #include <qapplication.h>
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
+#endif
 #include <qevent.h>
 #include <qlayout.h>
 #include <qmainwindow.h>
 #include <qmenu.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
+#if QT_CONFIG(rubberband)
 #include <qrubberband.h>
+#endif
 #include <qsignalmapper.h>
 #include <qstylepainter.h>
+#include <qstyleoption.h>
 #include <qtoolbutton.h>
 #include <qwidgetaction.h>
 #include <qtimer.h>

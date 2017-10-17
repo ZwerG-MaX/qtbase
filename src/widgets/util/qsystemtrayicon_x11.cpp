@@ -47,7 +47,9 @@
 #include "qevent.h"
 #include "qapplication.h"
 #include "qlist.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include "qtimer.h"
 #include "qsystemtrayicon_p.h"
 #include "qpaintengine.h"
@@ -210,7 +212,7 @@ bool QSystemTrayIconSys::event(QEvent *e)
     case QEvent::ToolTip:
         QApplication::sendEvent(q, e);
         break;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         return QApplication::sendEvent(q, e);
 #endif

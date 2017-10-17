@@ -53,8 +53,12 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qaction.h"
+#if QT_CONFIG(menu)
 #include "QtWidgets/qmenu.h"
+#endif
+#if QT_CONFIG(graphicsview)
 #include "private/qgraphicswidget_p.h"
+#endif
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -111,7 +115,7 @@ public:
     QAction::Priority priority;
 
     QList<QWidget *> widgets;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     QList<QGraphicsWidget *> graphicsWidgets;
 #endif
 #ifndef QT_NO_SHORTCUT

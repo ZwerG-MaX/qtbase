@@ -2044,7 +2044,7 @@ Qt::DropActions QAbstractItemModel::supportedDropActions() const
 Qt::DropActions QAbstractItemModel::supportedDragActions() const
 {
     Q_D(const QAbstractItemModel);
-    if (d->supportedDragActions != Qt::IgnoreAction)
+    if (int(d->supportedDragActions) != -1)
         return d->supportedDragActions;
     return supportedDropActions();
 }
@@ -3804,3 +3804,5 @@ void QAbstractItemModelPrivate::Persistent::insertMultiAtEnd(const QModelIndex& 
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qabstractitemmodel.cpp"

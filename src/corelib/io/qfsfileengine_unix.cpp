@@ -596,6 +596,14 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(FileFlags type) const
     return ret;
 }
 
+QByteArray QFSFileEngine::id() const
+{
+    Q_D(const QFSFileEngine);
+    if (d->fd != -1)
+        return QFileSystemEngine::id(d->fd);
+    return QFileSystemEngine::id(d->fileEntry);
+}
+
 QString QFSFileEngine::fileName(FileName file) const
 {
     Q_D(const QFSFileEngine);
@@ -654,7 +662,12 @@ bool QFSFileEngine::setPermissions(uint perms)
 {
     Q_D(QFSFileEngine);
     QSystemError error;
-    if (!QFileSystemEngine::setPermissions(d->fileEntry, QFile::Permissions(perms), error, 0)) {
+    bool ok;
+    if (d->fd != -1)
+        ok = QFileSystemEngine::setPermissions(d->fd, QFile::Permissions(perms), error, 0);
+    else
+        ok = QFileSystemEngine::setPermissions(d->fileEntry, QFile::Permissions(perms), error, 0);
+    if (!ok) {
         setError(QFile::PermissionsError, error.toString());
         return false;
     }

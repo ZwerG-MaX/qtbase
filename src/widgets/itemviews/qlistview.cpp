@@ -40,7 +40,6 @@
 
 #include "qlistview.h"
 
-#ifndef QT_NO_LISTVIEW
 #include <qabstractitemdelegate.h>
 #include <qapplication.h>
 #include <qpainter.h>
@@ -50,7 +49,9 @@
 #include <qstyle.h>
 #include <qevent.h>
 #include <qscrollbar.h>
+#if QT_CONFIG(rubberband)
 #include <qrubberband.h>
+#endif
 #include <private/qlistview_p.h>
 #include <private/qscrollbar_p.h>
 #include <qdebug.h>
@@ -72,6 +73,8 @@ extern bool qt_sendSpontaneousEvent(QObject *receiver, QEvent *event);
     \ingroup model-view
     \ingroup advanced
     \inmodule QtWidgets
+
+    \image windows-listview.png
 
     A QListView presents items stored in a model, either as a simple
     non-hierarchical list, or as a collection of icons. This class is used
@@ -110,15 +113,6 @@ extern bool qt_sendSpontaneousEvent(QObject *receiver, QEvent *event);
     laid out. Items are spaced according to their spacing(), and can exist
     within a notional grid of size specified by gridSize(). The items can
     be rendered as large or small icons depending on their iconSize().
-
-    \table 100%
-    \row \li \inlineimage windowsvista-listview.png Screenshot of a Windows Vista style list view
-         \li \inlineimage macintosh-listview.png Screenshot of a Macintosh style table view
-         \li \inlineimage fusion-listview.png Screenshot of a Fusion style table view
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} list view.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} list view.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} list view.
-    \endtable
 
     \section1 Improving Performance
 
@@ -808,7 +802,7 @@ void QListView::mouseReleaseEvent(QMouseEvent *e)
     }
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 /*!
   \reimp
 */
@@ -835,7 +829,7 @@ void QListView::wheelEvent(QWheelEvent *e)
         QApplication::sendEvent(d->hbar, e);
     }
 }
-#endif // QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 /*!
   \reimp
@@ -1050,7 +1044,7 @@ void QListView::paintEvent(QPaintEvent *e)
     d->commonListView->paintDragDrop(&painter);
 #endif
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     // #### move this implementation into a dynamic class
     if (d->showElasticBand && d->elasticBand.isValid()) {
         QStyleOptionRubberBand opt;
@@ -1878,6 +1872,11 @@ void QCommonListViewBase::paintDragDrop(QPainter *painter)
 }
 #endif
 
+QSize QListModeViewBase::viewportSize(const QAbstractItemView *v)
+{
+    return v->contentsRect().marginsRemoved(v->viewportMargins()).size();
+}
+
 void QCommonListViewBase::updateHorizontalScrollBar(const QSize &step)
 {
     horizontalScrollBar()->d_func()->itemviewChangeSingleStep(step.width() + spacing());
@@ -1890,7 +1889,7 @@ void QCommonListViewBase::updateHorizontalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    const QSize viewportSize = qq->contentsRect().size();
+    const QSize viewportSize = QListModeViewBase::viewportSize(qq);
 
     bool verticalWantsToShow = contentsSize.height() > viewportSize.height();
     bool horizontalWantsToShow;
@@ -1920,7 +1919,7 @@ void QCommonListViewBase::updateVerticalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    const QSize viewportSize = qq->contentsRect().size();
+    const QSize viewportSize = QListModeViewBase::viewportSize(qq);
 
     bool horizontalWantsToShow = contentsSize.width() > viewportSize.width();
     bool verticalWantsToShow;
@@ -2815,11 +2814,17 @@ bool QIconModeViewBase::filterDragLeaveEvent(QDragLeaveEvent *e)
 
 bool QIconModeViewBase::filterDragMoveEvent(QDragMoveEvent *e)
 {
-    if (e->source() != qq || !dd->canDrop(e))
-        return false;
+    const bool wasAccepted = e->isAccepted();
 
     // ignore by default
     e->ignore();
+
+    if (e->source() != qq || !dd->canDrop(e)) {
+        // restore previous acceptance on failure
+        e->setAccepted(wasAccepted);
+        return false;
+    }
+
     // get old dragged items rect
     QRect itemsRect = this->itemsRect(draggedItems);
     viewport()->update(itemsRect.translated(draggedItemsDelta()));
@@ -3298,5 +3303,3 @@ QSize QListView::viewportSizeHint() const
 QT_END_NAMESPACE
 
 #include "moc_qlistview.cpp"
-
-#endif // QT_NO_LISTVIEW

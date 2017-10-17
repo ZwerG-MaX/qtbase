@@ -42,14 +42,19 @@
 #include "qmainwindow.h"
 #include "qmainwindowlayout_p.h"
 
-#ifndef QT_NO_MAINWINDOW
-
+#if QT_CONFIG(dockwidget)
 #include "qdockwidget.h"
+#endif
 #include "qtoolbar.h"
 
 #include <qapplication.h>
+#include <qmenu.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
+#if QT_CONFIG(statusbar)
 #include <qstatusbar.h>
+#endif
 #include <qevent.h>
 #include <qstyle.h>
 #include <qdebug.h>
@@ -84,7 +89,7 @@ public:
             , useHIToolBar(false)
             , activateUnifiedToolbarAfterFullScreen(false)
 #endif
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
             , hasOldCursor(false) , cursorAdjusted(false)
 #endif
     { }
@@ -103,7 +108,7 @@ public:
     QList<int> hoverSeparator;
     QPoint hoverPos;
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
     QCursor separatorCursor(const QList<int> &path) const;
     void adjustCursor(const QPoint &pos);
     QCursor oldCursor;
@@ -377,7 +382,7 @@ void QMainWindowPrivate::init()
     \sa setToolButtonStyle()
 */
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 /*!
     \fn void QMainWindow::tabifiedDockWidgetActivated(QDockWidget *dockWidget)
 
@@ -516,7 +521,7 @@ void QMainWindow::setToolButtonStyle(Qt::ToolButtonStyle toolButtonStyle)
     emit toolButtonStyleChanged(d->toolButtonStyle);
 }
 
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
 /*!
     Returns the menu bar for the main window. This function creates
     and returns an empty menu bar if the menu bar does not exist.
@@ -603,9 +608,9 @@ void QMainWindow::setMenuWidget(QWidget *menuBar)
     }
     d->layout->setMenuBar(menuBar);
 }
-#endif // QT_NO_MENUBAR
+#endif // QT_CONFIG(menubar)
 
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
 /*!
     Returns the status bar for the main window. This function creates
     and returns an empty status bar if the status bar does not exist.
@@ -642,7 +647,7 @@ void QMainWindow::setStatusBar(QStatusBar *statusbar)
     }
     d->layout->setStatusBar(statusbar);
 }
-#endif // QT_NO_STATUSBAR
+#endif // QT_CONFIG(statusbar)
 
 /*!
     Returns the central widget for the main window. This function
@@ -689,7 +694,7 @@ QWidget *QMainWindow::takeCentralWidget()
     return oldcentralwidget;
 }
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 /*!
     Sets the given dock widget \a area to occupy the specified \a
     corner.
@@ -795,12 +800,12 @@ void QMainWindow::addToolBar(Qt::ToolBarArea area, QToolBar *toolbar)
 
     if(toolbar->d_func()->state && toolbar->d_func()->state->dragging) {
         //removing a toolbar which is dragging will cause crash
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         bool animated = isAnimated();
         setAnimated(false);
 #endif
         toolbar->d_func()->endDrag();
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         setAnimated(animated);
 #endif
     }
@@ -903,7 +908,7 @@ bool QMainWindow::toolBarBreak(QToolBar *toolbar) const
 
 #endif // QT_NO_TOOLBAR
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 
 /*! \property QMainWindow::animated
     \brief whether manipulating dock widgets and tool bars is animated
@@ -1017,7 +1022,7 @@ static bool checkDockWidgetArea(Qt::DockWidgetArea area, const char *where)
     return false;
 }
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
     \property QMainWindow::documentMode
     \brief whether the tab bar for tabbed dockwidgets is set to document mode.
@@ -1036,9 +1041,9 @@ void QMainWindow::setDocumentMode(bool enabled)
 {
     d_func()->layout->setDocumentMode(enabled);
 }
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
 /*!
     \property QMainWindow::tabShape
     \brief the tab shape used for tabbed dock widgets.
@@ -1090,7 +1095,7 @@ void QMainWindow::setTabPosition(Qt::DockWidgetAreas areas, QTabWidget::TabPosit
 {
     d_func()->layout->setTabPosition(areas, tabPosition);
 }
-#endif // QT_NO_TABWIDGET
+#endif // QT_CONFIG(tabwidget)
 
 /*!
     Adds the given \a dockwidget to the specified \a area.
@@ -1208,7 +1213,7 @@ void QMainWindow::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
 QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) const
 {
     QList<QDockWidget*> ret;
-#if defined(QT_NO_TABBAR)
+#if !QT_CONFIG(tabbar)
     Q_UNUSED(dockwidget);
 #else
     const QDockAreaLayoutInfo *info = d_func()->layout->layoutState.dockAreaLayout.info(dockwidget);
@@ -1280,7 +1285,7 @@ void QMainWindow::resizeDocks(const QList<QDockWidget *> &docks,
 }
 
 
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 
 /*!
     Saves the current state of this mainwindow's toolbars and
@@ -1344,7 +1349,7 @@ bool QMainWindow::restoreState(const QByteArray &state, int version)
     return restored;
 }
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
 QCursor QMainWindowPrivate::separatorCursor(const QList<int> &path) const
 {
     QDockAreaLayoutInfo *info = layout->layoutState.dockAreaLayout.info(path);
@@ -1426,7 +1431,7 @@ bool QMainWindow::event(QEvent *event)
     Q_D(QMainWindow);
     switch (event->type()) {
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         case QEvent::Paint: {
             QPainter p(this);
             QRegion r = static_cast<QPaintEvent*>(event)->region();
@@ -1498,19 +1503,19 @@ bool QMainWindow::event(QEvent *event)
         }
 #endif
 
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
         case QEvent::StatusTip:
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
             if (QStatusBar *sb = d->layout->statusBar())
                 sb->showMessage(static_cast<QStatusTipEvent*>(event)->tip());
             else
 #endif
                 static_cast<QStatusTipEvent*>(event)->ignore();
             return true;
-#endif // QT_NO_STATUSTIP
+#endif // QT_CONFIG(statustip)
 
         case QEvent::StyleChange:
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
             d->layout->layoutState.dockAreaLayout.styleChangedEvent();
 #endif
             if (!d->explicitIconSize)
@@ -1536,7 +1541,7 @@ bool QMainWindow::event(QEvent *event)
             }
             break;
 #endif
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
        case QEvent::CursorChange:
            // CursorChange events are triggered as mouse moves to new widgets even
            // if the cursor doesn't actually change, so do not change oldCursor if
@@ -1639,7 +1644,7 @@ bool QMainWindow::unifiedTitleAndToolBarOnMac() const
 */
 bool QMainWindow::isSeparator(const QPoint &pos) const
 {
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     Q_D(const QMainWindow);
     return !d->layout->layoutState.dockAreaLayout.findSeparator(pos).isEmpty();
 #else
@@ -1659,14 +1664,14 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
     // children and for the menu bar as well
     QWidget *child = childAt(event->pos());
     while (child && child != this) {
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
         if (QMenuBar *mb = qobject_cast<QMenuBar *>(child)) {
             if (mb->parentWidget() != this)
                 return;
             break;
         }
 #endif
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         if (QDockWidget *dw = qobject_cast<QDockWidget *>(child)) {
             if (dw->parentWidget() != this)
                 return;
@@ -1677,7 +1682,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
             }
             break;
         }
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 #ifndef QT_NO_TOOLBAR
         if (QToolBar *tb = qobject_cast<QToolBar *>(child)) {
             if (tb->parentWidget() != this)
@@ -1690,7 +1695,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
     if (child == this)
         return;
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     QMenu *popup = createPopupMenu();
     if (popup) {
         if (!popup->isEmpty()) {
@@ -1705,7 +1710,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
 }
 #endif // QT_NO_CONTEXTMENU
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
     Returns a popup menu containing checkable entries for the toolbars and
     dock widgets present in the main window. If  there are no toolbars and
@@ -1725,7 +1730,7 @@ QMenu *QMainWindow::createPopupMenu()
 {
     Q_D(QMainWindow);
     QMenu *menu = 0;
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QList<QDockWidget *> dockwidgets = findChildren<QDockWidget *>();
     if (dockwidgets.size()) {
         menu = new QMenu(this);
@@ -1748,7 +1753,7 @@ QMenu *QMainWindow::createPopupMenu()
         }
         menu->addSeparator();
     }
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 #ifndef QT_NO_TOOLBAR
     QList<QToolBar *> toolbars = findChildren<QToolBar *>();
     if (toolbars.size()) {
@@ -1766,10 +1771,8 @@ QMenu *QMainWindow::createPopupMenu()
     Q_UNUSED(d);
     return menu;
 }
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 QT_END_NAMESPACE
 
 #include "moc_qmainwindow.cpp"
-
-#endif // QT_NO_MAINWINDOW

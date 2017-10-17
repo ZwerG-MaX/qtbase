@@ -105,6 +105,7 @@ private slots:
     void stateChange();
     void flags();
     void cleanup();
+    void testBlockingWindowShownAfterModalDialog();
 
 private:
     QPoint m_availableTopLeft;
@@ -1644,7 +1645,7 @@ void tst_QWindow::inputReentrancy()
     QCOMPARE(window.touchReleasedCount, 1);
 }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 class TabletTestWindow : public QWindow
 {
 public:
@@ -1672,7 +1673,7 @@ public:
 
 void tst_QWindow::tabletEvents()
 {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     TabletTestWindow window;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(10, 10), m_testWindowSize));
     qGuiApp->installEventFilter(&window);
@@ -1829,6 +1830,12 @@ void tst_QWindow::initialSize()
     }
 }
 
+static bool isPlatformOffscreenOrMinimal()
+{
+    return ((QGuiApplication::platformName() == QLatin1String("offscreen"))
+             || (QGuiApplication::platformName() == QLatin1String("minimal")));
+}
+
 void tst_QWindow::modalDialog()
 {
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
@@ -1853,8 +1860,7 @@ void tst_QWindow::modalDialog()
     QGuiApplication::sync();
     QGuiApplication::processEvents();
 
-    if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
-        || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {
+    if (isPlatformOffscreenOrMinimal()) {
         QWARN("Focus stays in normalWindow on offscreen/minimal platforms");
         QTRY_COMPARE(QGuiApplication::focusWindow(), &normalWindow);
         return;
@@ -1899,8 +1905,7 @@ void tst_QWindow::modalDialogClosingOneOfTwoModal()
     QGuiApplication::sync();
     QGuiApplication::processEvents();
 
-    if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
-        || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {
+    if (isPlatformOffscreenOrMinimal()) {
         QWARN("Focus is lost when closing modal dialog on offscreen/minimal platforms");
         QTRY_COMPARE(QGuiApplication::focusWindow(), nullptr);
         return;
@@ -1993,6 +1998,9 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
 {
     if (QGuiApplication::platformName() == QLatin1String("cocoa"))
         QSKIP("This test fails on OS X on CI");
+
+    if (isPlatformOffscreenOrMinimal())
+        QSKIP("Can't test window focusing on offscreen/minimal");
 
     const QPoint center = QGuiApplication::primaryScreen()->availableGeometry().center();
 
@@ -2232,6 +2240,47 @@ void tst_QWindow::flags()
     QCOMPARE(window.flags(), baseFlags | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     window.setFlag(Qt::FramelessWindowHint, false);
     QCOMPARE(window.flags(), baseFlags | Qt::WindowStaysOnTopHint);
+}
+
+class EventWindow : public QWindow
+{
+public:
+    EventWindow() : QWindow(), gotBlocked(false) {}
+    bool gotBlocked;
+protected:
+    bool event(QEvent *e)
+    {
+        if (e->type() == QEvent::WindowBlocked)
+            gotBlocked = true;
+        return QWindow::event(e);
+    }
+};
+
+void tst_QWindow::testBlockingWindowShownAfterModalDialog()
+{
+    EventWindow normalWindow;
+    normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));
+    normalWindow.resize(m_testWindowSize);
+    normalWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&normalWindow));
+    QVERIFY(!normalWindow.gotBlocked);
+
+    QWindow dialog;
+    dialog.setFramePosition(m_availableTopLeft + QPoint(200, 200));
+    dialog.resize(m_testWindowSize);
+    dialog.setModality(Qt::ApplicationModal);
+    dialog.setFlags(Qt::Dialog);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    QVERIFY(normalWindow.gotBlocked);
+
+    EventWindow normalWindowAfter;
+    normalWindowAfter.setFramePosition(m_availableTopLeft + QPoint(80, 80));
+    normalWindowAfter.resize(m_testWindowSize);
+    QVERIFY(!normalWindowAfter.gotBlocked);
+    normalWindowAfter.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&normalWindowAfter));
+    QVERIFY(normalWindowAfter.gotBlocked);
 }
 
 #include <tst_qwindow.moc>

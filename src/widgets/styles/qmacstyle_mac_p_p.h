@@ -48,7 +48,9 @@
 #include "qmacstyle_mac_p.h"
 #include "qcommonstyle_p.h"
 #include <private/qapplication_p.h>
+#if QT_CONFIG(combobox)
 #include <private/qcombobox_p.h>
+#endif
 #include <private/qpainter_p.h>
 #include <private/qstylehelper_p.h>
 #include <qapplication.h>
@@ -60,42 +62,71 @@
 #if QT_CONFIG(dialogbuttonbox)
 #include <qdialogbuttonbox.h>
 #endif
+#if QT_CONFIG(dockwidget)
 #include <qdockwidget.h>
+#endif
 #include <qevent.h>
 #include <qfocusframe.h>
 #include <qformlayout.h>
+#if QT_CONFIG(groupbox)
 #include <qgroupbox.h>
+#endif
 #include <qhash.h>
 #include <qheaderview.h>
 #include <qlayout.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(mainwindow)
 #include <qmainwindow.h>
+#endif
 #include <qmap.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
 #include <qpaintdevice.h>
 #include <qpainter.h>
 #include <qpixmapcache.h>
 #include <qpointer.h>
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
 #if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
 #endif
 #include <qradiobutton.h>
+#if QT_CONFIG(rubberband)
 #include <qrubberband.h>
+#endif
+#if QT_CONFIG(sizegrip)
 #include <qsizegrip.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
+#if QT_CONFIG(splitter)
 #include <qsplitter.h>
+#endif
 #include <qstyleoption.h>
 #include <qtextedit.h>
 #include <qtextstream.h>
 #include <qtoolbar.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(treeview)
 #include <qtreeview.h>
+#endif
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
-#include <qwizard.h>
+#endif
 #include <qdebug.h>
+#if QT_CONFIG(datetimeedit)
 #include <qdatetimeedit.h>
+#endif
 #include <qmath.h>
 #include <qpair.h>
 #include <qvector.h>
@@ -160,7 +191,7 @@ typedef void (^QCocoaDrawRectBlock)(NSRect, CGContextRef);
     do { \
         static const int sizes[] = { (large), (small), (mini) }; \
         return sizes[controlSize]; \
-    } while (0)
+    } while (false)
 
 #if QT_CONFIG(pushbutton)
 bool qt_mac_buttonIsRenderedFlat(const QPushButton *pushButton, const QStyleOptionButton *option);
@@ -231,8 +262,8 @@ public:
 
     void drawFocusRing(QPainter *p, const QRect &targetRect, int hMargin, int vMargin, qreal radius = 0) const;
 
-#ifndef QT_NO_TABBAR
-    void tabLayout(const QStyleOptionTab *opt, const QWidget *widget, QRect *textRect) const;
+#if QT_CONFIG(tabbar)
+    void tabLayout(const QStyleOptionTab *opt, const QWidget *widget, QRect *textRect, QRect *iconRect) const;
 #endif
 
 public:

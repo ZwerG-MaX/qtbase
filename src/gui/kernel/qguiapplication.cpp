@@ -634,6 +634,18 @@ QGuiApplication::~QGuiApplication()
     QGuiApplicationPrivate::m_inputDeviceManager = 0;
     delete QGuiApplicationPrivate::desktopFileName;
     QGuiApplicationPrivate::desktopFileName = 0;
+    QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
+    QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
+    QGuiApplicationPrivate::lastCursorPosition = {qInf(), qInf()};
+    QGuiApplicationPrivate::currentMousePressWindow = QGuiApplicationPrivate::currentMouseWindow = nullptr;
+    QGuiApplicationPrivate::applicationState = Qt::ApplicationInactive;
+    QGuiApplicationPrivate::highDpiScalingUpdated = false;
+    QGuiApplicationPrivate::tabletDevicePoints.clear();
+#ifndef QT_NO_SESSIONMANAGER
+    QGuiApplicationPrivate::is_fallback_session_management_enabled = true;
+#endif
+    QGuiApplicationPrivate::mousePressTime = 0;
+    QGuiApplicationPrivate::mousePressX = QGuiApplicationPrivate::mousePressY = 0;
 }
 
 QGuiApplicationPrivate::QGuiApplicationPrivate(int &argc, char **argv, int flags)
@@ -1531,6 +1543,7 @@ QGuiApplicationPrivate::~QGuiApplicationPrivate()
     delete m_a32ColorProfile.load();
 
     window_list.clear();
+    screen_list.clear();
 }
 
 #if 0
@@ -1984,7 +1997,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
 
 void QGuiApplicationPrivate::processWheelEvent(QWindowSystemInterfacePrivate::WheelEvent *e)
 {
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     QWindow *window = e->window.data();
     QPointF globalPoint = e->globalPos;
     QPointF localPoint = e->localPos;
@@ -2014,7 +2027,7 @@ void QGuiApplicationPrivate::processWheelEvent(QWindowSystemInterfacePrivate::Wh
      QGuiApplication::sendSpontaneousEvent(window, &ev);
 #else
      Q_UNUSED(e);
-#endif /* ifndef QT_NO_WHEELEVENT */
+#endif // QT_CONFIG(wheelevent)
 }
 
 // Remember, Qt convention is:  keyboard state is state *before*
@@ -2289,7 +2302,7 @@ QGuiApplicationPrivate::TabletPointData &QGuiApplicationPrivate::tabletDevicePoi
 
 void QGuiApplicationPrivate::processTabletEvent(QWindowSystemInterfacePrivate::TabletEvent *e)
 {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     TabletPointData &pointData = tabletDevicePoint(e->uid);
 
     QEvent::Type type = QEvent::TabletMove;
@@ -2356,7 +2369,7 @@ void QGuiApplicationPrivate::processTabletEvent(QWindowSystemInterfacePrivate::T
 
 void QGuiApplicationPrivate::processTabletEnterProximityEvent(QWindowSystemInterfacePrivate::TabletEnterProximityEvent *e)
 {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     QTabletEvent ev(QEvent::TabletEnterProximity, QPointF(), QPointF(),
                     e->device, e->pointerType, 0, 0, 0,
                     0, 0, 0,
@@ -2370,7 +2383,7 @@ void QGuiApplicationPrivate::processTabletEnterProximityEvent(QWindowSystemInter
 
 void QGuiApplicationPrivate::processTabletLeaveProximityEvent(QWindowSystemInterfacePrivate::TabletLeaveProximityEvent *e)
 {
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     QTabletEvent ev(QEvent::TabletLeaveProximity, QPointF(), QPointF(),
                     e->device, e->pointerType, 0, 0, 0,
                     0, 0, 0,

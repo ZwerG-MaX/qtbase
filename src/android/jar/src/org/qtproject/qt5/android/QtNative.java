@@ -52,7 +52,8 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.ClipboardManager;
+import android.content.ClipboardManager;
+import android.content.ClipboardManager.OnPrimaryClipChangedListener;
 import android.os.Build;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -60,6 +61,7 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.InputDevice;
 
 import java.lang.reflect.Method;
 import java.security.KeyStore;
@@ -469,6 +471,17 @@ public class QtNative
         }
     }
 
+    static public void sendGenericMotionEvent(MotionEvent event, int id)
+    {
+        if (event.getActionMasked() != MotionEvent.ACTION_SCROLL
+                || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != InputDevice.SOURCE_CLASS_POINTER) {
+            return;
+        }
+
+        mouseWheel(id, (int) event.getX(), (int) event.getY(),
+                       event.getAxisValue(MotionEvent.AXIS_HSCROLL), event.getAxisValue(MotionEvent.AXIS_VSCROLL));
+    }
+
     public static Context getContext() {
         if (m_activity != null)
             return m_activity;
@@ -515,12 +528,13 @@ public class QtNative
                                       final int x1,
                                       final int y1,
                                       final int x2,
-                                      final int y2)
+                                      final int y2,
+                                      final boolean rtl)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2);
+                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2, rtl);
             }
         });
     }
@@ -584,7 +598,14 @@ public class QtNative
                 @Override
                 public void run() {
                     if (m_activity != null)
-                        m_clipboardManager = (android.text.ClipboardManager) m_activity.getSystemService(Context.CLIPBOARD_SERVICE);
+                        m_clipboardManager = (android.content.ClipboardManager) m_activity.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (m_clipboardManager != null) {
+                        m_clipboardManager.addPrimaryClipChangedListener(new ClipboardManager.OnPrimaryClipChangedListener() {
+                            public void onPrimaryClipChanged() {
+                                onClipboardDataChanged();
+                            }
+                        });
+                    }
                     semaphore.release();
                 }
             });
@@ -792,6 +813,7 @@ public class QtNative
     public static native void mouseDown(int winId, int x, int y);
     public static native void mouseUp(int winId, int x, int y);
     public static native void mouseMove(int winId, int x, int y);
+    public static native void mouseWheel(int winId, int x, int y, float hdelta, float vdelta);
     public static native void touchBegin(int winId);
     public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float major, float minor, float rotation, float pressure);
     public static native void touchEnd(int winId, int action);
@@ -843,6 +865,10 @@ public class QtNative
     public static native boolean onContextItemSelected(int itemId, boolean checked);
     public static native void onContextMenuClosed(Menu menu);
     // menu methods
+
+    // clipboard methods
+    public static native void onClipboardDataChanged();
+    // clipboard methods
 
     // activity methods
     public static native void onActivityResult(int requestCode, int resultCode, Intent data);

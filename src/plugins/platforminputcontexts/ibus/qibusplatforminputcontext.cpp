@@ -133,7 +133,18 @@ QIBusPlatformInputContext::~QIBusPlatformInputContext (void)
 
 bool QIBusPlatformInputContext::isValid() const
 {
-    return d->valid;
+    return d->valid && d->busConnected;
+}
+
+bool QIBusPlatformInputContext::hasCapability(Capability capability) const
+{
+    switch (capability) {
+    case QPlatformInputContext::HiddenTextCapability:
+        return false; // QTBUG-40691, do not show IME on desktop for password entry fields.
+    default:
+        break;
+    }
+    return true;
 }
 
 void QIBusPlatformInputContext::invokeAction(QInputMethod::Action a, int)
@@ -395,8 +406,8 @@ void QIBusPlatformInputContext::filterEventFinished(QDBusPendingCallWatcher *cal
 
     Qt::KeyboardModifiers modifiers = watcher->modifiers();
     QVariantList args = watcher->arguments();
-    const ulong time = static_cast<const ulong>(args.at(0).toUInt());
-    const QEvent::Type type = static_cast<const QEvent::Type>(args.at(1).toUInt());
+    const ulong time = static_cast<ulong>(args.at(0).toUInt());
+    const QEvent::Type type = static_cast<QEvent::Type>(args.at(1).toUInt());
     const int qtcode = args.at(2).toInt();
     const quint32 code = args.at(3).toUInt();
     const quint32 sym = args.at(4).toUInt();

@@ -54,17 +54,21 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractscrollarea_p.h"
 #include "QtGui/qtextdocumentfragment.h"
+#if QT_CONFIG(scrollbar)
 #include "QtWidgets/qscrollbar.h"
+#endif
 #include "QtGui/qtextcursor.h"
 #include "QtGui/qtextformat.h"
+#if QT_CONFIG(menu)
 #include "QtWidgets/qmenu.h"
+#endif
 #include "QtGui/qabstracttextdocumentlayout.h"
 #include "QtCore/qbasictimer.h"
 #include "qplaintextedit.h"
 
-#ifndef QT_NO_TEXTEDIT
-
 #include "private/qwidgettextcontrol_p.h"
+
+QT_REQUIRE_CONFIG(textedit);
 
 QT_BEGIN_NAMESPACE
 
@@ -184,7 +188,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_TEXTEDIT
 
 #endif // QPLAINTEXTEDIT_P_H

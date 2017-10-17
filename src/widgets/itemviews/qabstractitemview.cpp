@@ -39,7 +39,6 @@
 
 #include "qabstractitemview.h"
 
-#ifndef QT_NO_ITEMVIEWS
 #include <qpointer.h>
 #include <qapplication.h>
 #include <qclipboard.h>
@@ -48,13 +47,14 @@
 #include <qdrag.h>
 #include <qevent.h>
 #include <qscrollbar.h>
-#include <qwhatsthis.h>
 #include <qtooltip.h>
 #include <qdatetime.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
-#include <qtreeview.h>
-#include <qtableview.h>
+#endif
 #include <qheaderview.h>
 #include <qstyleditemdelegate.h>
 #include <private/qabstractitemview_p.h>
@@ -174,7 +174,7 @@ void QAbstractItemViewPrivate::checkMouseMove(const QPersistentModelIndex &index
 
         if (index.isValid()) {
             emit q->entered(index);
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
             QString statustip = model->data(index, Qt::StatusTipRole).toString();
             if (parent && (shouldClearStatusTip || !statustip.isEmpty())) {
                 QStatusTipEvent tip(statustip);
@@ -183,7 +183,7 @@ void QAbstractItemViewPrivate::checkMouseMove(const QPersistentModelIndex &index
             }
 #endif
         } else {
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
             if (parent && shouldClearStatusTip) {
                 QString emptyString;
                 QStatusTipEvent tip( emptyString );
@@ -1704,7 +1704,7 @@ bool QAbstractItemView::viewportEvent(QEvent *event)
         break;
     case QEvent::Leave:
         d->setHoverIndex(QModelIndex()); // If we've left, no hover should be needed anymore
-    #ifndef QT_NO_STATUSTIP
+    #if QT_CONFIG(statustip)
         if (d->shouldClearStatusTip && d->parent) {
             QString empty;
             QStatusTipEvent tip(empty);
@@ -1929,7 +1929,7 @@ void QAbstractItemView::mouseReleaseEvent(QMouseEvent *event)
         QStyleOptionViewItem option = d->viewOptionsV1();
         if (d->pressedAlreadySelected)
             option.state |= QStyle::State_Selected;
-        if ((model()->flags(index) & Qt::ItemIsEnabled)
+        if ((d->model->flags(index) & Qt::ItemIsEnabled)
             && style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, &option, this))
             emit activated(index);
     }
@@ -2230,7 +2230,7 @@ void QAbstractItemView::focusInEvent(QFocusEvent *event)
     QAbstractScrollArea::focusInEvent(event);
 
     const QItemSelectionModel* model = selectionModel();
-    const bool currentIndexValid = currentIndex().isValid();
+    bool currentIndexValid = currentIndex().isValid();
 
     if (model
         && !d->currentIndexSet
@@ -2238,19 +2238,16 @@ void QAbstractItemView::focusInEvent(QFocusEvent *event)
         bool autoScroll = d->autoScroll;
         d->autoScroll = false;
         QModelIndex index = moveCursor(MoveNext, Qt::NoModifier); // first visible index
-        if (index.isValid() && d->isIndexEnabled(index) && event->reason() != Qt::MouseFocusReason)
+        if (index.isValid() && d->isIndexEnabled(index) && event->reason() != Qt::MouseFocusReason) {
             selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+            currentIndexValid = true;
+        }
         d->autoScroll = autoScroll;
     }
 
-    if (model && currentIndexValid) {
-        if (currentIndex().flags() != Qt::ItemIsEditable)
-            setAttribute(Qt::WA_InputMethodEnabled, false);
-        else
-            setAttribute(Qt::WA_InputMethodEnabled);
-    }
-
-    if (!currentIndexValid)
+    if (model && currentIndexValid)
+        setAttribute(Qt::WA_InputMethodEnabled, (currentIndex().flags() & Qt::ItemIsEditable));
+    else if (!currentIndexValid)
         setAttribute(Qt::WA_InputMethodEnabled, false);
 
     d->viewport->update();
@@ -3652,6 +3649,7 @@ void QAbstractItemView::currentChanged(const QModelIndex &current, const QModelI
             d->shouldScrollToCurrentOnShow = d->autoScroll;
         }
     }
+    setAttribute(Qt::WA_InputMethodEnabled, (current.isValid() && (current.flags() & Qt::ItemIsEditable)));
 }
 
 #ifndef QT_NO_DRAGANDDROP
@@ -4219,11 +4217,11 @@ QWidget *QAbstractItemViewPrivate::editor(const QModelIndex &index,
             QWidget *focusWidget = w;
             while (QWidget *fp = focusWidget->focusProxy())
                 focusWidget = fp;
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
             if (QLineEdit *le = qobject_cast<QLineEdit*>(focusWidget))
                 le->selectAll();
 #endif
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
             if (QSpinBox *sb = qobject_cast<QSpinBox*>(focusWidget))
                 sb->selectAll();
             else if (QDoubleSpinBox *dsb = qobject_cast<QDoubleSpinBox*>(focusWidget))
@@ -4493,5 +4491,3 @@ QModelIndexList QAbstractItemViewPrivate::selectedDraggableIndexes() const
 QT_END_NAMESPACE
 
 #include "moc_qabstractitemview.cpp"
-
-#endif // QT_NO_ITEMVIEWS

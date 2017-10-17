@@ -42,21 +42,32 @@
 #include <qaccessible.h>
 #include <qapplication.h>
 #include <qevent.h>
+#if QT_CONFIG(itemviews)
 #include <qheaderview.h>
+#endif
+#if QT_CONFIG(tabbar)
 #include <qtabbar.h>
+#include <private/qtabbar_p.h>
+#endif
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
-#include <qlistview.h>
-#include <qtableview.h>
+#endif
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtooltip.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
-#include <qtreeview.h>
-#include <private/qtabbar_p.h>
+#endif
 #include <QAbstractScrollArea>
+#if QT_CONFIG(scrollarea)
 #include <QScrollArea>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <QScrollBar>
+#endif
 #include <QDebug>
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -66,7 +77,7 @@ QT_BEGIN_NAMESPACE
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
   \class QAccessibleTabBar
   \brief The QAccessibleTabBar class implements the QAccessibleInterface for tab bars.
@@ -259,9 +270,9 @@ QString QAccessibleTabBar::text(QAccessible::Text t) const
     return QString();
 }
 
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
 /*!
   \class QAccessibleComboBox
   \brief The QAccessibleComboBox class implements the QAccessibleInterface for editable and read-only combo boxes.
@@ -379,9 +390,9 @@ QStringList QAccessibleComboBox::keyBindingsForAction(const QString &/*actionNam
     return QStringList();
 }
 
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 // ======================= QAccessibleAbstractScrollArea =======================
 QAccessibleAbstractScrollArea::QAccessibleAbstractScrollArea(QWidget *widget)
     : QAccessibleWidget(widget, QAccessible::Client)
@@ -490,7 +501,7 @@ QAccessibleScrollArea::QAccessibleScrollArea(QWidget *widget)
 {
     Q_ASSERT(qobject_cast<QScrollArea *>(widget));
 }
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
 
 QT_END_NAMESPACE
 

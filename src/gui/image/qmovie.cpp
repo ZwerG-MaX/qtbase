@@ -172,8 +172,6 @@
 
 #include "qmovie.h"
 
-#ifndef QT_NO_MOVIE
-
 #include "qglobal.h"
 #include "qimage.h"
 #include "qimagereader.h"
@@ -977,7 +975,7 @@ QList<QByteArray> QMovie::supportedFormats()
 
     const auto doesntSupportAnimation =
             [&buffer](const QByteArray &format) {
-                return !QImageReader(&buffer, format).supportsAnimation();
+                return !QImageReader(&buffer, format).supportsOption(QImageIOHandler::Animation);
             };
 
     list.erase(std::remove_if(list.begin(), list.end(), doesntSupportAnimation), list.end());
@@ -1020,5 +1018,3 @@ void QMovie::setCacheMode(CacheMode cacheMode)
 QT_END_NAMESPACE
 
 #include "moc_qmovie.cpp"
-
-#endif // QT_NO_MOVIE

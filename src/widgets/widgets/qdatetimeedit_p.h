@@ -52,7 +52,6 @@
 //
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
-#include "QtWidgets/qcombobox.h"
 #include "QtWidgets/qcalendarwidget.h"
 #include "QtWidgets/qspinbox.h"
 #include "QtWidgets/qtoolbutton.h"
@@ -62,8 +61,6 @@
 #include "private/qdatetimeparser_p.h"
 
 #include "qdebug.h"
-
-#ifndef QT_NO_DATETIMEEDIT
 
 QT_BEGIN_NAMESPACE
 
@@ -180,7 +177,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_DATETIMEEDIT
 
 #endif // QDATETIMEEDIT_P_H

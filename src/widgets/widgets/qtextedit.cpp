@@ -38,17 +38,22 @@
 ****************************************************************************/
 
 #include "qtextedit_p.h"
+#if QT_CONFIG(lineedit)
 #include "qlineedit.h"
+#endif
+#if QT_CONFIG(textbrowser)
 #include "qtextbrowser.h"
+#endif
 
-#ifndef QT_NO_TEXTEDIT
 #include <qfont.h>
 #include <qpainter.h>
 #include <qevent.h>
 #include <qdebug.h>
 #include <qdrag.h>
 #include <qclipboard.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qstyle.h>
 #include <qtimer.h>
 #ifndef QT_NO_ACCESSIBILITY
@@ -67,12 +72,8 @@
 #include <qtexttable.h>
 #include <qvariant.h>
 
-#endif
-
 QT_BEGIN_NAMESPACE
 
-
-#ifndef QT_NO_TEXTEDIT
 static inline bool shouldEnableInputMethod(QTextEdit *textedit)
 {
     return !textedit->isReadOnly();
@@ -243,7 +244,7 @@ void QTextEditPrivate::pageUpDown(QTextCursor::MoveOperation op, QTextCursor::Mo
     control->setTextCursor(cursor);
 }
 
-#ifndef QT_NO_SCROLLBAR
+#if QT_CONFIG(scrollbar)
 static QSize documentSize(QWidgetTextControl *control)
 {
     QTextDocument *doc = control->document();
@@ -1831,7 +1832,7 @@ void QTextEdit::changeEvent(QEvent *e)
 
 /*! \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QTextEdit::wheelEvent(QWheelEvent *e)
 {
     Q_D(QTextEdit);
@@ -2134,7 +2135,7 @@ void QTextEdit::setReadOnly(bool ro)
     Qt::TextInteractionFlags flags = Qt::NoTextInteraction;
     if (ro) {
         flags = Qt::TextSelectableByMouse;
-#ifndef QT_NO_TEXTBROWSER
+#if QT_CONFIG(textbrowser)
         if (qobject_cast<QTextBrowser *>(this))
             flags |= Qt::TextBrowserInteraction;
 #endif
@@ -2634,8 +2635,6 @@ void QTextEdit::ensureCursorVisible()
     This signal is emitted whenever redo operations become available
     (\a available is true) or unavailable (\a available is false).
 */
-
-#endif // QT_NO_TEXTEDIT
 
 QT_END_NAMESPACE
 

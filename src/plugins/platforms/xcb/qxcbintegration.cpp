@@ -63,7 +63,7 @@
 
 #include <QtGui/private/qguiapplication_p.h>
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 #include <X11/Xlib.h>
 #endif
 
@@ -123,7 +123,7 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
     qApp->setAttribute(Qt::AA_CompressHighFrequencyEvents, true);
 
     qRegisterMetaType<QXcbWindow*>();
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     XInitThreads();
 #endif
     m_nativeInterface.reset(new QXcbNativeInterface);
@@ -178,12 +178,25 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 
     const int numParameters = parameters.size();
     m_connections.reserve(1 + numParameters / 2);
-    m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, displayName);
+    auto conn = new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, displayName);
+    if (conn->isConnected())
+        m_connections << conn;
+    else
+        delete conn;
 
     for (int i = 0; i < numParameters - 1; i += 2) {
         qCDebug(lcQpaScreen) << "connecting to additional display: " << parameters.at(i) << parameters.at(i+1);
         QString display = parameters.at(i) + QLatin1Char(':') + parameters.at(i+1);
-        m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, display.toLatin1().constData());
+        conn = new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, display.toLatin1().constData());
+        if (conn->isConnected())
+            m_connections << conn;
+        else
+            delete conn;
+    }
+
+    if (m_connections.isEmpty()) {
+        qCritical("Could not connect to any X display.");
+        exit(1);
     }
 
     m_fontDatabase.reset(new QGenericUnixFontDatabase());
@@ -214,25 +227,9 @@ QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
     return xcbWindow;
 }
 
-class QXcbForeignWindow : public QXcbWindow
-{
-public:
-    QXcbForeignWindow(QWindow *window, WId nativeHandle)
-        : QXcbWindow(window) { m_window = nativeHandle; }
-    ~QXcbForeignWindow() {}
-    bool isForeignWindow() const override { return true; }
-
-protected:
-    // No-ops
-    void create() override {}
-    void destroy() override {}
-};
-
 QPlatformWindow *QXcbIntegration::createForeignWindow(QWindow *window, WId nativeHandle) const
 {
-    QXcbWindow *xcbWindow = new QXcbForeignWindow(window, nativeHandle);
-    xcbWindow->create();
-    return xcbWindow;
+    return new QXcbForeignWindow(window, nativeHandle);
 }
 
 #ifndef QT_NO_OPENGL
@@ -305,12 +302,15 @@ QAbstractEventDispatcher *QXcbIntegration::createEventDispatcher() const
 
 void QXcbIntegration::initialize()
 {
+    const QLatin1String defaultInputContext("compose");
     // Perform everything that may potentially need the event dispatcher (timers, socket
     // notifiers) here instead of the constructor.
     QString icStr = QPlatformInputContextFactory::requested();
     if (icStr.isNull())
-        icStr = QLatin1String("compose");
+        icStr = defaultInputContext;
     m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
+    if (!m_inputContext && icStr != defaultInputContext && icStr != QLatin1String("none"))
+        m_inputContext.reset(QPlatformInputContextFactory::create(defaultInputContext));
 }
 
 void QXcbIntegration::moveToScreen(QWindow *window, int screen)
@@ -471,7 +471,7 @@ QByteArray QXcbIntegration::wmClass() const
     return m_wmClass;
 }
 
-#if !defined(QT_NO_SESSIONMANAGER) && defined(XCB_USE_SM)
+#if QT_CONFIG(xcb_sm)
 QPlatformSessionManager *QXcbIntegration::createPlatformSessionManager(const QString &id, const QString &key) const
 {
     return new QXcbSessionManager(id, key);

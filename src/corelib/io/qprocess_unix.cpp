@@ -136,7 +136,7 @@ QProcessEnvironment QProcessEnvironment::systemEnvironment()
 
         QByteArray name(entry, equal - entry);
         QByteArray value(equal + 1);
-        env.d->hash.insert(QProcessEnvironmentPrivate::Key(name),
+        env.d->vars.insert(QProcessEnvironmentPrivate::Key(name),
                            QProcessEnvironmentPrivate::Value(value));
     }
     return env;
@@ -145,10 +145,6 @@ QProcessEnvironment QProcessEnvironment::systemEnvironment()
 #endif // !defined(Q_OS_DARWIN)
 
 #if QT_CONFIG(process)
-
-// POSIX requires PIPE_BUF to be 512 or larger
-// so we will use 512
-static const int errorBufferMax = 512;
 
 namespace {
 struct QProcessPoller
@@ -338,7 +334,7 @@ bool QProcessPrivate::openChannel(Channel &channel)
     }
 }
 
-static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Hash &environment, int *envc)
+static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Map &environment, int *envc)
 {
     *envc = 0;
     if (environment.isEmpty())
@@ -348,10 +344,10 @@ static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Hash &environm
     envp[environment.count()] = 0;
     envp[environment.count() + 1] = 0;
 
-    QProcessEnvironmentPrivate::Hash::ConstIterator it = environment.constBegin();
-    const QProcessEnvironmentPrivate::Hash::ConstIterator end = environment.constEnd();
+    auto it = environment.constBegin();
+    const auto end = environment.constEnd();
     for ( ; it != end; ++it) {
-        QByteArray key = it.key().key;
+        QByteArray key = it.key();
         QByteArray value = it.value().bytes();
         key.reserve(key.length() + 1 + value.length());
         key.append('=');
@@ -436,7 +432,7 @@ void QProcessPrivate::startProcess()
     char **envp = 0;
     if (environment.d.constData()) {
         QProcessEnvironmentPrivate::MutexLocker locker(environment.d);
-        envp = _q_dupEnvironment(environment.d.constData()->hash, &envc);
+        envp = _q_dupEnvironment(environment.d.constData()->vars, &envc);
     }
 
     // Encode the working directory if it's non-empty, otherwise just pass 0.
@@ -548,11 +544,18 @@ void QProcessPrivate::startProcess()
     }
 }
 
+struct ChildError
+{
+    int code;
+    char function[8];
+};
+
 void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv, char **envp)
 {
     ::signal(SIGPIPE, SIG_DFL);         // reset the signal that we ignored
 
     Q_Q(QProcess);
+    ChildError error = { 0, {} };       // force zeroing of function[8]
 
     // copy the stdin socket if asked to (without closing on exec)
     if (inputChannelMode != QProcess::ForwardedInputChannel)
@@ -575,9 +578,9 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     qt_safe_close(childStartedPipe[0]);
 
     // enter the working directory
-    const char *callthatfailed = "chdir: ";
     if (workingDir && QT_CHDIR(workingDir) == -1) {
         // failed, stop the process
+        strcpy(error.function, "chdir");
         goto report_errno;
     }
 
@@ -587,7 +590,7 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     // execute the process
     if (!envp) {
         qt_safe_execvp(argv[0], argv);
-        callthatfailed = "execvp: ";
+        strcpy(error.function, "execvp");
     } else {
         if (path) {
             char **arg = path;
@@ -605,33 +608,22 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
 #endif
             qt_safe_execve(argv[0], argv, envp);
         }
-        callthatfailed = "execve: ";
+        strcpy(error.function, "execve");
     }
 
     // notify failure
-    // we're running in the child process, so we don't need to be thread-safe;
-    // we can use strerror
+    // don't use strerror or any other routines that may allocate memory, since
+    // some buggy libc versions can deadlock on locked mutexes.
 report_errno:
-    const char *msg = strerror(errno);
-#if defined (QPROCESS_DEBUG)
-    fprintf(stderr, "QProcessPrivate::execChild() failed (%s), notifying parent process\n", msg);
-#endif
-    qt_safe_write(childStartedPipe[1], callthatfailed, strlen(callthatfailed));
-    qt_safe_write(childStartedPipe[1], msg, strlen(msg));
-    qt_safe_close(childStartedPipe[1]);
+    error.code = errno;
+    qt_safe_write(childStartedPipe[1], &error, sizeof(error));
     childStartedPipe[1] = -1;
 }
 
 bool QProcessPrivate::processStarted(QString *errorMessage)
 {
-    char buf[errorBufferMax];
-    int i = 0;
-    int ret;
-    do {
-        ret = qt_safe_read(childStartedPipe[0], buf + i, sizeof buf - i);
-        if (ret > 0)
-            i += ret;
-    } while (ret > 0 && i < int(sizeof buf));
+    ChildError buf;
+    int ret = qt_safe_read(childStartedPipe[0], &buf, sizeof(buf));
 
     if (startupSocketNotifier) {
         startupSocketNotifier->setEnabled(false);
@@ -646,10 +638,10 @@ bool QProcessPrivate::processStarted(QString *errorMessage)
 #endif
 
     // did we read an error message?
-    if ((i > 0) && errorMessage)
-        *errorMessage = QString::fromLocal8Bit(buf, i);
+    if (ret > 0 && errorMessage)
+        *errorMessage = QLatin1String(buf.function) + QLatin1String(": ") + qt_error_string(buf.code);
 
-    return i <= 0;
+    return ret <= 0;
 }
 
 qint64 QProcessPrivate::bytesAvailableInChannel(const Channel *channel) const
@@ -800,6 +792,10 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
         if (qt_pollfd_check(poller.stdinPipe(), POLLOUT))
             _q_canWrite();
 
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return false;
+
         if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())
                 return false;
@@ -846,6 +842,10 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
         if (qt_pollfd_check(poller.stderrPipe(), POLLIN))
             _q_canReadStandardError();
 
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return false;
+
         if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())
                 return false;
@@ -890,6 +890,10 @@ bool QProcessPrivate::waitForFinished(int msecs)
 
         if (qt_pollfd_check(poller.stderrPipe(), POLLIN))
             _q_canReadStandardError();
+
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return true;
 
         if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())

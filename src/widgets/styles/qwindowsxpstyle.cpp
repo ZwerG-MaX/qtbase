@@ -57,14 +57,28 @@
 #include <qpa/qplatformnativeinterface.h>
 
 #include <qdesktopwidget.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(tabbar)
 #include <qtabbar.h>
+#endif
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
 #include <qheaderview.h>
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(stackedwidget)
 #include <qstackedwidget.h>
+#endif
 #if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
 #endif
@@ -371,10 +385,10 @@ bool QWindowsXPStylePrivate::isLineEditBaseColorSet(const QStyleOption *option, 
         // Since spin box includes a line edit we need to resolve the palette mask also from
         // the parent, as while the color is always correct on the palette supplied by panel,
         // the mask can still be empty. If either mask specifies custom base color, use that.
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
         if (const QAbstractSpinBox *spinbox = qobject_cast<QAbstractSpinBox*>(widget->parentWidget()))
             resolveMask |= spinbox->palette().resolve();
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
     }
     return (resolveMask & (1 << QPalette::Base)) != 0;
 }
@@ -1145,21 +1159,21 @@ void QWindowsXPStyle::polish(QWidget *widget)
 #endif
         || qobject_cast<QToolButton*>(widget)
         || qobject_cast<QTabBar*>(widget)
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
         || qobject_cast<QComboBox*>(widget)
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
         || qobject_cast<QScrollBar*>(widget)
         || qobject_cast<QSlider*>(widget)
         || qobject_cast<QHeaderView*>(widget)
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
         || qobject_cast<QAbstractSpinBox*>(widget)
         || qobject_cast<QSpinBox*>(widget)
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
         ) {
         widget->setAttribute(Qt::WA_Hover);
     }
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     if (qobject_cast<QRubberBand*>(widget)) {
         widget->setWindowOpacity(0.6);
     }
@@ -1194,7 +1208,7 @@ void QWindowsXPStyle::polish(QPalette &pal)
 /*! \reimp */
 void QWindowsXPStyle::unpolish(QWidget *widget)
 {
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     if (qobject_cast<QRubberBand*>(widget)) {
         widget->setWindowOpacity(1.0);
     }
@@ -1220,16 +1234,16 @@ void QWindowsXPStyle::unpolish(QWidget *widget)
 #endif
         || qobject_cast<QToolButton*>(widget)
         || qobject_cast<QTabBar*>(widget)
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
         || qobject_cast<QComboBox*>(widget)
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
         || qobject_cast<QScrollBar*>(widget)
         || qobject_cast<QSlider*>(widget)
         || qobject_cast<QHeaderView*>(widget)
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
         || qobject_cast<QAbstractSpinBox*>(widget)
         || qobject_cast<QSpinBox*>(widget)
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
         ) {
         widget->setAttribute(Qt::WA_Hover, false);
     }
@@ -1509,10 +1523,9 @@ case PE_Frame:
                 return;
             } else if (fillType == BT_NONE) {
                 return;
-            } else {
-                break;
             }
         }
+        break;
     }
     case PE_FrameLineEdit: {
         // we try to check if this lineedit is a delegate on a QAbstractItemView-derived class.
@@ -2287,7 +2300,7 @@ void QWindowsXPStyle::drawControl(ControlElement element, const QStyleOption *op
                 drawItemText(p, mbi->rect, alignment, mbi->palette, mbi->state & State_Enabled, mbi->text, textRole);
         }
         return;
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     case CE_DockWidgetTitle:
         if (const QStyleOptionDockWidget *dwOpt = qstyleoption_cast<const QStyleOptionDockWidget *>(option))
         {
@@ -2412,8 +2425,8 @@ void QWindowsXPStyle::drawControl(ControlElement element, const QStyleOption *op
             return;
         }
         break;
-#endif // QT_NO_DOCKWIDGET
-#ifndef QT_NO_RUBBERBAND
+#endif // QT_CONFIG(dockwidget)
+#if QT_CONFIG(rubberband)
     case CE_RubberBand:
         if (qstyleoption_cast<const QStyleOptionRubberBand *>(option)) {
             QColor highlight = option->palette.color(QPalette::Active, QPalette::Highlight);
@@ -2428,7 +2441,8 @@ void QWindowsXPStyle::drawControl(ControlElement element, const QStyleOption *op
             p->restore();
             return;
         }
-#endif // QT_NO_RUBBERBAND
+        break;
+#endif // QT_CONFIG(rubberband)
     case CE_HeaderEmptyArea:
         if (option->state & State_Horizontal)
         {
@@ -2495,7 +2509,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         flags |= State_MouseOver;
 
     switch (cc) {
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
     case CC_SpinBox:
         if (const QStyleOptionSpinBox *sb = qstyleoption_cast<const QStyleOptionSpinBox *>(option))
         {
@@ -2547,8 +2561,8 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
             }
         }
         break;
-#endif // QT_NO_SPINBOX
-#ifndef QT_NO_COMBOBOX
+#endif // QT_CONFIG(spinbox)
+#if QT_CONFIG(combobox)
     case CC_ComboBox:
         if (const QStyleOptionComboBox *cmb = qstyleoption_cast<const QStyleOptionComboBox *>(option))
         {
@@ -2599,7 +2613,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
             }
         }
         break;
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
     case CC_ScrollBar:
         if (const QStyleOptionSlider *scrollbar = qstyleoption_cast<const QStyleOptionSlider *>(option))
         {
@@ -2710,7 +2724,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         }
         break;
 
-#ifndef QT_NO_SLIDER
+#if QT_CONFIG(slider)
     case CC_Slider:
         if (const QStyleOptionSlider *slider = qstyleoption_cast<const QStyleOptionSlider *>(option))
         {
@@ -2845,7 +2859,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         }
         break;
 #endif
-#ifndef QT_NO_TOOLBUTTON
+#if QT_CONFIG(toolbutton)
     case CC_ToolButton:
         if (const QStyleOptionToolButton *toolbutton
             = qstyleoption_cast<const QStyleOptionToolButton *>(option)) {
@@ -2959,7 +2973,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
             }
         }
         break;
-#endif // QT_NO_TOOLBUTTON
+#endif // QT_CONFIG(toolbutton)
 
     case CC_TitleBar:
         {
@@ -3162,7 +3176,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         }
         break;
 
-#ifndef QT_NO_MDIAREA
+#if QT_CONFIG(mdiarea)
     case CC_MdiControls:
         {
             QRect buttonRect;
@@ -3218,13 +3232,13 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
             }
         }
         break;
-#endif //QT_NO_MDIAREA
-#ifndef QT_NO_DIAL
+#endif // QT_CONFIG(mdiarea)
+#if QT_CONFIG(dial)
     case CC_Dial:
         if (const QStyleOptionSlider *dial = qstyleoption_cast<const QStyleOptionSlider *>(option))
             QStyleHelper::drawDial(dial, p);
         break;
-#endif // QT_NO_DIAL
+#endif // QT_CONFIG(dial)
     default:
         QWindowsStyle::drawComplexControl(cc, option, p, widget);
         break;
@@ -3558,7 +3572,7 @@ QRect QWindowsXPStyle::subControlRect(ComplexControl cc, const QStyleOptionCompl
             }
         }
         break;
-#ifndef QT_NO_MDIAREA
+#if QT_CONFIG(mdiarea)
     case CC_MdiControls:
     {
         int numSubControls = 0;
@@ -3595,7 +3609,7 @@ QRect QWindowsXPStyle::subControlRect(ComplexControl cc, const QStyleOptionCompl
         rect = QRect(offset, 0, buttonWidth, option->rect.height());
         break;
     }
-#endif // QT_NO_MDIAREA
+#endif // QT_CONFIG(mdiarea)
 
     default:
         rect = visualRect(option->direction, option->rect,
@@ -3649,7 +3663,7 @@ QSize QWindowsXPStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt
     case CT_Menu:
         sz += QSize(1, 0);
         break;
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
     case CT_MenuBarItem:
         if (!sz.isEmpty())
             sz += QSize(windowsItemHMargin * 5 + 1, 6);
@@ -3752,13 +3766,12 @@ int QWindowsXPStyle::styleHint(StyleHint hint, const QStyleOption *option, const
             }
         }
         break;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     case SH_RubberBand_Mask:
-        if (qstyleoption_cast<const QStyleOptionRubberBand *>(option)) {
+        if (qstyleoption_cast<const QStyleOptionRubberBand *>(option))
             res = 0;
-            break;
-        }
-#endif // QT_NO_RUBBERBAND
+        break;
+#endif // QT_CONFIG(rubberband)
 
     case SH_ItemView_DrawDelegateFrame:
         res = 1;

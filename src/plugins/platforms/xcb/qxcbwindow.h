@@ -191,6 +191,7 @@ protected:
 
     QXcbScreen *parentScreen();
 
+    QXcbScreen *initialScreen() const;
     void changeNetWmState(bool set, xcb_atom_t one, xcb_atom_t two = 0);
     NetWmStates netWmStates();
     void setNetWmStates(NetWmStates);
@@ -275,6 +276,18 @@ protected:
 
     QXcbSyncWindowRequest *m_pendingSyncRequest = nullptr;
     xcb_cursor_t m_currentBitmapCursor = XCB_CURSOR_NONE;
+};
+
+class QXcbForeignWindow : public QXcbWindow
+{
+public:
+    QXcbForeignWindow(QWindow *window, WId nativeHandle)
+        : QXcbWindow(window) { m_window = nativeHandle; }
+    ~QXcbForeignWindow();
+    bool isForeignWindow() const override { return true; }
+
+protected:
+    void create() override {} // No-op
 };
 
 QT_END_NAMESPACE

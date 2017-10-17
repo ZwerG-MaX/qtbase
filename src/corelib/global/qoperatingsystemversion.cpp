@@ -175,7 +175,10 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
     version.m_major = -1;
     version.m_minor = -1;
 
-    static const int versions[][2] = {
+    static const struct {
+        uint major : 4;
+        uint minor : 4;
+    } versions[] = {
         { 1, 0 }, // API level 1
         { 1, 1 }, // API level 2
         { 1, 5 }, // API level 3
@@ -201,14 +204,15 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
         { 6, 0 }, // API level 23
         { 7, 0 }, // API level 24
         { 7, 1 }, // API level 25
+        { 8, 0 }, // API level 26
     };
 
     // This will give us at least the first 2 version components
     const size_t versionIdx = size_t(QJNIObjectPrivate::getStaticField<jint>(
         "android/os/Build$VERSION", "SDK_INT")) - 1;
     if (versionIdx < sizeof(versions) / sizeof(versions[0])) {
-        version.m_major = versions[versionIdx][0];
-        version.m_minor = versions[versionIdx][1];
+        version.m_major = versions[versionIdx].major;
+        version.m_minor = versions[versionIdx].minor;
     }
 
     // API level 6 was exactly version 2.0.1
@@ -333,6 +337,7 @@ QString QOperatingSystemVersion::name() const
     }
 }
 
+#ifdef Q_COMPILER_INITIALIZER_LISTS
 /*!
     \fn bool QOperatingSystemVersion::isAnyOfType(std::initializer_list<OSType> types) const
 
@@ -347,6 +352,7 @@ bool QOperatingSystemVersion::isAnyOfType(std::initializer_list<OSType> types) c
     }
     return false;
 }
+#endif
 
 /*!
     \variable QOperatingSystemVersion::Windows7
@@ -411,6 +417,14 @@ const QOperatingSystemVersion QOperatingSystemVersion::OSXElCapitan =
  */
 const QOperatingSystemVersion QOperatingSystemVersion::MacOSSierra =
     QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 12);
+
+/*!
+    \variable QOperatingSystemVersion::MacOSHighSierra
+    \brief a version corresponding to macOS High Sierra (version 10.13).
+    \since 5.9.1
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::MacOSHighSierra =
+    QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 13);
 
 /*!
     \variable QOperatingSystemVersion::AndroidJellyBean
@@ -487,5 +501,13 @@ const QOperatingSystemVersion QOperatingSystemVersion::AndroidNougat =
  */
 const QOperatingSystemVersion QOperatingSystemVersion::AndroidNougat_MR1 =
     QOperatingSystemVersion(QOperatingSystemVersion::Android, 7, 1);
+
+/*!
+    \variable QOperatingSystemVersion::AndroidOreo
+    \brief a version corresponding to Android Oreo (version 8.0, API level 26).
+    \since 5.9.2
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::AndroidOreo =
+    QOperatingSystemVersion(QOperatingSystemVersion::Android, 8, 0);
 
 QT_END_NAMESPACE

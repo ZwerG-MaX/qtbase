@@ -46,7 +46,9 @@
 #include <qdebug.h>
 #include <qdrag.h>
 #include <qclipboard.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qstyle.h>
 #include <qtimer.h>
 #include "private/qtextdocumentlayout_p.h"
@@ -62,8 +64,6 @@
 #include <limits.h>
 #include <qtexttable.h>
 #include <qvariant.h>
-
-#ifndef QT_NO_TEXTEDIT
 
 QT_BEGIN_NAMESPACE
 
@@ -947,7 +947,7 @@ void QPlainTextEditPrivate::pageUpDown(QTextCursor::MoveOperation op, QTextCurso
     }
 }
 
-#ifndef QT_NO_SCROLLBAR
+#if QT_CONFIG(scrollbar)
 
 void QPlainTextEditPrivate::_q_adjustScrollbars()
 {
@@ -1978,7 +1978,7 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
             }
 
 
-            if (!placeholderText().isEmpty() && document()->isEmpty()) {
+            if (!placeholderText().isEmpty() && document()->isEmpty() && layout->preeditAreaText().isEmpty()) {
               Q_D(QPlainTextEdit);
               QColor col = d->control->palette().text().color();
               col.setAlpha(128);
@@ -2296,7 +2296,7 @@ void QPlainTextEdit::changeEvent(QEvent *e)
 
 /*! \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QPlainTextEdit::wheelEvent(QWheelEvent *e)
 {
     Q_D(QPlainTextEdit);
@@ -3194,5 +3194,3 @@ QT_END_NAMESPACE
 
 #include "moc_qplaintextedit.cpp"
 #include "moc_qplaintextedit_p.cpp"
-
-#endif // QT_NO_TEXTEDIT

@@ -39,8 +39,6 @@
 
 #include "qcalendarwidget.h"
 
-#ifndef QT_NO_CALENDARWIDGET
-
 #include <qabstractitemmodel.h>
 #include <qitemdelegate.h>
 #include <qdatetime.h>
@@ -832,7 +830,12 @@ class StaticDayOfWeekAssociativeArray {
     static Q_DECL_CONSTEXPR int day2idx(Qt::DayOfWeek day) Q_DECL_NOTHROW { return int(day) - 1; } // alt: day % 7
 public:
     Q_DECL_CONSTEXPR StaticDayOfWeekAssociativeArray() Q_DECL_NOEXCEPT_EXPR(noexcept(T()))
-        : contained(), data() {}
+#ifdef Q_COMPILER_CONSTEXPR
+        : contained{}, data{}   // arrays require uniform initialization
+#else
+        : contained(), data()
+#endif
+    {}
 
     Q_DECL_CONSTEXPR bool contains(Qt::DayOfWeek day) const Q_DECL_NOTHROW { return contained[day2idx(day)]; }
     Q_DECL_CONSTEXPR const T &value(Qt::DayOfWeek day) const Q_DECL_NOTHROW { return data[day2idx(day)]; }
@@ -957,7 +960,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
     void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent(QWheelEvent *event) Q_DECL_OVERRIDE;
 #endif
     void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE;
@@ -1412,7 +1415,7 @@ void QCalendarView::keyPressEvent(QKeyEvent *event)
     QTableView::keyPressEvent(event);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QCalendarView::wheelEvent(QWheelEvent *event)
 {
     const int numDegrees = event->delta() / 8;
@@ -3124,5 +3127,3 @@ QT_END_NAMESPACE
 
 #include "qcalendarwidget.moc"
 #include "moc_qcalendarwidget.cpp"
-
-#endif //QT_NO_CALENDARWIDGET

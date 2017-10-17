@@ -576,6 +576,8 @@ void QWindow::setVisible(bool visible)
             QGuiApplicationPrivate::showModalWindow(this);
         else
             QGuiApplicationPrivate::hideModalWindow(this);
+    } else if (visible && QGuiApplication::modalWindow()) {
+        QGuiApplicationPrivate::updateBlockedStatus(this);
     }
 
 #ifndef QT_NO_CURSOR
@@ -1757,6 +1759,7 @@ void QWindow::resize(int w, int h)
 void QWindow::resize(const QSize &newSize)
 {
     Q_D(QWindow);
+    d->positionPolicy = QWindowPrivate::WindowFrameExclusive;
     if (d->platformWindow) {
         d->platformWindow->setGeometry(QHighDpi::toNativePixels(QRect(position(), newSize), this));
     } else {
@@ -2220,7 +2223,7 @@ bool QWindow::event(QEvent *ev)
 #endif
         break; }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         wheelEvent(static_cast<QWheelEvent*>(ev));
         break;
@@ -2254,7 +2257,7 @@ bool QWindow::event(QEvent *ev)
         break;
     }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     case QEvent::TabletPress:
     case QEvent::TabletMove:
     case QEvent::TabletRelease:
@@ -2418,7 +2421,7 @@ void QWindow::mouseMoveEvent(QMouseEvent *ev)
     ev->ignore();
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 /*!
     Override this to handle mouse wheel or other wheel events (\a ev).
 */
@@ -2426,7 +2429,7 @@ void QWindow::wheelEvent(QWheelEvent *ev)
 {
     ev->ignore();
 }
-#endif //QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 /*!
     Override this to handle touch events (\a ev).
@@ -2436,7 +2439,7 @@ void QWindow::touchEvent(QTouchEvent *ev)
     ev->ignore();
 }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 /*!
     Override this to handle tablet press, move, and release events (\a ev).
 

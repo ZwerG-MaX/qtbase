@@ -77,7 +77,7 @@ public:
 
     enum MetaEnumTest_Enum0 { MetaEnumTest_Enum0_dummy = 2, MetaEnumTest_Enum0_value = 42, MetaEnsureSignedEnum0 = -1 };
     Q_ENUM(MetaEnumTest_Enum0)
-    enum MetaEnumTest_Enum1 { MetaEnumTest_Enum1_value = 42, MetaEnumTest_Enum1_bigValue = (Q_INT64_C(1) << 33) + 50 };
+    enum MetaEnumTest_Enum1 : qint64 { MetaEnumTest_Enum1_value = 42, MetaEnumTest_Enum1_bigValue = (Q_INT64_C(1) << 33) + 50 };
     Q_ENUM(MetaEnumTest_Enum1)
 
     enum MetaEnumTest_Enum3 ENUM_SIZE(qint64) { MetaEnumTest_Enum3_value = -47, MetaEnumTest_Enum3_bigValue = (Q_INT64_C(1) << 56) + 5, MetaEnumTest_Enum3_bigNegValue = -(Q_INT64_C(1) << 56) - 3 };
@@ -2558,6 +2558,8 @@ void tst_QVariant::variantMap()
     QVariant v3 = QVariant(QMetaType::type("QMap<QString, QVariant>"), &map);
     QCOMPARE(qvariant_cast<QVariantMap>(v3).value("test").toInt(), 42);
 
+    QCOMPARE(v, QVariant(v.toHash()));
+
     // multi-keys
     map.insertMulti("test", 47);
     v = map;
@@ -2565,6 +2567,8 @@ void tst_QVariant::variantMap()
     QCOMPARE(map2, map);
     map2 = v.toMap();
     QCOMPARE(map2, map);
+
+    QCOMPARE(v, QVariant(v.toHash()));
 }
 
 void tst_QVariant::variantHash()
@@ -2587,6 +2591,8 @@ void tst_QVariant::variantHash()
     QVariant v3 = QVariant(QMetaType::type("QHash<QString, QVariant>"), &hash);
     QCOMPARE(qvariant_cast<QVariantHash>(v3).value("test").toInt(), 42);
 
+    QCOMPARE(v, QVariant(v.toMap()));
+
     // multi-keys
     hash.insertMulti("test", 47);
     v = hash;
@@ -2594,6 +2600,8 @@ void tst_QVariant::variantHash()
     QCOMPARE(hash2, hash);
     hash2 = v.toHash();
     QCOMPARE(hash2, hash);
+
+    QCOMPARE(v, QVariant(v.toMap()));
 }
 
 class CustomQObject : public QObject {
@@ -4632,7 +4640,7 @@ void tst_QVariant::pairElements()
 
 enum EnumTest_Enum0 { EnumTest_Enum0_value = 42, EnumTest_Enum0_negValue = -8 };
 Q_DECLARE_METATYPE(EnumTest_Enum0)
-enum EnumTest_Enum1 { EnumTest_Enum1_value = 42, EnumTest_Enum1_bigValue = (Q_INT64_C(1) << 33) + 50 };
+enum EnumTest_Enum1 : qint64 { EnumTest_Enum1_value = 42, EnumTest_Enum1_bigValue = (Q_INT64_C(1) << 33) + 50 };
 Q_DECLARE_METATYPE(EnumTest_Enum1)
 
 #if defined(Q_COMPILER_CLASS_ENUM)

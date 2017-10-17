@@ -51,6 +51,8 @@
 #include <initializer_list>
 #endif
 
+#include <algorithm>
+
 #if defined(Q_CC_MSVC)
 #pragma warning( push )
 #pragma warning( disable : 4311 ) // disable pointer truncation warning
@@ -371,7 +373,7 @@ public:
         typedef const T *pointer;
         typedef const T &reference;
 
-        inline const_iterator() : i(Q_NULLPTR) { }
+        Q_DECL_CONSTEXPR inline const_iterator() : i(Q_NULLPTR) { }
         explicit inline const_iterator(void *node)
             : i(reinterpret_cast<QHashData::Node *>(node)) { }
 #ifdef QT_STRICT_ITERATORS
@@ -385,8 +387,8 @@ public:
         inline const T &value() const { return concrete(i)->value; }
         inline const T &operator*() const { return concrete(i)->value; }
         inline const T *operator->() const { return &concrete(i)->value; }
-        inline bool operator==(const const_iterator &o) const { return i == o.i; }
-        inline bool operator!=(const const_iterator &o) const { return i != o.i; }
+        Q_DECL_CONSTEXPR inline bool operator==(const const_iterator &o) const { return i == o.i; }
+        Q_DECL_CONSTEXPR inline bool operator!=(const const_iterator &o) const { return i != o.i; }
 
         inline const_iterator &operator++() {
             i = QHashData::nextNode(i);
@@ -936,18 +938,38 @@ Q_OUTOFLINE_TEMPLATE bool QHash<Key, T>::operator==(const QHash &other) const
     const_iterator it = begin();
 
     while (it != end()) {
-        const Key &akey = it.key();
+        // Build two equal ranges for i.key(); one for *this and one for other.
+        // For *this we can avoid a lookup via equal_range, as we know the beginning of the range.
+        auto thisEqualRangeEnd = it;
+        while (thisEqualRangeEnd != end() && it.key() == thisEqualRangeEnd.key())
+            ++thisEqualRangeEnd;
 
-        const_iterator it2 = other.find(akey);
-        do {
-            if (it2 == other.end() || !(it2.key() == akey))
-                return false;
-            if (!(it.value() == it2.value()))
-                return false;
-            ++it;
-            ++it2;
-        } while (it != end() && it.key() == akey);
+        const auto otherEqualRange = other.equal_range(it.key());
+
+        if (std::distance(it, thisEqualRangeEnd) != std::distance(otherEqualRange.first, otherEqualRange.second))
+            return false;
+
+        // Keys in the ranges are equal by construction; this checks only the values.
+        //
+        // When using the 3-arg std::is_permutation, MSVC will emit warning C4996,
+        // passing an unchecked iterator to a Standard Library algorithm. We don't
+        // want to suppress the warning, and we can't use stdext::make_checked_array_iterator
+        // because QHash::(const_)iterator does not work with size_t and thus will
+        // emit more warnings. Use the 4-arg std::is_permutation instead (which
+        // is supported since MSVC 2015).
+        //
+        // ### Qt 6: if C++14 library support is a mandated minimum, remove the ifdef for MSVC.
+        if (!std::is_permutation(it, thisEqualRangeEnd, otherEqualRange.first
+#if defined(Q_CC_MSVC) && _MSC_VER >= 1900
+                                 , otherEqualRange.second
+#endif
+                                 )) {
+            return false;
+        }
+
+        it = thisEqualRangeEnd;
     }
+
     return true;
 }
 

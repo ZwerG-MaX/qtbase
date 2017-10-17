@@ -245,9 +245,15 @@ static int doLink(int argc, char **argv)
 static int installFile(const QString &source, const QString &target, bool exe = false)
 {
     QFile sourceFile(source);
-
-    QFile::remove(target);
-    QDir::root().mkpath(QFileInfo(target).absolutePath());
+    QFile targetFile(target);
+    if (targetFile.exists()) {
+#ifdef Q_OS_WIN
+        targetFile.setPermissions(targetFile.permissions() | QFile::WriteUser);
+#endif
+        QFile::remove(target);
+    } else {
+        QDir::root().mkpath(QFileInfo(target).absolutePath());
+    }
 
     if (!sourceFile.copy(target)) {
         fprintf(stderr, "Error copying %s to %s: %s\n", source.toLatin1().constData(), qPrintable(target), qPrintable(sourceFile.errorString()));
@@ -255,7 +261,6 @@ static int installFile(const QString &source, const QString &target, bool exe = 
     }
 
     if (exe) {
-        QFile targetFile(target);
         if (!targetFile.setPermissions(sourceFile.permissions() | QFileDevice::ExeOwner | QFileDevice::ExeUser |
                                        QFileDevice::ExeGroup | QFileDevice::ExeOther)) {
             fprintf(stderr, "Error setting execute permissions on %s: %s\n",
@@ -266,14 +271,24 @@ static int installFile(const QString &source, const QString &target, bool exe = 
 
     // Copy file times
     QString error;
+#ifdef Q_OS_WIN
+    const QFile::Permissions permissions = targetFile.permissions();
+    const bool readOnly = !(permissions & QFile::WriteUser);
+    if (readOnly)
+        targetFile.setPermissions(permissions | QFile::WriteUser);
+#endif
     if (!IoUtils::touchFile(target, sourceFile.fileName(), &error)) {
         fprintf(stderr, "%s", qPrintable(error));
         return 3;
     }
+#ifdef Q_OS_WIN
+    if (readOnly)
+        targetFile.setPermissions(permissions);
+#endif
     return 0;
 }
 
-static int installDirectory(const QString &source, const QString &target)
+static int installFileOrDirectory(const QString &source, const QString &target)
 {
     QFileInfo fi(source);
     if (false) {
@@ -299,7 +314,7 @@ static int installDirectory(const QString &source, const QString &target)
             const QFileInfo &entry = it.fileInfo();
             const QString &entryTarget = target + QDir::separator() + entry.fileName();
 
-            const int recursionResult = installDirectory(entry.filePath(), entryTarget);
+            const int recursionResult = installFileOrDirectory(entry.filePath(), entryTarget);
             if (recursionResult != 0)
                 return recursionResult;
         }
@@ -313,23 +328,24 @@ static int installDirectory(const QString &source, const QString &target)
 
 static int doQInstall(int argc, char **argv)
 {
-    if (argc != 3) {
-        fprintf(stderr, "Error: this qinstall command requires exactly three arguments (type, source, destination)\n");
+    bool installExecutable = false;
+    if (argc == 3 && !strcmp(argv[0], "-exe")) {
+        installExecutable = true;
+        --argc;
+        ++argv;
+    }
+
+    if (argc != 2 && !installExecutable) {
+        fprintf(stderr, "Error: usage: [-exe] source target\n");
         return 3;
     }
 
-    const QString source = QString::fromLocal8Bit(argv[1]);
-    const QString target = QString::fromLocal8Bit(argv[2]);
+    const QString source = QString::fromLocal8Bit(argv[0]);
+    const QString target = QString::fromLocal8Bit(argv[1]);
 
-    if (!strcmp(argv[0], "file"))
-        return installFile(source, target);
-    if (!strcmp(argv[0], "program"))
+    if (installExecutable)
         return installFile(source, target, /*exe=*/true);
-    if (!strcmp(argv[0], "directory"))
-        return installDirectory(source, target);
-
-    fprintf(stderr, "Error: Unsupported qinstall command type %s\n", argv[0]);
-    return 3;
+    return installFileOrDirectory(source, target);
 }
 
 

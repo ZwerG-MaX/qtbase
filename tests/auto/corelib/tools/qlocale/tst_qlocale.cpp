@@ -137,6 +137,8 @@ private slots:
     void textDirection_data();
     void textDirection();
 
+    void bcp47Name();
+
 private:
     QString m_decimal, m_thousand, m_sdate, m_ldate, m_time;
     QString m_sysapp;
@@ -920,6 +922,18 @@ void tst_QLocale::strtod_data()
     QTest::addColumn<int>("processed");
     QTest::addColumn<bool>("ok");
 
+    // plain numbers, success
+    QTest::newRow("0")               << QString("0")               << 0.0           << 1  << true;
+    QTest::newRow("0.")              << QString("0.")              << 0.0           << 2  << true;
+    QTest::newRow("0.0")             << QString("0.0")             << 0.0           << 3  << true;
+    QTest::newRow("0e+0")            << QString("0e+0")            << 0.0           << 4  << true;
+    QTest::newRow("0e-0")            << QString("0e-0")            << 0.0           << 4  << true;
+    QTest::newRow("0e+1")            << QString("0e+1")            << 0.0           << 4  << true;
+    QTest::newRow("0e-1")            << QString("0e-1")            << 0.0           << 4  << true;
+    QTest::newRow("0E+0")            << QString("0E+0")            << 0.0           << 4  << true;
+    QTest::newRow("0E-0")            << QString("0E-0")            << 0.0           << 4  << true;
+    QTest::newRow("0E+1")            << QString("0E+1")            << 0.0           << 4  << true;
+    QTest::newRow("0E-1")            << QString("0E-1")            << 0.0           << 4  << true;
     QTest::newRow("3.4")             << QString("3.4")             << 3.4           << 3  << true;
     QTest::newRow("0.035003945")     << QString("0.035003945")     << 0.035003945   << 11 << true;
     QTest::newRow("3.5003945e-2")    << QString("3.5003945e-2")    << 0.035003945   << 12 << true;
@@ -928,6 +942,10 @@ void tst_QLocale::strtod_data()
     QTest::newRow("12456789012")     << QString("12456789012")     << 12456789012.0 << 11 << true;
     QTest::newRow("1.2456789012e10") << QString("1.2456789012e10") << 12456789012.0 << 15 << true;
 
+    // starts with junk, fails
+    QTest::newRow("a0")               << QString("a0")               << 0.0 << 0 << false;
+    QTest::newRow("a0.")              << QString("a0.")              << 0.0 << 0 << false;
+    QTest::newRow("a0.0")             << QString("a0.0")             << 0.0 << 0 << false;
     QTest::newRow("a3.4")             << QString("a3.4")             << 0.0 << 0 << false;
     QTest::newRow("b0.035003945")     << QString("b0.035003945")     << 0.0 << 0 << false;
     QTest::newRow("c3.5003945e-2")    << QString("c3.5003945e-2")    << 0.0 << 0 << false;
@@ -936,7 +954,18 @@ void tst_QLocale::strtod_data()
     QTest::newRow("f12456789012")     << QString("f12456789012")     << 0.0 << 0 << false;
     QTest::newRow("g1.2456789012e10") << QString("g1.2456789012e10") << 0.0 << 0 << false;
 
-    QTest::newRow("3.4a")             << QString("3.4a")             << 3.4           << 3  << true;
+    // ends with junk, success
+    QTest::newRow("0a")               << QString("0a")               << 0.0           << 1  << true;
+    QTest::newRow("0.a")              << QString("0.a")              << 0.0           << 2  << true;
+    QTest::newRow("0.0a")             << QString("0.0a")             << 0.0           << 3  << true;
+    QTest::newRow("0e+0a")            << QString("0e+0a")            << 0.0           << 4  << true;
+    QTest::newRow("0e-0a")            << QString("0e-0a")            << 0.0           << 4  << true;
+    QTest::newRow("0e+1a")            << QString("0e+1a")            << 0.0           << 4  << true;
+    QTest::newRow("0e-1a")            << QString("0e-1a")            << 0.0           << 4  << true;
+    QTest::newRow("0E+0a")            << QString("0E+0a")            << 0.0           << 4  << true;
+    QTest::newRow("0E-0a")            << QString("0E-0a")            << 0.0           << 4  << true;
+    QTest::newRow("0E+1a")            << QString("0E+1a")            << 0.0           << 4  << true;
+    QTest::newRow("0E-1a")            << QString("0E-1a")            << 0.0           << 4  << true;
     QTest::newRow("0.035003945b")     << QString("0.035003945b")     << 0.035003945   << 11 << true;
     QTest::newRow("3.5003945e-2c")    << QString("3.5003945e-2c")    << 0.035003945   << 12 << true;
     QTest::newRow("0.000003945d")     << QString("0.000003945d")     << 0.000003945   << 11 << true;
@@ -944,6 +973,10 @@ void tst_QLocale::strtod_data()
     QTest::newRow("12456789012f")     << QString("12456789012f")     << 12456789012.0 << 11 << true;
     QTest::newRow("1.2456789012e10g") << QString("1.2456789012e10g") << 12456789012.0 << 15 << true;
 
+    // "0x" prefix, success but only for the "0" before "x"
+    QTest::newRow("0x0")               << QString("0x0")               << 0.0 << 1 << true;
+    QTest::newRow("0x0.")              << QString("0x0.")              << 0.0 << 1 << true;
+    QTest::newRow("0x0.0")             << QString("0x0.0")             << 0.0 << 1 << true;
     QTest::newRow("0x3.4")             << QString("0x3.4")             << 0.0 << 1 << true;
     QTest::newRow("0x0.035003945")     << QString("0x0.035003945")     << 0.0 << 1 << true;
     QTest::newRow("0x3.5003945e-2")    << QString("0x3.5003945e-2")    << 0.0 << 1 << true;
@@ -951,6 +984,9 @@ void tst_QLocale::strtod_data()
     QTest::newRow("0x3.945e-6")        << QString("0x3.945e-6")        << 0.0 << 1 << true;
     QTest::newRow("0x12456789012")     << QString("0x12456789012")     << 0.0 << 1 << true;
     QTest::newRow("0x1.2456789012e10") << QString("0x1.2456789012e10") << 0.0 << 1 << true;
+
+    // hexfloat is not supported (yet)
+    QTest::newRow("0x1.921fb5p+1")     << QString("0x1.921fb5p+1")     << 0.0 << 1 << true;
 }
 
 void tst_QLocale::strtod()
@@ -968,6 +1004,28 @@ void tst_QLocale::strtod()
     QCOMPARE(result, num);
     QCOMPARE(actualOk, ok);
     QCOMPARE(static_cast<int>(end - numData.constData()), processed);
+
+    // make sure neither QByteArray, QString or QLocale also work
+    // (but they don't support incomplete parsing)
+    if (processed == num_str.size() || processed == 0) {
+        actualOk = false;
+        QCOMPARE(num_str.toDouble(&actualOk), num);
+        QCOMPARE(actualOk, ok);
+
+        actualOk = false;
+        QCOMPARE(numData.toDouble(&actualOk), num);
+        QCOMPARE(actualOk, ok);
+
+        actualOk = false;
+        QCOMPARE(QLocale::c().toDouble(num_str, &actualOk), num);
+        QCOMPARE(actualOk, ok);
+    }
+
+    // and QStringRef, but we can limit the length without allocating memory
+    QStringRef num_strref(&num_str, 0, processed);
+    actualOk = false;
+    QCOMPARE(QLocale::c().toDouble(num_strref, &actualOk), num);
+    QCOMPARE(actualOk, ok);
 }
 
 void tst_QLocale::long_long_conversion_data()
@@ -1246,10 +1304,11 @@ void tst_QLocale::formatTime_data()
     QTest::newRow("28") << QTime(1, 2, 3, 456) << "H:m:s.z" << "1:2:3.456";
     QTest::newRow("29") << QTime(1, 2, 3, 456) << "H:m:s.zz" << "1:2:3.456456";
     QTest::newRow("30") << QTime(1, 2, 3, 456) << "H:m:s.zzz" << "1:2:3.456";
-    QTest::newRow("31") << QTime(1, 2, 3, 4) << "H:m:s.z" << "1:2:3.4";
-    QTest::newRow("32") << QTime(1, 2, 3, 4) << "H:m:s.zzz" << "1:2:3.004";
-    QTest::newRow("33") << QTime() << "H:m:s.zzz" << "";
-    QTest::newRow("34") << QTime(1, 2, 3, 4) << "dd MM yyyy H:m:s.zzz" << "dd MM yyyy 1:2:3.004";
+    QTest::newRow("31") << QTime(1, 2, 3, 400) << "H:m:s.z" << "1:2:3.4";
+    QTest::newRow("32") << QTime(1, 2, 3, 4) << "H:m:s.z" << "1:2:3.004";
+    QTest::newRow("33") << QTime(1, 2, 3, 4) << "H:m:s.zzz" << "1:2:3.004";
+    QTest::newRow("34") << QTime() << "H:m:s.zzz" << "";
+    QTest::newRow("35") << QTime(1, 2, 3, 4) << "dd MM yyyy H:m:s.zzz" << "dd MM yyyy 1:2:3.004";
 }
 
 void tst_QLocale::formatTime()
@@ -1486,10 +1545,12 @@ void tst_QLocale::toDateTime_data()
                         << "d/M/yyyy hh:h:mm" << "1/12/1974 05:5:14";
     QTest::newRow("2C") << "C" << QDateTime(QDate(1974, 12, 1), QTime(15, 0, 0))
                         << "d/M/yyyyy h" << "1/12/1974y 15";
-    QTest::newRow("4C") << "C" << QDateTime(QDate(1974, 1, 1), QTime(0, 0, 0))
-                        << "d/M/yyyy zzz" << "1/1/1974 000";
-    QTest::newRow("5C") << "C" << QDateTime(QDate(1974, 1, 1), QTime(0, 0, 0))
-                        << "dd/MM/yyy z" << "01/01/74y 0";
+    QTest::newRow("4C") << "C" << QDateTime(QDate(1974, 1, 1), QTime(0, 0, 0, 1))
+                        << "d/M/yyyy zzz" << "1/1/1974 001";
+    QTest::newRow("5C") << "C" << QDateTime(QDate(1974, 1, 1), QTime(0, 0, 0, 1))
+                        << "dd/MM/yyy z" << "01/01/74y 001";
+    QTest::newRow("5Cbis") << "C" << QDateTime(QDate(1974, 1, 1), QTime(0, 0, 0, 100))
+                        << "dd/MM/yyy z" << "01/01/74y 1";
     QTest::newRow("8C") << "C" << QDateTime(QDate(1974, 12, 2), QTime(0, 0, 13))
                         << "ddddd/MMMMM/yy ss" << "Monday2/December12/74 13";
     QTest::newRow("9C") << "C" << QDateTime(QDate(1974, 12, 1), QTime(0, 0, 13))
@@ -1584,10 +1645,9 @@ void tst_QLocale::macDefaultLocale()
     // make sure we are using the system to parse them
     QCOMPARE(locale.toString(1234.56), systemLocaleFormatNumber(QString("1,234.56")));
 
-    QTime currentTime = QTime::currentTime();
-    QTime utcTime = QDateTime::currentDateTime().toUTC().time();
-
-    int diff = currentTime.hour() - utcTime.hour();
+    QTime testTime = QTime(1, 2, 3);
+    QTime utcTime = QDateTime(QDate::currentDate(), testTime).toUTC().time();
+    int diff = testTime.hour() - utcTime.hour();
 
     // Check if local time and utc time are on opposite sides of the 24-hour wrap-around.
     if (diff < -12)
@@ -1595,7 +1655,7 @@ void tst_QLocale::macDefaultLocale()
     if (diff > 12)
         diff -= 24;
 
-    const QString timeString = locale.toString(QTime(1,2,3), QLocale::LongFormat);
+    const QString timeString = locale.toString(testTime, QLocale::LongFormat);
     QVERIFY(timeString.contains(QString("1:02:03")));
 
     // To run this test make sure "Curreny" is US Dollar in System Preferences->Language & Region->Advanced.
@@ -2465,6 +2525,27 @@ void tst_QLocale::textDirection()
 
     QLocale locale(QLocale::Language(language), QLocale::Script(script), QLocale::AnyCountry);
     QCOMPARE(locale.textDirection() == Qt::RightToLeft, rightToLeft);
+}
+
+void tst_QLocale::bcp47Name()
+{
+    QCOMPARE(QLocale("C").bcp47Name(), QStringLiteral("en"));
+    QCOMPARE(QLocale("en").bcp47Name(), QStringLiteral("en"));
+    QCOMPARE(QLocale("en_US").bcp47Name(), QStringLiteral("en"));
+    QCOMPARE(QLocale("en_GB").bcp47Name(), QStringLiteral("en-GB"));
+    QCOMPARE(QLocale("en_DE").bcp47Name(), QStringLiteral("en-DE"));
+    QCOMPARE(QLocale("de_DE").bcp47Name(), QStringLiteral("de"));
+    QCOMPARE(QLocale("sr_RS").bcp47Name(), QStringLiteral("sr"));
+    QCOMPARE(QLocale("sr_Cyrl_RS").bcp47Name(), QStringLiteral("sr"));
+    QCOMPARE(QLocale("sr_Latn_RS").bcp47Name(), QStringLiteral("sr-Latn"));
+    QCOMPARE(QLocale("sr_ME").bcp47Name(), QStringLiteral("sr-ME"));
+    QCOMPARE(QLocale("sr_Cyrl_ME").bcp47Name(), QStringLiteral("sr-Cyrl-ME"));
+    QCOMPARE(QLocale("sr_Latn_ME").bcp47Name(), QStringLiteral("sr-ME"));
+
+    // Fall back to defaults when country isn't in CLDR for this language:
+    QCOMPARE(QLocale("sr_HR").bcp47Name(), QStringLiteral("sr"));
+    QCOMPARE(QLocale("sr_Cyrl_HR").bcp47Name(), QStringLiteral("sr"));
+    QCOMPARE(QLocale("sr_Latn_HR").bcp47Name(), QStringLiteral("sr-Latn"));
 }
 
 QTEST_MAIN(tst_QLocale)

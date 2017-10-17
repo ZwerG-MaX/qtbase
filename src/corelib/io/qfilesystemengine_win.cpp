@@ -473,12 +473,17 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link,
    if (data.missingFlags(QFileSystemMetaData::LinkType))
        QFileSystemEngine::fillMetaData(link, data, QFileSystemMetaData::LinkType);
 
-    QString ret;
+    QString target;
     if (data.isLnkFile())
-        ret = readLink(link);
+        target = readLink(link);
     else if (data.isLink())
-        ret = readSymLink(link);
-    return QFileSystemEntry(ret);
+        target = readSymLink(link);
+    QFileSystemEntry ret(target);
+    if (!target.isEmpty() && ret.isRelative()) {
+        target.prepend(absoluteName(link).path() + QLatin1Char('/'));
+        ret = QFileSystemEntry(QDir::cleanPath(target));
+    }
+    return ret;
 }
 
 //static
@@ -571,19 +576,21 @@ typedef struct _FILE_ID_INFO {
 // File ID for Windows up to version 7.
 static inline QByteArray fileId(HANDLE handle)
 {
-    QByteArray result;
 #ifndef Q_OS_WINRT
     BY_HANDLE_FILE_INFORMATION info;
     if (GetFileInformationByHandle(handle, &info)) {
-        result = QByteArray::number(uint(info.nFileIndexLow), 16);
-        result += ':';
-        result += QByteArray::number(uint(info.nFileIndexHigh), 16);
+        char buffer[sizeof "01234567:0123456701234567"];
+        qsnprintf(buffer, sizeof(buffer), "%lx:%08lx%08lx",
+                  info.dwVolumeSerialNumber,
+                  info.nFileIndexHigh,
+                  info.nFileIndexLow);
+        return buffer;
     }
 #else // !Q_OS_WINRT
     Q_UNUSED(handle);
     Q_UNIMPLEMENTED();
 #endif // Q_OS_WINRT
-    return result;
+    return QByteArray();
 }
 
 // File ID for Windows starting from version 8.
@@ -610,20 +617,33 @@ QByteArray fileIdWin8(HANDLE handle)
 QByteArray QFileSystemEngine::id(const QFileSystemEntry &entry)
 {
     QByteArray result;
-    const HANDLE handle =
+
 #ifndef Q_OS_WINRT
-        CreateFile((wchar_t*)entry.nativeFilePath().utf16(), GENERIC_READ,
-                   FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    const HANDLE handle =
+        CreateFile((wchar_t*)entry.nativeFilePath().utf16(), 0,
+                   FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                   FILE_FLAG_BACKUP_SEMANTICS, NULL);
 #else // !Q_OS_WINRT
-        CreateFile2((const wchar_t*)entry.nativeFilePath().utf16(), GENERIC_READ,
-                    FILE_SHARE_READ, OPEN_EXISTING, NULL);
+    CREATEFILE2_EXTENDED_PARAMETERS params;
+    params.dwSize = sizeof(params);
+    params.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+    params.dwFileFlags = FILE_FLAG_BACKUP_SEMANTICS;
+    const HANDLE handle =
+        CreateFile2((const wchar_t*)entry.nativeFilePath().utf16(), 0,
+                    FILE_SHARE_READ, OPEN_EXISTING, &params);
 #endif // Q_OS_WINRT
-    if (handle) {
-        result = QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows8 ?
-                 fileIdWin8(handle) : fileId(handle);
+    if (handle != INVALID_HANDLE_VALUE) {
+        result = id(handle);
         CloseHandle(handle);
     }
     return result;
+}
+
+//static
+QByteArray QFileSystemEngine::id(HANDLE fHandle)
+{
+    return QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows8 ?
+                fileIdWin8(HANDLE(fHandle)) : fileId(HANDLE(fHandle));
 }
 
 //static

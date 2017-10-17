@@ -40,6 +40,8 @@
 # include <private/qcore_mac_p.h>
 #endif
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
+
 #include <qapplication.h>
 #include <qdesktopwidget.h>
 #include <qevent.h>
@@ -48,7 +50,9 @@
 #include <qstyleoption.h>
 #include <qstylepainter.h>
 #include <qtimer.h>
+#if QT_CONFIG(effects)
 #include <private/qeffects_p.h>
+#endif
 #include <qtextdocument.h>
 #include <qdebug.h>
 #include <private/qstylesheetstyle_p.h>
@@ -285,7 +289,7 @@ void QTipLabel::timerEvent(QTimerEvent *e)
         || e->timerId() == expireTimer.timerId()){
         hideTimer.stop();
         expireTimer.stop();
-#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ && !defined(QT_NO_EFFECTS)
+#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ && QT_CONFIG(effects)
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip)){
             // Fade out tip on mac (makes it invisible).
             // The tip will not be deleted until a new tip is shown.
@@ -493,19 +497,19 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
     }
 
     if (!text.isEmpty()){ // no tip can be reused, create new tip:
-#if 1 // Used to be excluded in Qt4 for Q_WS_WIN
-        new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
-#else
+#ifdef Q_OS_WIN32
         // On windows, we can't use the widget as parent otherwise the window will be
         // raised when the tooltip will be shown
         new QTipLabel(text, QApplication::desktop()->screen(QTipLabel::getTipScreen(pos, w)), msecDisplayTime);
+#else
+        new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
 #endif
         QTipLabel::instance->setTipRect(w, rect);
         QTipLabel::instance->placeTip(pos, w);
         QTipLabel::instance->setObjectName(QLatin1String("qtooltip_label"));
 
 
-#if !defined(QT_NO_EFFECTS) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
+#if QT_CONFIG(effects) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip))
             qFadeEffect(QTipLabel::instance);
         else if (QApplication::isEffectEnabled(Qt::UI_AnimateTooltip))
