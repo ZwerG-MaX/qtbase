@@ -476,8 +476,10 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
             break;
         if (option->state & State_Open)
             drawPrimitive(PE_IndicatorArrowDown, option, painter, widget);
-        else
-            drawPrimitive(PE_IndicatorArrowRight, option, painter, widget);
+        else {
+            const bool reverse = (option->direction == Qt::RightToLeft);
+            drawPrimitive(reverse ? PE_IndicatorArrowLeft : PE_IndicatorArrowRight, option, painter, widget);
+        }
         break;
     }
 #if QT_CONFIG(tabbar)
@@ -761,7 +763,7 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
             painter->drawRect(rect);
 
             QColor checkMarkColor = option->palette.text().color().darker(120);
-            const int checkMarkPadding = QStyleHelper::dpiScaled(3);
+            const int checkMarkPadding = 1 + rect.width() * 0.2; // at least one pixel padding
 
             if (checkbox->state & State_NoChange) {
                 gradient = QLinearGradient(rect.topLeft(), rect.bottomLeft());
@@ -773,20 +775,20 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
                 painter->setPen(QPen(checkMarkColor, 1));
                 painter->setBrush(gradient);
                 painter->drawRect(rect.adjusted(checkMarkPadding, checkMarkPadding, -checkMarkPadding, -checkMarkPadding));
-
-            } else if (checkbox->state & (State_On)) {
-                QPen checkPen = QPen(checkMarkColor, QStyleHelper::dpiScaled(1.8));
+            } else if (checkbox->state & State_On) {
+                qreal penWidth = QStyleHelper::dpiScaled(1.8);
+                penWidth = qMax(penWidth , 0.18 * rect.height());
+                penWidth = qMin(penWidth , 0.30 * rect.height());
                 checkMarkColor.setAlpha(210);
-                painter->translate(-1, 0.5);
-                painter->setPen(checkPen);
+                painter->setPen(QPen(checkMarkColor, penWidth));
                 painter->setBrush(Qt::NoBrush);
-                painter->translate(0.2, 0.0);
+                painter->translate(-0.8, 0.5);
 
                 // Draw checkmark
                 QPainterPath path;
-                path.moveTo(2 + checkMarkPadding, rect.height() / 2.0);
+                path.moveTo(1.33 * checkMarkPadding, rect.height() / 2.0);
                 path.lineTo(rect.width() / 2.0, rect.height() - checkMarkPadding);
-                path.lineTo(rect.width() - checkMarkPadding - 0.5, checkMarkPadding);
+                path.lineTo(rect.width() - checkMarkPadding * 0.92, checkMarkPadding);
                 painter->drawPath(path.translated(rect.topLeft()));
             }
         }
@@ -1556,9 +1558,9 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
             bool enabled = menuItem->state & State_Enabled;
 
             bool ignoreCheckMark = false;
-            int checkcol = qMax<int>(menuItem->maxIconWidth, QStyleHelper::dpiScaled(20));
-            const int margin = QStyleHelper::dpiScaled(4);
-
+            const int checkColHOffset = windowsItemHMargin + windowsItemFrame - 1;
+            int checkcol = qMax(menuItem->rect.height() * 0.7,
+                                      qMax(menuItem->maxIconWidth * 1.0, dpiScaled(17))); // icon checkbox's highlihgt column width
             if (
 #if QT_CONFIG(combobox)
                 qobject_cast<const QComboBox*>(widget) ||
@@ -1568,10 +1570,9 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
 
             if (!ignoreCheckMark) {
                 // Check
-                const int indicatorWidth = proxy()->pixelMetric(PM_IndicatorWidth, option, widget);
-                const int indicatorHeight = proxy()->pixelMetric(PM_IndicatorHeight, option, widget);
-                QRect checkRect(option->rect.left() + indicatorWidth / 2,
-                                option->rect.center().y() - indicatorHeight / 2 + 1, indicatorWidth, indicatorHeight);
+                const int boxMargin = dpiScaled(4);
+                const int boxWidth = checkcol - 2 * boxMargin;
+                QRect checkRect(option->rect.left() + boxMargin + checkColHOffset, option->rect.center().y() - boxWidth/2 + 1, boxWidth, boxWidth);
                 checkRect = visualRect(menuItem->direction, menuItem->rect, checkRect);
                 if (checkable) {
                     if (menuItem->checkType & QStyleOptionMenuItem::Exclusive) {
@@ -1583,7 +1584,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                             QPalette::ColorRole textRole = !enabled ? QPalette::Text:
                                                                       selected ? QPalette::HighlightedText : QPalette::ButtonText;
                             painter->setBrush(option->palette.brush( option->palette.currentColorGroup(), textRole));
-                            painter->drawEllipse(checkRect.adjusted(margin, margin, -margin, -margin));
+                            const int adjustment = checkRect.height() * 0.3;
+                            painter->drawEllipse(checkRect.adjusted(adjustment, adjustment, -adjustment, -adjustment));
                         }
                     } else {
                         // Check box
@@ -1612,7 +1614,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
 
             QPainter *p = painter;
             QRect vCheckRect = visualRect(opt->direction, menuitem->rect,
-                                          QRect(menuitem->rect.x() + margin, menuitem->rect.y(),
+                                          QRect(menuitem->rect.x() + checkColHOffset, menuitem->rect.y(),
                                                 checkcol, menuitem->rect.height()));
             if (!menuItem->icon.isNull()) {
                 QIcon::Mode mode = dis ? QIcon::Disabled : QIcon::Normal;
@@ -1663,11 +1665,10 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 discol = menuitem->palette.text().color();
                 p->setPen(discol);
             }
-            const int lm = QStyleHelper::dpiScaled(windowsItemFrame + windowsItemHMargin + 2) + checkcol;
-            const int rm = QStyleHelper::dpiScaled(windowsRightBorder + 1) + tab;
-            const int xpos = menuitem->rect.x() + lm;
+            int xm = checkColHOffset + checkcol + windowsItemHMargin;
+            int xpos = menuitem->rect.x() + xm;
 
-            QRect textRect(xpos, y + windowsItemVMargin, w - lm - rm, h - 2 * windowsItemVMargin);
+            QRect textRect(xpos, y + windowsItemVMargin, w - xm - windowsRightBorder - tab + 1, h - 2 * windowsItemVMargin);
             QRect vTextRect = visualRect(opt->direction, menuitem->rect, textRect);
             QStringRef s(&menuitem->text);
             if (!s.isEmpty()) {                     // draw text

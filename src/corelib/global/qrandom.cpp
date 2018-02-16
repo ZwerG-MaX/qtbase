@@ -74,7 +74,7 @@ DECLSPEC_IMPORT BOOLEAN WINAPI SystemFunction036(PVOID RandomBuffer, ULONG Rando
 }
 #endif
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #  include <private/qjni_p.h>
 #endif
 
@@ -656,6 +656,11 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
  */
 
 /*!
+    \enum QRandomGenerator::System
+    \internal
+*/
+
+/*!
     \fn QRandomGenerator::QRandomGenerator(quint32 seedValue)
 
     Initializes this QRandomGenerator object with the value \a seedValue as
@@ -694,7 +699,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
  */
 
 /*!
-    \fn QRandomGenerator::QRandomGenerator(const quint32 *begin, const quin32 *end)
+    \fn QRandomGenerator::QRandomGenerator(const quint32 *begin, const quint32 *end)
     \overload
 
     Initializes this QRandomGenerator object with the values found in the range
@@ -762,7 +767,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
 
     A typedef to the type that operator()() returns. That is, quint32.
 
-    \sa operator()()
+    \sa {QRandomGenerator::operator()}{operator()()}
  */
 
 /*!
@@ -771,6 +776,22 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
     Generates a 32-bit random quantity and returns it.
 
     \sa generate(), generate64()
+ */
+
+/*!
+    \fn quint32 QRandomGenerator::generate()
+
+    Generates a 32-bit random quantity and returns it.
+
+    \sa {QRandomGenerator::operator()}{operator()()}, generate64()
+ */
+
+/*!
+    \fn quint64 QRandomGenerator::generate64()
+
+    Generates a 64-bit random quantity and returns it.
+
+    \sa {QRandomGenerator::operator()}{operator()()}, generate()
  */
 
 /*!
@@ -800,7 +821,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
     \fn void QRandomGenerator::seed(std::seed_seq &seed)
     \overload
 
-    Reseeds this object using the seed sequence \a sseq as the seed.
+    Reseeds this object using the seed sequence \a seed as the seed.
  */
 
 /*!
@@ -826,7 +847,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
     \endcode
 
     This function complies with the requirements for the function
-    \c{\l{http://en.cppreference.com/w/cpp/numeric/random/seed_seq/generate}{std::seed_seq::generate}},
+    \l{http://en.cppreference.com/w/cpp/numeric/random/seed_seq/generate}{\c std::seed_seq::generate},
     which requires unsigned 32-bit integer values.
 
     Note that if the [begin, end) range refers to an area that can store more
@@ -906,16 +927,16 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
     \endcode
 
     The same may also be obtained by using
-    \c{\l{http://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution}{std::uniform_real_distribution}}
+    \l{http://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution}{\c std::uniform_real_distribution}
     with parameters 0 and 1.
 
     \sa generate(), generate64(), bounded()
  */
 
 /*!
-    \fn qreal QRandomGenerator::bounded(qreal highest)
+    \fn double QRandomGenerator::bounded(double highest)
 
-    Generates one random qreal in the range between 0 (inclusive) and \a
+    Generates one random double in the range between 0 (inclusive) and \a
     highest (exclusive). This function is equivalent to and is implemented as:
 
     \code
@@ -931,7 +952,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
 
     Generates one random 32-bit quantity in the range between 0 (inclusive) and
     \a highest (exclusive). The same result may also be obtained by using
-    \c{\l{http://en.cppreference.com/w/cpp/numeric/random/uniform_int_distribution}{std::uniform_int_distribution}}
+    \l{http://en.cppreference.com/w/cpp/numeric/random/uniform_int_distribution}{\c std::uniform_int_distribution}
     with parameters 0 and \c{highest - 1}. That class can also be used to obtain
     quantities larger than 32 bits.
 
@@ -969,7 +990,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
 
     Generates one random 32-bit quantity in the range between \a lowest (inclusive)
     and \a highest (exclusive). The same result may also be obtained by using
-    \c{\l{http://en.cppreference.com/w/cpp/numeric/random/uniform_int_distribution}{std::uniform_int_distribution}}
+    \l{http://en.cppreference.com/w/cpp/numeric/random/uniform_int_distribution}{\c std::uniform_int_distribution}
     with parameters \a lowest and \c{\a highest - 1}. That class can also be used to
     obtain quantities larger than 32 bits.
 
@@ -1098,7 +1119,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
 
     A typedef to the type that operator()() returns. That is, quint64.
 
-    \sa operator()()
+    \sa {QRandomGenerator64::operator()}{operator()()}
  */
 
 /*!
@@ -1169,7 +1190,9 @@ QRandomGenerator64 QRandomGenerator64::securelySeeded()
     return result;
 }
 
-/// \internal
+/*!
+    \internal
+*/
 inline QRandomGenerator::QRandomGenerator(System)
     : type(SystemRNG)
 {
@@ -1262,7 +1285,7 @@ void QRandomGenerator::_fillRange(void *buffer, void *bufferEnd)
     std::generate(begin, end, [this]() { return storage.engine()(); });
 }
 
-#if defined(Q_OS_ANDROID) && (__ANDROID_API__ < 21)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED) && (__ANDROID_API__ < 21)
 typedef QThreadStorage<QJNIObjectPrivate> AndroidRandomStorage;
 Q_GLOBAL_STATIC(AndroidRandomStorage, randomTLS)
 
@@ -1291,7 +1314,7 @@ Q_GLOBAL_STATIC(SeedStorage, randTLS)  // Thread Local Storage for seed value
 */
 void qsrand(uint seed)
 {
-#if defined(Q_OS_ANDROID) && (__ANDROID_API__ < 21)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED) && (__ANDROID_API__ < 21)
     if (randomTLS->hasLocalData()) {
         randomTLS->localData().callMethod<void>("setSeed", "(J)V", jlong(seed));
         return;
@@ -1347,7 +1370,7 @@ void qsrand(uint seed)
 */
 int qrand()
 {
-#if defined(Q_OS_ANDROID) && (__ANDROID_API__ < 21)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED) && (__ANDROID_API__ < 21)
     AndroidRandomStorage *randomStorage = randomTLS();
     if (!randomStorage)
         return rand();

@@ -100,6 +100,7 @@ void QXcbConnection::xi2SelectStateEvents()
     XIEventMask xiEventMask;
     bitMask = XI_HierarchyChangedMask;
     bitMask |= XI_DeviceChangedMask;
+    bitMask |= XI_PropertyEventMask;
     xiEventMask.deviceid = XIAllDevices;
     xiEventMask.mask_len = sizeof(bitMask);
     xiEventMask.mask = xiBitMask;
@@ -121,7 +122,6 @@ void QXcbConnection::xi2SelectDeviceEvents(xcb_window_t window)
     // core enter/leave events will be ignored in this case.
     bitMask |= XI_EnterMask;
     bitMask |= XI_LeaveMask;
-    bitMask |= XI_PropertyEventMask;
 #ifdef XCB_USE_XINPUT22
     if (isAtLeastXI22()) {
         bitMask |= XI_TouchBeginMask;
@@ -378,24 +378,25 @@ void QXcbConnection::xi2SelectDeviceEventsCompatibility(xcb_window_t window)
 
     unsigned int mask = 0;
     unsigned char *bitMask = reinterpret_cast<unsigned char *>(&mask);
-    mask |= XI_PropertyEventMask;
+    Display *dpy = static_cast<Display *>(m_xlib_display);
+
 #ifdef XCB_USE_XINPUT22
     if (isAtLeastXI22()) {
         mask |= XI_TouchBeginMask;
         mask |= XI_TouchUpdateMask;
         mask |= XI_TouchEndMask;
+
+        XIEventMask xiMask;
+        xiMask.mask_len = sizeof(mask);
+        xiMask.mask = bitMask;
+        xiMask.deviceid = XIAllMasterDevices;
+        Status result = XISelectEvents(dpy, window, &xiMask, 1);
+        if (result == Success)
+            QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
+        else
+            qCDebug(lcQpaXInput, "failed to select events, window %x, result %d", window, result);
     }
 #endif
-    XIEventMask xiMask;
-    xiMask.mask_len = sizeof(mask);
-    xiMask.mask = bitMask;
-    xiMask.deviceid = XIAllMasterDevices;
-    Display *dpy = static_cast<Display *>(m_xlib_display);
-    Status result = XISelectEvents(dpy, window, &xiMask, 1);
-    if (result == Success)
-        QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
-    else
-        qCDebug(lcQpaXInput, "failed to select events, window %x, result %d", window, result);
 
     mask = XI_ButtonPressMask;
     mask |= XI_ButtonReleaseMask;
@@ -433,6 +434,11 @@ void QXcbConnection::xi2SelectDeviceEventsCompatibility(xcb_window_t window)
         }
         XISelectEvents(dpy, window, xiEventMask.data(), i);
     }
+#endif
+
+#if !QT_CONFIG(tabletevent) && !defined(XCB_USE_XINPUT21)
+    Q_UNUSED(bitMask);
+    Q_UNUSED(dpy);
 #endif
 }
 
@@ -755,8 +761,9 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
         // Touches must be accepted when we are grabbing touch events. Otherwise the entire sequence
         // will get replayed when the grab ends.
         if (m_xiGrab) {
-            // XIAllowTouchEvents deadlocks with libXi < 1.7.4 (this has nothing to do with the XI2 versions like 2.2)
-            // http://lists.x.org/archives/xorg-devel/2014-July/043059.html
+            // Note that XIAllowTouchEvents is known to deadlock with older libXi versions,
+            // for details see qtbase/src/plugins/platforms/xcb/README. This has nothing to
+            // do with the XInput protocol version, but is a bug in libXi implementation instead.
             XIAllowTouchEvents(static_cast<Display *>(m_xlib_display), xiDeviceEvent->deviceid,
                                xiDeviceEvent->detail, xiDeviceEvent->event, XIAcceptTouch);
         }
@@ -1012,10 +1019,12 @@ void QXcbConnection::xi2HandleScrollEvent(void *event, ScrollingDevice &scrollin
                     double delta = scrollingDevice.lastScrollPosition.y() - value;
                     scrollingDevice.lastScrollPosition.setY(value);
                     angleDelta.setY((delta / scrollingDevice.verticalIncrement) * 120);
-                    // We do not set "pixel" delta if it is only measured in ticks.
-                    if (scrollingDevice.verticalIncrement > 1)
+                    // With most drivers the increment is 1 for wheels.
+                    // For libinput it is hardcoded to a useless 15.
+                    // For a proper touchpad driver it should be in the same order of magnitude as 120
+                    if (scrollingDevice.verticalIncrement > 15)
                         rawDelta.setY(delta);
-                    else if (scrollingDevice.verticalIncrement < -1)
+                    else if (scrollingDevice.verticalIncrement < -15)
                         rawDelta.setY(-delta);
                 }
             }
@@ -1024,10 +1033,10 @@ void QXcbConnection::xi2HandleScrollEvent(void *event, ScrollingDevice &scrollin
                     double delta = scrollingDevice.lastScrollPosition.x() - value;
                     scrollingDevice.lastScrollPosition.setX(value);
                     angleDelta.setX((delta / scrollingDevice.horizontalIncrement) * 120);
-                    // We do not set "pixel" delta if it is only measured in ticks.
-                    if (scrollingDevice.horizontalIncrement > 1)
+                    // See comment under vertical
+                    if (scrollingDevice.horizontalIncrement > 15)
                         rawDelta.setX(delta);
-                    else if (scrollingDevice.horizontalIncrement < -1)
+                    else if (scrollingDevice.horizontalIncrement < -15)
                         rawDelta.setX(-delta);
                 }
             }

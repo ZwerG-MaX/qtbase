@@ -472,7 +472,7 @@ using qsizetype = QIntegerForSizeof<std::size_t>::Signed;
 #  define QT_ASCII_CAST_WARN
 #endif
 
-#if defined(__i386__) || defined(_WIN32)
+#ifdef Q_PROCESSOR_X86_32
 #  if defined(Q_CC_GNU)
 #    define QT_FASTCALL __attribute__((regparm(3)))
 #  elif defined(Q_CC_MSVC)
@@ -506,6 +506,12 @@ using qsizetype = QIntegerForSizeof<std::size_t>::Signed;
 #else
 #  define Q_NEVER_INLINE
 #  define Q_ALWAYS_INLINE inline
+#endif
+
+#ifdef Q_CC_GNU
+#  define QT_INIT_METAOBJECT __attribute__((init_priority(101)))
+#else
+#  define QT_INIT_METAOBJECT
 #endif
 
 //defines the type for the WNDPROC on windows

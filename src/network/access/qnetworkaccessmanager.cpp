@@ -1027,8 +1027,7 @@ QNetworkConfiguration QNetworkAccessManager::configuration() const
     if (session) {
         return session->configuration();
     } else {
-        QNetworkConfigurationManager manager;
-        return manager.defaultConfiguration();
+        return d->networkConfigurationManager.defaultConfiguration();
     }
 }
 
@@ -1052,12 +1051,11 @@ QNetworkConfiguration QNetworkAccessManager::activeConfiguration() const
     Q_D(const QNetworkAccessManager);
 
     QSharedPointer<QNetworkSession> networkSession(d->getNetworkSession());
-    QNetworkConfigurationManager manager;
     if (networkSession) {
-        return manager.configurationFromIdentifier(
+        return d->networkConfigurationManager.configurationFromIdentifier(
             networkSession->sessionProperty(QLatin1String("ActiveConfiguration")).toString());
     } else {
-        return manager.defaultConfiguration();
+        return d->networkConfigurationManager.defaultConfiguration();
     }
 }
 
@@ -1384,17 +1382,16 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
     }
 
     if (!d->networkSessionStrongRef && (d->initializeSession || !d->networkConfiguration.identifier().isEmpty())) {
-        QNetworkConfigurationManager manager;
         if (!d->networkConfiguration.identifier().isEmpty()) {
             if ((d->networkConfiguration.state() & QNetworkConfiguration::Defined)
-                    && d->networkConfiguration != manager.defaultConfiguration())
-                d->createSession(manager.defaultConfiguration());
+                    && d->networkConfiguration != d->networkConfigurationManager.defaultConfiguration())
+                d->createSession(d->networkConfigurationManager.defaultConfiguration());
             else
                 d->createSession(d->networkConfiguration);
 
         } else {
-            if (manager.capabilities() & QNetworkConfigurationManager::NetworkSessionRequired)
-                d->createSession(manager.defaultConfiguration());
+            if (d->networkSessionRequired)
+                d->createSession(d->networkConfigurationManager.defaultConfiguration());
             else
                 d->initializeSession = false;
         }
@@ -1884,7 +1881,8 @@ void QNetworkAccessManagerPrivate::_q_networkSessionStateChanged(QNetworkSession
         emit q->networkSessionConnected();
     lastSessionState = state;
 
-    if (online && state == QNetworkSession::Disconnected) {
+    if (online && (state == QNetworkSession::Disconnected
+                   || state == QNetworkSession::NotAvailable)) {
         const auto cfgs = networkConfigurationManager.allConfigurations();
         for (const QNetworkConfiguration &cfg : cfgs) {
             if (cfg.state().testFlag(QNetworkConfiguration::Active)) {
@@ -1926,9 +1924,9 @@ void QNetworkAccessManagerPrivate::_q_onlineStateChanged(bool isOnline)
         online = (networkConfiguration.state() & QNetworkConfiguration::Active);
     } else {
         if (online != isOnline) {
-                _q_networkSessionClosed();
-                createSession(q->configuration());
             online = isOnline;
+            _q_networkSessionClosed();
+            createSession(q->configuration());
         }
     }
     if (online) {
@@ -1951,13 +1949,13 @@ void QNetworkAccessManagerPrivate::_q_configurationChanged(const QNetworkConfigu
     const QString id = configuration.identifier();
     if (configuration.state().testFlag(QNetworkConfiguration::Active)) {
         if (!onlineConfigurations.contains(id)) {
-
             QSharedPointer<QNetworkSession> session(getNetworkSession());
             if (session) {
                 if (online && session->configuration().identifier()
                         != networkConfigurationManager.defaultConfiguration().identifier()) {
 
                     onlineConfigurations.insert(id);
+                    // CHECK: If it's having Active flag - why would it be disconnected ???
                     //this one disconnected but another one is online,
                     // close and create new session
                     _q_networkSessionClosed();
@@ -1968,6 +1966,7 @@ void QNetworkAccessManagerPrivate::_q_configurationChanged(const QNetworkConfigu
 
     } else if (onlineConfigurations.contains(id)) {
         //this one is disconnecting
+        // CHECK: If it disconnected while we create a session over a down configuration ???
         onlineConfigurations.remove(id);
         if (!onlineConfigurations.isEmpty()) {
             _q_networkSessionClosed();

@@ -210,6 +210,7 @@ private slots:
     void QTBUG12268_hiddenMovedSectionSorting();
     void QTBUG14242_hideSectionAutoSize();
     void QTBUG50171_visualRegionForSwappedItems();
+    void QTBUG53221_assertShiftHiddenRow();
     void ensureNoIndexAtLength();
     void offsetConsistent();
 
@@ -2250,10 +2251,6 @@ void tst_QHeaderView::QTBUG6058_reset()
 
 void tst_QHeaderView::QTBUG7833_sectionClicked()
 {
-
-
-
-
     QTableView tv;
     QStandardItemModel *sim = new QStandardItemModel(&tv);
     QSortFilterProxyModel *proxyModel = new QSortFilterProxyModel(&tv);
@@ -2277,10 +2274,19 @@ void tst_QHeaderView::QTBUG7833_sectionClicked()
     tv.horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
 
     tv.setModel(proxyModel);
+    const int section4Size = tv.horizontalHeader()->sectionSize(4) + 1;
+    tv.horizontalHeader()->resizeSection(4, section4Size);
     tv.setColumnHidden(5, true);
     tv.setColumnHidden(6, true);
     tv.horizontalHeader()->swapSections(8, 10);
     tv.sortByColumn(1, Qt::AscendingOrder);
+
+    QCOMPARE(tv.isColumnHidden(5), true);
+    QCOMPARE(tv.isColumnHidden(6), true);
+    QCOMPARE(tv.horizontalHeader()->sectionsMoved(), true);
+    QCOMPARE(tv.horizontalHeader()->logicalIndex(8), 10);
+    QCOMPARE(tv.horizontalHeader()->logicalIndex(10), 8);
+    QCOMPARE(tv.horizontalHeader()->sectionSize(4), section4Size);
 
     QSignalSpy clickedSpy(tv.horizontalHeader(), SIGNAL(sectionClicked(int)));
     QSignalSpy pressedSpy(tv.horizontalHeader(), SIGNAL(sectionPressed(int)));
@@ -2382,6 +2388,54 @@ void tst_QHeaderView::QTBUG50171_visualRegionForSwappedItems()
     headerView.swapSections(1, 2);
     headerView.hideSection(0);
     headerView.testVisualRegionForSelection();
+}
+
+class QTBUG53221_Model : public QAbstractItemModel
+{
+public:
+    void insertRowAtBeginning()
+    {
+        Q_EMIT layoutAboutToBeChanged();
+        m_displayNames.insert(0, QStringLiteral("Item %1").arg(m_displayNames.count()));
+        // Rows are always inserted at the beginning, so move all others.
+        foreach (const QModelIndex &persIndex, persistentIndexList())
+        {
+            // The vertical header view will have a persistent index stored here on the second call to insertRowAtBeginning.
+            changePersistentIndex(persIndex, index(persIndex.row() + 1, persIndex.column(), persIndex.parent()));
+        }
+        Q_EMIT layoutChanged();
+    }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        return (role == Qt::DisplayRole) ? m_displayNames.at(index.row()) : QVariant();
+    }
+
+    QModelIndex index(int row, int column, const QModelIndex &) const override { return createIndex(row, column); }
+    QModelIndex parent(const QModelIndex &) const override { return QModelIndex(); }
+    int rowCount(const QModelIndex &) const override { return m_displayNames.count(); }
+    int columnCount(const QModelIndex &) const override { return 1; }
+
+private:
+    QStringList m_displayNames;
+};
+
+void tst_QHeaderView::QTBUG53221_assertShiftHiddenRow()
+{
+    QTableView tableView;
+    QTBUG53221_Model modelTableView;
+    tableView.setModel(&modelTableView);
+
+    modelTableView.insertRowAtBeginning();
+    tableView.setRowHidden(0, true);
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(0), true);
+    modelTableView.insertRowAtBeginning();
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(0), false);
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(1), true);
+    modelTableView.insertRowAtBeginning();
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(0), false);
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(1), false);
+    QCOMPARE(tableView.verticalHeader()->isSectionHidden(2), true);
 }
 
 void protected_QHeaderView::testVisualRegionForSelection()

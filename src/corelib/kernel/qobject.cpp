@@ -230,6 +230,7 @@ QObjectPrivate::QObjectPrivate(int version)
     connectedSignals[0] = connectedSignals[1] = 0;
     metaObject = 0;
     isWindow = false;
+    deleteLaterCalled = false;
 }
 
 QObjectPrivate::~QObjectPrivate()
@@ -4796,7 +4797,7 @@ QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int s
                                              QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
                                              const int *types, const QMetaObject *senderMetaObject)
 {
-    if (!sender || !slotObj || !senderMetaObject) {
+    if (!sender || !receiver || !slotObj || !senderMetaObject) {
         qWarning("QObject::connect: invalid null parameter");
         if (slotObj)
             slotObj->destroyIfLastRef();

@@ -61,7 +61,10 @@
 #include <qt_windows.h>
 #endif
 #if QT_CONFIG(slog2)
-#include <slog2.h>
+#include <sys/slog2.h>
+#endif
+#if QT_HAS_INCLUDE(<paths.h>)
+#include <paths.h>
 #endif
 
 #ifdef Q_OS_ANDROID
@@ -215,8 +218,11 @@ static bool willLogToConsole()
 #  ifdef Q_OS_WIN
     return GetConsoleWindow();
 #  elif defined(Q_OS_UNIX)
+#    ifndef _PATH_TTY
+#    define _PATH_TTY "/dev/tty"
+#    endif
     // if /dev/tty exists, we can only open it if we have a controlling TTY
-    int devtty = qt_safe_open("/dev/tty", O_RDONLY);
+    int devtty = qt_safe_open(_PATH_TTY, O_RDONLY);
     if (devtty == -1 && (errno == ENOENT || errno == EPERM || errno == ENXIO)) {
         // no /dev/tty, fall back to isatty on stderr
         return isatty(STDERR_FILENO);
@@ -1566,7 +1572,7 @@ static void syslog_default_message_handler(QtMsgType type, const char *message)
 }
 #endif
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 static void android_default_message_handler(QtMsgType type,
                                   const QMessageLogContext &context,
                                   const QString &message)
@@ -1614,7 +1620,7 @@ static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &con
 #elif QT_CONFIG(syslog)
         syslog_default_message_handler(type, logMessage.toUtf8().constData());
         return;
-#elif defined(Q_OS_ANDROID)
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
         android_default_message_handler(type, context, logMessage);
         return;
 #endif

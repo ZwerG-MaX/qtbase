@@ -55,6 +55,13 @@
 #include <stdio.h>
 #include <errno.h>
 
+#if QT_HAS_INCLUDE(<paths.h>)
+# include <paths.h>
+#endif
+#ifndef _PATH_TMP           // from <paths.h>
+# define _PATH_TMP          "/tmp"
+#endif
+
 #if defined(Q_OS_MAC)
 # include <QtCore/private/qcore_mac_p.h>
 # include <CoreFoundation/CFBundle.h>
@@ -107,6 +114,16 @@ struct statx { mode_t stx_mode; };
 #endif
 
 QT_BEGIN_NAMESPACE
+
+enum {
+#ifdef Q_OS_ANDROID
+    // On Android, the link(2) system call has been observed to always fail
+    // with EACCES, regardless of whether there are permission problems or not.
+    SupportsHardlinking = false
+#else
+    SupportsHardlinking = true
+#endif
+};
 
 #define emptyFileEntryWarning() emptyFileEntryWarning_(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC)
 static void emptyFileEntryWarning_(const char *file, int line, const char *function)
@@ -1287,7 +1304,7 @@ bool QFileSystemEngine::renameFile(const QFileSystemEntry &source, const QFileSy
     }
 #endif
 
-    if (::link(srcPath, tgtPath) == 0) {
+    if (SupportsHardlinking && ::link(srcPath, tgtPath) == 0) {
         if (::unlink(srcPath) == 0)
             return true;
 
@@ -1301,6 +1318,11 @@ bool QFileSystemEngine::renameFile(const QFileSystemEntry &source, const QFileSy
 
         error = QSystemError(savedErrno, QSystemError::StandardLibraryError);
         return false;
+    } else if (!SupportsHardlinking) {
+        // man 2 link on Linux has:
+        // EPERM  The filesystem containing oldpath and newpath does not
+        //        support the creation of hard links.
+        errno = EPERM;
     }
 
     switch (errno) {
@@ -1492,14 +1514,13 @@ QString QFileSystemEngine::tempPath()
 #else
     QString temp = QFile::decodeName(qgetenv("TMPDIR"));
     if (temp.isEmpty()) {
+        if (false) {
 #if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
-        if (NSString *nsPath = NSTemporaryDirectory()) {
+        } else if (NSString *nsPath = NSTemporaryDirectory()) {
             temp = QString::fromCFString((CFStringRef)nsPath);
-        } else {
-#else
-        {
 #endif
-            temp = QLatin1String("/tmp");
+        } else {
+            temp = QLatin1String(_PATH_TMP);
         }
     }
     return QDir::cleanPath(temp);
